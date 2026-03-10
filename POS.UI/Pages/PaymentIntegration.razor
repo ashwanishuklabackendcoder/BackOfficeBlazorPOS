@@ -1,0 +1,138 @@
+﻿@page "/payment-integration"
+@using POS.UI.Services
+@inject IAuthService AuthService
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>Payment Integration</PageTitle>
+
+<div class="container-fluid mt-3">
+    @if (isAdmin)
+    {
+        <div class="card">
+            <div class="card-header d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                <div>
+                    <div class="fw-semibold">Payment Integration</div>
+                    <div class="text-muted small">Configure payment providers for your store.</div>
+                </div>
+                <span class="badge bg-info text-dark">Admin only</span>
+            </div>
+            <div class="card-body">
+
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabStripe ? "active" : "")"
+                                @onclick="() => SwitchTab(TabStripe)">
+                            Stripe
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabDojo ? "active" : "")"
+                                @onclick="() => SwitchTab(TabDojo)">
+                            Dojo
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabPaypal ? "active" : "")"
+                                @onclick="() => SwitchTab(TabPaypal)">
+                            Paypal
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabSagepay ? "active" : "")"
+                                @onclick="() => SwitchTab(TabSagepay)">
+                            Sagepay
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabKlarna ? "active" : "")"
+                                @onclick="() => SwitchTab(TabKlarna)">
+                            Klarna
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabPayVector ? "active" : "")"
+                                @onclick="() => SwitchTab(TabPayVector)">
+                            PayVector
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabV12 ? "active" : "")"
+                                @onclick="() => SwitchTab(TabV12)">
+                            V12
+                        </button>
+                    </li>
+                </ul>
+
+                @if (activeTab == TabStripe)
+                {
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-8">
+                            <label class="form-label">Publishable Key</label>
+                            <input class="form-control"
+                                   placeholder="pk_live_..."
+                                   @bind="stripePublishableKey" />
+                        </div>
+                        <div class="col-12 col-lg-8">
+                            <label class="form-label">Secret Key</label>
+                            <input class="form-control"
+                                   type="@(showStripeSecret ? "text" : "password")"
+                                   placeholder="sk_live_..."
+                                   @bind="stripeSecretKey" />
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="stripeSecretToggle" @bind="showStripeSecret" />
+                                <label class="form-check-label" for="stripeSecretToggle">Show secret key</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-primary" disabled>Save (coming soon)</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted">Configuration for this provider will be available soon.</div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isAdmin;
+    private bool infoShown;
+    private const string TabStripe = "Stripe";
+    private const string TabDojo = "Dojo";
+    private const string TabPaypal = "Paypal";
+    private const string TabSagepay = "Sagepay";
+    private const string TabKlarna = "Klarna";
+    private const string TabPayVector = "PayVector";
+    private const string TabV12 = "V12";
+
+    private string activeTab = TabStripe;
+    private string stripePublishableKey = string.Empty;
+    private string stripeSecretKey = string.Empty;
+    private bool showStripeSecret;
+
+    protected override void OnInitialized()
+    {
+        isAdmin = AuthService.CurrentUser?.IsAdmin == true;
+        if (!isAdmin)
+        {
+            AppSnackbar.Show("You do not have permission to view this page.", SnackbarType.Warning);
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || !isAdmin || infoShown)
+            return;
+
+        infoShown = true;
+        AppSnackbar.Show("Changes are stored only in the UI for now. Save functionality will be added later.", SnackbarType.Info);
+    }
+
+    private void SwitchTab(string tab)
+    {
+        activeTab = tab;
+    }
+}

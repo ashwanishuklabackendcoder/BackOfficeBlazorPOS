@@ -1,0 +1,515 @@
+@page "/branch-location-setup"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IBranchLocationService BranchService
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>Branch Location Setup</PageTitle>
+
+<div class="container-fluid mt-3">
+    <div class="row g-3">
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">Branches</span>
+                    <span class="badge bg-secondary">@branches.Count</span>
+                </div>
+                <div class="list-group list-group-flush branch-list">
+                    @if (branches.Count == 0)
+                    {
+                        <div class="p-3 text-muted">No active branches found.</div>
+                    }
+                    else
+                    {
+                        @foreach (var branch in branches)
+                        {
+                            <button type="button"
+                                    class="@BranchItemClass(branch.Id)"
+                                    @onclick="() => SelectBranch(branch.Id)">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-semibold">@branch.Code</div>
+                                        <div class="small ">@branch.Name</div>
+                                    </div>
+                                    @if (branch.KeyLocation)
+                                    {
+                                        <span class="badge bg-info text-dark">Key</span>
+                                    }
+                                </div>
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-8">
+            <div class="card h-100">
+                <div class="card-header">
+                    <span class="fw-semibold">Branch Details</span>
+                </div>
+                <div class="card-body">
+                    @if (model == null)
+                    {
+                        <div class="text-muted">Select a branch to view and edit details.</div>
+                    }
+                    else
+                    {
+                        <ul class="nav nav-tabs mb-3">
+                            <li class="nav-item">
+                                <button class="@TabClass(TabGeneral)"
+                                        @onclick="() => SwitchTab(TabGeneral)">
+                                    General
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="@TabClass(TabOpeningHours)"
+                                        @onclick="() => SwitchTab(TabOpeningHours)">
+                                    Opening Hours
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="@TabClass(TabECommerce)"
+                                        @onclick="() => SwitchTab(TabECommerce)">
+                                    ECommerce
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="@TabClass(TabPrinting)"
+                                        @onclick="() => SwitchTab(TabPrinting)">
+                                    Printing
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="@TabClass(TabWorkshop)"
+                                        @onclick="() => SwitchTab(TabWorkshop)">
+                                    Workshop
+                                </button>
+                            </li>
+                        </ul>
+
+                        @if (activeTab == "General")
+                        {
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Code *</label>
+                                    <input class="form-control"
+                                           @bind="model.Code"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Code)))"
+                                           disabled="true" />
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">Name *</label>
+                                    <input class="form-control"
+                                           @bind="model.Name"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Name)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Company Number *</label>
+                                    <input class="form-control"
+                                           @bind="model.CompanyNumber"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.CompanyNumber)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Postcode *</label>
+                                    <input class="form-control"
+                                           @bind="model.Postcode"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Postcode)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end gap-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" @bind="model.IsActive" disabled="@isLocked" />
+                                        <label class="form-check-label">Active</label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" @bind="model.KeyLocation" disabled="@isLocked" />
+                                        <label class="form-check-label">Key Location</label>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Address 1</label>
+                                    <input class="form-control"
+                                           @bind="model.Address1"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Address1)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Address 2</label>
+                                    <input class="form-control"
+                                           @bind="model.Address2"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Address2)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Address 3</label>
+                                    <input class="form-control"
+                                           @bind="model.Address3"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Address3)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Address 4</label>
+                                    <input class="form-control"
+                                           @bind="model.Address4"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.Address4)))"
+                                           disabled="@isLocked" />
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">General Email Address</label>
+                                    <input class="form-control"
+                                           @bind="model.GeneralEmailAddress"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.GeneralEmailAddress)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Main Telephone</label>
+                                    <input class="form-control"
+                                           @bind="model.MainTelephone"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.MainTelephone)))"
+                                           disabled="@isLocked" />
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Account Name</label>
+                                    <input class="form-control"
+                                           @bind="model.AccountName"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.AccountName)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Account Email</label>
+                                    <input class="form-control"
+                                           @bind="model.AccountEmail"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.AccountEmail)))"
+                                           disabled="@isLocked" />
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label">Admin Name</label>
+                                    <input class="form-control"
+                                           @bind="model.AdminName"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.AdminName)))"
+                                           disabled="@isLocked" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Admin Email</label>
+                                    <input class="form-control"
+                                           @bind="model.AdminEmail"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.AdminEmail)))"
+                                           disabled="@isLocked" />
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="form-label">Store Website URL</label>
+                                    <input class="form-control"
+                                           @bind="model.StoreWebsiteURL"
+                                           maxlength="@(MaxLengthHelper.For<BranchDetailDto>(nameof(BranchDetailDto.StoreWebsiteURL)))"
+                                           disabled="@isLocked" />
+                                </div>
+                            </div>
+                        }
+                        else if (activeTab == "OpeningHours")
+                        {
+                            <div class="row g-2">
+                                @foreach (var hour in model.Settings.OpeningHours)
+                                {
+                                    <div class="col-12 col-md-6">
+                                        <div class="border rounded p-2">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="fw-semibold">@hour.Day</span>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" role="switch"
+                                                           @bind="hour.IsClosed" disabled="@isLocked" />
+                                                    <label class="form-check-label">Closed</label>
+                                                </div>
+                                            </div>
+                                            <div class="row g-2">
+                                                <div class="col">
+                                                    <input type="time" class="form-control"
+                                                           @bind="hour.OpenTime"
+                                                           disabled="@isLocked || hour.IsClosed" />
+                                                </div>
+                                                <div class="col">
+                                                    <input type="time" class="form-control"
+                                                           @bind="hour.CloseTime"
+                                                           disabled="@isLocked || hour.IsClosed" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (activeTab == "ECommerce")
+                        {
+                            <div class="row g-3 align-items-end">
+
+                              
+
+                                <!-- CONTACT EMAIL -->
+                                <div class="col-md-6">
+                                    <label class="form-label">Contact Email</label>
+                                    <input class="form-control"
+                                           @bind="model.Settings.EcommerceContactEmail"
+                                           maxlength="80"
+                                           disabled="@isLocked" />
+                                </div>
+
+                                <!-- ORDER PREFIX -->
+                                <div class="col-md-6">
+                                    <label class="form-label">Order Prefix</label>
+                                    <input class="form-control"
+                                           @bind="model.Settings.EcommerceOrderPrefix"
+                                           maxlength="30"
+                                           disabled="@isLocked" />
+                                </div>
+                                <!-- ENABLE SWITCH -->
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               role="switch"
+                                               @bind="model.Settings.EcommerceEnabled"
+                                               disabled="@isLocked" />
+                                        <label class="form-check-label ms-2">Enabled</label>
+                                    </div>
+                                </div>
+
+                            </div>
+                        }
+                        else if (activeTab == "Printing")
+                        {
+                            @if (string.IsNullOrWhiteSpace(model.Code))
+                            {
+                                <div class="text-muted">Select a branch with a valid location code to configure printers.</div>
+                            }
+                            else
+                            {
+                                <BranchPrintingTab LocationCode="@model.Code" Disabled="@isLocked" />
+                            }
+                        }
+                        else if (activeTab == "Workshop")
+                        {
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch mt-4">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               @bind="model.Settings.WorkshopEnabled" disabled="@isLocked" />
+                                        <label class="form-check-label">Enabled</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label">Workshop Email</label>
+                                    <input class="form-control" @bind="model.Settings.WorkshopEmail" maxlength="80" disabled="@isLocked" />
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="card-footer d-flex justify-content-end gap-2">
+                    <button class="btn btn-outline-secondary"
+                            @onclick="Cancel"
+                            disabled="@isLocked || model == null || isSaving">
+                        Cancel
+                    </button>
+                    <button class="btn btn-primary"
+                            @onclick="Save" >
+                        Save
+                    </button>
+@*                     <button class="btn btn-primary"
+                            @onclick="Save"
+                            disabled="@isLocked || model == null || isSaving">
+                        Save
+                    </button> *@
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .branch-list {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+</style>
+
+@code {
+    List<BranchSummaryDto> branches = new();
+    BranchDetailDto? model;
+    BranchDetailDto? original;
+    int? selectedId;
+    const string TabGeneral = "General";
+    const string TabOpeningHours = "OpeningHours";
+    const string TabECommerce = "ECommerce";
+    const string TabPrinting = "Printing";
+    const string TabWorkshop = "Workshop";
+    string activeTab = TabGeneral;
+    bool isSaving;
+
+    bool isLocked => model?.IsDeleted == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        branches = await BranchService.GetActiveBranchesAsync();
+        if (branches.Count > 0)
+        {
+            await SelectBranch(branches[0].Id);
+        }
+    }
+
+    async Task SelectBranch(int id)
+    {
+        selectedId = id;
+        activeTab = "General";
+
+        var res = await BranchService.GetBranchAsync(id);
+        if (res.Success && res.Data != null)
+        {
+            model = EnsureDefaults(res.Data);
+            original = Clone(model);
+            if (model.IsDeleted)
+                AppSnackbar.Show("This branch is deleted and cannot be edited.", SnackbarType.Warning);
+        }
+        else
+        {
+            model = null;
+            AppSnackbar.Show(res.Message ?? "Unable to load branch.", SnackbarType.Error);
+        }
+    }
+
+    void SwitchTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    string TabClass(string tab)
+        => activeTab == tab ? "nav-link active" : "nav-link";
+
+    string BranchItemClass(int id)
+        => selectedId == id
+            ? "list-group-item list-group-item-action active"
+            : "list-group-item list-group-item-action";
+
+    async Task Save()
+    {
+        if (model == null || isLocked)
+            return;
+
+        var validation = ValidateClient(model);
+        if (!string.IsNullOrEmpty(validation))
+        {
+            AppSnackbar.Show(validation, SnackbarType.Error);
+            return;
+        }
+
+        isSaving = true;
+        var res = await BranchService.SaveBranchAsync(model);
+        isSaving = false;
+
+        if (res.Success)
+            AppSnackbar.Show(res.Message ?? "Saved", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res.Message ?? "Save failed", SnackbarType.Error);
+
+        if (res.Success && res.Data != null)
+        {
+            model = EnsureDefaults(res.Data);
+            original = Clone(model);
+            branches = await BranchService.GetActiveBranchesAsync();
+            selectedId = model.Id;
+        }
+    }
+
+    void Cancel()
+    {
+        if (original == null || isLocked)
+            return;
+
+        model = Clone(original);
+        AppSnackbar.Show("Changes discarded.", SnackbarType.Info);
+    }
+
+    static BranchDetailDto EnsureDefaults(BranchDetailDto dto)
+    {
+        dto.Settings ??= new BranchSettingsDto();
+        dto.Settings.OpeningHours ??= new List<OpeningHourDto>();
+
+        if (dto.Settings.OpeningHours.Count == 0)
+        {
+            dto.Settings.OpeningHours = new List<OpeningHourDto>
+            {
+                new OpeningHourDto { Day = "Monday", OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(17, 0) },
+                new OpeningHourDto { Day = "Tuesday", OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(17, 0) },
+                new OpeningHourDto { Day = "Wednesday", OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(17, 0) },
+                new OpeningHourDto { Day = "Thursday", OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(17, 0) },
+                new OpeningHourDto { Day = "Friday", OpenTime = new TimeOnly(9, 0), CloseTime = new TimeOnly(17, 0) },
+                new OpeningHourDto { Day = "Saturday", OpenTime = new TimeOnly(10, 0), CloseTime = new TimeOnly(16, 0) },
+                new OpeningHourDto { Day = "Sunday", IsClosed = true }
+            };
+        }
+
+        return dto;
+    }
+
+    static BranchDetailDto Clone(BranchDetailDto source)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(source);
+        return System.Text.Json.JsonSerializer.Deserialize<BranchDetailDto>(json) ?? new BranchDetailDto();
+    }
+
+    static string? ValidateClient(BranchDetailDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Code))
+            return "Code is required.";
+        if (dto.Code.Trim().Length > 2)
+            return "Code must be 2 characters or fewer.";
+
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            return "Name is required.";
+
+        if (string.IsNullOrWhiteSpace(dto.CompanyNumber))
+            return "Company Number is required.";
+
+        if (string.IsNullOrWhiteSpace(dto.Postcode))
+            return "Postcode is required.";
+
+        if (!string.IsNullOrWhiteSpace(dto.MainTelephone) && dto.MainTelephone.Length > 30)
+            return "Telephone number must be 30 characters or fewer.";
+
+        if (!IsValidEmail(dto.GeneralEmailAddress))
+            return "General Email Address is invalid.";
+
+        if (!IsValidEmail(dto.AccountEmail))
+            return "Account Email is invalid.";
+
+        if (!IsValidEmail(dto.AdminEmail))
+            return "Admin Email is invalid.";
+
+        if (!IsValidEmail(dto.Settings?.EcommerceContactEmail))
+            return "ECommerce Contact Email is invalid.";
+
+        if (!IsValidEmail(dto.Settings?.WorkshopEmail))
+            return "Workshop Email is invalid.";
+
+        return null;
+    }
+
+    static bool IsValidEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return true;
+
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            email.Trim(),
+            @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    }
+}
+

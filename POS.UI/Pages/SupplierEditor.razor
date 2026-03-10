@@ -1,0 +1,85 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ISupplierService SupplierService
+@inject AppSnackbarService AppSnackbar
+
+
+<div class="card card-warning card-outline">
+    <div class="card-body">
+
+        <div class="row mb-3">
+            <label class="col-sm-3 col-form-label">Supplier Number</label>
+            <div class="col-sm-3">
+                <input class="form-control"
+                       @bind="model.AccountNo"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.AccountNo)))" />
+            </div>
+            <div class="col-sm-2">
+                <button class="btn btn-primary w-100" @onclick="Search">Search</button>
+            </div>
+        </div>
+
+        <div class="row mb-2">
+            <div class="col-sm-4">
+                <label>Name</label>
+                <input class="form-control"
+                       @bind="model.Name"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Name)))" />
+            </div>
+        </div>
+
+        <!-- keep all other fields exactly as-is -->
+
+    </div>
+
+    <div class="card-footer text-end">
+        <button class="btn btn-success" @onclick="Save">Save</button>
+        <button class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<SupplierDto> OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    SupplierDto model = new();
+    bool recordExists;
+    async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(model.AccountNo))
+        {
+            AppSnackbar.Show("Enter Supplier Number", SnackbarType.Warning);
+            return;
+        }
+
+        var res = await SupplierService.GetSupplier(model.AccountNo);
+
+        if (res?.Success == true && res.Data != null)
+        {
+            model = res.Data;
+            recordExists = true;
+        }
+        else
+        {
+            recordExists = false;
+            var acc = model.AccountNo;
+            model = new SupplierDto { AccountNo = acc };
+            AppSnackbar.Show(res?.Message ?? "Supplier not found. A new record will be created.", SnackbarType.Info);
+        }
+    }
+
+    async Task Save()
+    {
+        var res = await SupplierService.SaveSupplier(model);
+        if (res?.Success == true)
+            AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+
+        if (res?.Success == true)
+        {
+            await OnSaved.InvokeAsync(model);
+        }
+    }
+}
+

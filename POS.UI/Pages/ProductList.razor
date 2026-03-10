@@ -1,0 +1,603 @@
+@page "/products"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using System.Net.Http.Headers;
+@using System.Reflection.Metadata
+@using static System.Net.WebRequestMethods
+
+
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IProductApiService ProductApi
+@inject IManufacturerService ManufacturerService
+@inject ISupplierService SupplierApi
+@inherits LayoutComponentBase
+
+@inject ICategoryService CategoryApi
+@inject IStockService StockService
+
+
+<PageTitle>Saved Products</PageTitle>
+<style>
+    .stock-panel {
+        height: 260px; /* fixed panel height */
+        display: flex;
+        flex-direction: column;
+    }
+
+    .stock-table-wrapper {
+        flex: 1;
+        overflow-y: auto; /* vertical scroll */
+    }
+
+        .stock-table-wrapper thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+</style>
+<div class="card card-warning card-outline">
+
+    <!-- ================= HEADER ================= -->
+    <div class="card-header">
+        <div class="fw-bold mb-2">Saved Products</div>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3 position-relative">
+                        <label class="form-label">Make</label>
+                            <BrandSelector @bind-Value="filter.Make" />
+        
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Search 1</label>
+                        <input class="form-control"
+                               @bind="filter.Search1"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Search1)))" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Search 2</label>
+                        <input class="form-control"
+                               @bind="filter.Search2"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Search2)))" />
+                    </div>
+
+                    
+                </div>
+
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3 position-relative">
+                        <label class="form-label">Supplier</label>
+
+                        <SupplierSelector @bind-Value="filter.Supplier1Code" />
+
+  
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">MFR No</label>
+                        <input class="form-control"
+                               @bind="filter.MfrPartNumber"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.MfrPartNumber)))" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Detail</label>
+                        <input class="form-control"
+                               @bind="filter.Details"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Details)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Size</label>
+                        <input class="form-control"
+                               @bind="filter.Size"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Size)))" />
+                    </div>
+    
+
+
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3 position-relative">
+                        <label class="form-label">Category A</label>
+
+                        <CategorySelector Level="A"
+                                          @bind-Code="filter.CatACode"
+                                          @bind-Name="filter.CatA" />
+                    </div>
+
+                    <div class="col-md-3 position-relative">
+                        <label class="form-label">Category B</label>
+                        <CategorySelector Level="B"
+                                          @bind-Code="filter.CatBCode"
+                                          @bind-Name="filter.CatB" />
+                    </div>
+
+                    <div class="col-md-3 position-relative">
+                        <label class="form-label">Category C</label>
+                        <CategorySelector Level="C"
+                                          @bind-Code="filter.CatCCode"
+                                          @bind-Name="filter.CatC" />
+                    </div>
+             
+                    <div class="col-md-2">
+                        <label class="form-label">Gender</label>
+                        <input class="form-control"
+                               @bind="filter.Gender"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Gender)))" />
+                    </div>
+
+                </div>
+
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Color</label>
+                        <input class="form-control"
+                               @bind="filter.Color"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Color)))" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Year</label>
+                        <input class="form-control"
+                               @bind="filter.Year"
+                               maxlength="@(MaxLengthHelper.For<ProductFilterDto>(nameof(ProductFilterDto.Year)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Website</label>
+                        <select class="form-select" @bind="filter.Website">
+                            <option value="">All</option>
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Price From</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+
+                            <input type="number"
+                                   step="0.01"
+                                   class="form-control"
+                                   @bind="filter.CostPrice" />
+                        </div>
+                        
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">To</label>
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+
+                            <input type="number"
+                                   step="0.01"
+                                   class="form-control"
+                                   @bind="filter.CostPrice" />
+                        </div>
+                       
+                    </div>
+            
+
+                    <div class="col-md-3 d-flex align-items-end gap-1">
+                        <button class="btn btn-primary " @onclick="SearchProducts"> Search </button>
+
+                        <button class="btn btn-secondary " @onclick="ClearFilters"> Clear </button>
+
+                   </div>
+
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-2 h-100">
+                    <div class="row g-2">
+
+                        <!-- STOCK -->
+                        <div class="col-6">
+                            <div class="fw-semibold small mb-1">Stock</div>
+
+                            <InputRadioGroup TValue="string" @bind-Value="filter.StockMode">
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("All")" />
+                                    <label class="form-check-label">All Products</label>
+                                </div>
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("AllShops")" />
+                                    <label class="form-check-label">All Shops</label>
+                                </div>
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("Here")" />
+                                    <label class="form-check-label">Stock Here</label>
+                                </div>
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("NotInStock")" />
+                                    <label class="form-check-label">Not In Stock</label>
+                                </div>
+
+                            </InputRadioGroup>
+                        </div>
+
+                        <!-- MATCH TYPE -->
+                        <div class="col-6 border-start ps-3">
+                            <div class="fw-semibold small mb-1">Match</div>
+
+                            <InputRadioGroup TValue="string" @bind-Value="filter.MatchType">
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("Contains")" />
+                                    <label class="form-check-label">Contains</label>
+                                </div>
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("Equals")" />
+                                    <label class="form-check-label">Equals</label>
+                                </div>
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("StartsWith")" />
+                                    <label class="form-check-label">Starts With</label>
+                                </div>
+
+                                <div class="form-check form-check-sm">
+                                    <InputRadio class="form-check-input" Value="@("EndsWith")" />
+                                    <label class="form-check-label">Ends With</label>
+                                </div>
+
+                            </InputRadioGroup>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="border p-2 stock-panel">
+                    <h6 class="fw-bold mb-2">Stock</h6>
+
+                    <div class="table-responsive stock-table-wrapper">
+                        <table class="table table-sm table-bordered text-center mb-0">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th>Loc</th>
+                                    <th>Qty</th>
+                                    <th>Min</th>
+                                    <th>Max</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in stockRows)
+                                {
+                                    <tr>
+                                        <td>@r.Loc</td>
+                                        <td>@r.Qty</td>
+                                        <td>@r.Min</td>
+                                        <td>@r.Max</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+        <!-- FILTER ROW -->
+
+   
+    </div>
+
+    <!-- ================= BODY ================= -->
+    <div class="card-body p-2">
+
+        @if (_loading)
+        {
+            <div class="text-center p-3">
+                <span class="spinner-border spinner-border-sm"></span>
+                Loading products...
+            </div>
+        }
+
+        <table class="table table-sm table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th @onclick="() => SortBy(nameof(ProductDto.PartNumber))">
+                        Part No @SortIcon(nameof(ProductDto.PartNumber))
+                    </th>
+                    <th @onclick="() => SortBy(nameof(ProductDto.Make))">
+                        Make @SortIcon(nameof(ProductDto.Make))
+                    </th>
+                    <th @onclick="() => SortBy(nameof(ProductDto.CatA))">
+                        Category A @SortIcon(nameof(ProductDto.CatA))
+                    </th>
+                    <th @onclick="() => SortBy(nameof(ProductDto.CatB))">
+                        Category B @SortIcon(nameof(ProductDto.CatB))
+                    </th>
+                    <th @onclick="() => SortBy(nameof(ProductDto.CatC))">
+                        Category C @SortIcon(nameof(ProductDto.CatC))
+                    </th>
+                    <th @onclick="() => SortBy(nameof(ProductDto.Supplier1Code))">
+                        Supplier @SortIcon(nameof(ProductDto.Supplier1Code))
+                    </th>
+                    <th @onclick="() => SortBy(nameof(ProductDto.CostPrice))">
+                        Cost Price @SortIcon(nameof(ProductDto.CostPrice))
+                    </th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @if (!_products.Any() && !_loading)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-muted">
+                            No products found
+                        </td>
+                    </tr>
+                }
+
+                @foreach (var p in SortedProducts)
+                {
+                    <tr style="cursor:pointer"
+                        @onclick="() => LoadStockForProduct(p)">
+
+                        <td>@p.PartNumber</td>
+                        <td>@p.Make</td>
+                        <td>@p.CatA</td>
+                        <td>@p.CatB</td>
+                        <td>@p.CatC</td>
+                        <td>@p.Supplier1Code</td>
+                        <td>@p.CostPrice</td>
+                        <td>
+                            @if (SelectionMode)
+                            {
+                                <button class="btn btn-sm btn-success"
+                                        @onclick="async () => { await LoadStockForProduct(p); await SelectProduct(p); }">
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-primary me-1"
+                                        @onclick="() => Edit(p)">
+                                    Edit
+                                </button>
+                            }
+                        </td>
+
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+    </div>
+</div>
+
+@code {
+
+    // ================= STATE =================
+
+    List<ProductDto> _products = new();
+    ProductDto model = new();
+    ProductFilterDto filter = new();
+    List<SupplierDto> supplierSuggestions = new(); 
+    List<StockRow> stockRows = new();
+
+    [Parameter]
+    public bool SelectionMode { get; set; } = false;
+
+    [Parameter]
+    public EventCallback<ProductDto> OnProductSelected { get; set; }
+
+    string supplier1Display = "";
+    List<string> makeSuggestions = new();
+    Dictionary<string, List<CategoryDto>> suggestions = new()
+    {
+        ["A"] = new(),
+        ["B"] = new(),
+        ["C"] = new()
+    };
+
+    Dictionary<string, string?> selectedNames = new()
+    {
+        ["A"] = null,
+        ["B"] = null,
+        ["C"] = null
+    };
+
+    string _sortColumn = nameof(ProductDto.PartNumber);
+    bool _sortAsc = true;
+    bool _loading = false;
+
+    // ================= API SEARCH =================
+    class StockRow
+    {
+        public string Loc { get; set; } = "";
+        public string Qty { get; set; } = "0";
+        public string Min { get; set; } = "0";
+        public string Max { get; set; } = "0";
+    }
+
+
+    async Task SearchProducts()
+    {
+        _loading = true;
+
+        var res = await ProductApi.GetProductsAsync(filter);
+
+        _products = res?.Success == true
+            ? res.Data
+            : new List<ProductDto>();
+
+        _loading = false;
+    }
+
+    async Task LoadStockForProduct(ProductDto product)
+    {
+        var levels = await StockService.GetStockLevelsAsync(product.PartNumber);
+
+        stockRows = levels.Select(l => new StockRow
+        {
+            Loc = l.LocationCode,
+            Qty = l.Quantity.ToString(),
+            Min = "0",
+            Max = "0"
+        }).ToList();
+    }
+
+
+
+    void ClearFilters()
+    {
+        filter = new ProductFilterDto();
+        _products.Clear();
+    }
+
+    // ================= SORTING =================
+
+    IEnumerable<ProductDto> SortedProducts =>
+        _sortColumn switch
+        {
+            nameof(ProductDto.PartNumber) => _sortAsc ? _products.OrderBy(x => x.PartNumber) : _products.OrderByDescending(x => x.PartNumber),
+            nameof(ProductDto.Make) => _sortAsc ? _products.OrderBy(x => x.Make) : _products.OrderByDescending(x => x.Make),
+            nameof(ProductDto.CatA) => _sortAsc ? _products.OrderBy(x => x.CatA) : _products.OrderByDescending(x => x.CatA),
+            nameof(ProductDto.CatB) => _sortAsc ? _products.OrderBy(x => x.CatB) : _products.OrderByDescending(x => x.CatB),
+            nameof(ProductDto.CatC) => _sortAsc ? _products.OrderBy(x => x.CatC) : _products.OrderByDescending(x => x.CatC),
+            nameof(ProductDto.Supplier1Code) => _sortAsc ? _products.OrderBy(x => x.Supplier1Code) : _products.OrderByDescending(x => x.Supplier1Code),
+            nameof(ProductDto.CostPrice) => _sortAsc ? _products.OrderBy(x => x.CostPrice) : _products.OrderByDescending(x => x.CostPrice),
+            _ => _products
+        };
+
+    void SortBy(string column)
+    {
+        if (_sortColumn == column)
+            _sortAsc = !_sortAsc;
+        else
+        {
+            _sortColumn = column;
+            _sortAsc = true;
+        }
+    }
+
+    string SortIcon(string column)
+        => _sortColumn == column ? (_sortAsc ? "?" : "?") : "";
+
+    // ================= ACTIONS =================
+
+    void AddNew()
+        => Navigation.NavigateTo("/product");
+
+    void Edit(ProductDto p)
+        => Navigation.NavigateTo($"/product/{p.PartNumber}");
+
+    async Task Delete(ProductDto p)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Delete product {p.PartNumber}?");
+        if (ok)
+            _products.Remove(p);
+    }
+
+    async Task LoadMakeSuggestions()
+    {
+        if (string.IsNullOrWhiteSpace(filter.Make) || filter.Make.Length < 3)
+        {
+            makeSuggestions.Clear();
+            return;
+        }
+
+        makeSuggestions = await ManufacturerService.SuggestMakes(filter.Make);
+    }
+
+    void SelectMake(string make)
+    {
+        filter.Make = make;
+        makeSuggestions.Clear();
+    }
+    async Task SelectProduct(ProductDto product)
+    {
+        if (OnProductSelected.HasDelegate)
+            await OnProductSelected.InvokeAsync(product);
+    }
+
+
+    string GetSupplier1Display()
+    {
+        return string.IsNullOrEmpty(supplier1Display)
+            ? filter.Supplier1Code     
+            : supplier1Display;        
+    }
+
+    void SelectSupplier1(SupplierDto s)
+    {
+        filter.Supplier1Code = s.AccountNo; 
+        supplier1Display = s.Name;          
+        supplierSuggestions.Clear();
+    }
+
+    async Task OnSupplier1Input(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+
+        supplier1Display = "";              
+        filter.Supplier1Code = value;       
+
+        if (value.Length < 2)
+        {
+            supplierSuggestions.Clear();
+            return;
+        }
+
+        supplierSuggestions = await SupplierApi.Suggest(value);
+    }
+
+    string GetCategoryDisplay(string level)
+    {
+        return level switch
+        {
+            "A" => selectedNames["A"] ?? filter.CatACode,
+            "B" => selectedNames["B"] ?? filter.CatBCode,
+            "C" => selectedNames["C"] ?? filter.CatCCode,
+            _ => ""
+        };
+    }
+
+    async Task OnCategoryInput(ChangeEventArgs e, string type)
+    {
+        var value = e.Value?.ToString() ?? "";
+
+        switch (type)
+        {
+            case "A": filter.CatACode = value; selectedNames["A"] = null; break;
+            case "B": filter.CatBCode = value; selectedNames["B"] = null; break;
+            case "C": filter.CatCCode = value; selectedNames["C"] = null; break;
+        }
+
+        if (value.Length < 3)
+        {
+            suggestions[type].Clear();
+            return;
+        }
+
+        suggestions[type] = await CategoryApi.Suggest(type, value);
+    }
+
+    void SelectCategory(CategoryDto dto, string type)
+    {
+        switch (type)
+        {
+            case "A": filter.CatACode = dto.Code; selectedNames["A"] = dto.Name; break;
+            case "B": filter.CatBCode = dto.Code; selectedNames["B"] = dto.Name; break;
+            case "C": filter.CatCCode = dto.Code; selectedNames["C"] = dto.Name; break;
+        }
+
+        suggestions[type].Clear();
+    }
+
+    
+
+
+
+}
+

@@ -1,0 +1,39 @@
+@using BackOfficeBlazor.Shared.DTOs
+
+<div class="mb-3">
+    <label class="form-label">Location Code</label>
+    <input class="form-control"
+           @bind="model.Code"
+           maxlength="@(MaxLengthHelper.For<LocationDto>(nameof(LocationDto.Code)))" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Location Name</label>
+    <input class="form-control"
+           @bind="model.Name"
+           maxlength="@(MaxLengthHelper.For<LocationDto>(nameof(LocationDto.Name)))" />
+</div>
+
+<div class="d-flex justify-content-end gap-2">
+    <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+    <button class="btn btn-primary" @onclick="Save">Save</button>
+</div>
+
+@code {
+    [Parameter] public EventCallback<LocationDto> OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    LocationDto model = new();
+
+    async Task Save()
+    {
+        // Persist location here (API/service)
+        await OnSaved.InvokeAsync(model);
+    }
+
+    async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}
+

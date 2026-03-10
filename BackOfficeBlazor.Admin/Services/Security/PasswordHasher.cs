@@ -1,0 +1,32 @@
+using System.Security.Cryptography;
+
+namespace BackOfficeBlazor.Admin.Services.Security
+{
+    public static class PasswordHasher
+    {
+        public static (byte[] hash, byte[] salt) HashPassword(string password)
+        {
+            var salt = RandomNumberGenerator.GetBytes(16);
+            var hash = Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                salt,
+                iterations: 100_000,
+                hashAlgorithm: HashAlgorithmName.SHA256,
+                outputLength: 32);
+
+            return (hash, salt);
+        }
+
+        public static bool Verify(string password, byte[] hash, byte[] salt)
+        {
+            var attempted = Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                salt,
+                iterations: 100_000,
+                hashAlgorithm: HashAlgorithmName.SHA256,
+                outputLength: 32);
+
+            return CryptographicOperations.FixedTimeEquals(attempted, hash);
+        }
+    }
+}

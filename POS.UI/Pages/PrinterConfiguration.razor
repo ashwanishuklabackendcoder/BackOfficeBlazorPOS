@@ -1,0 +1,392 @@
+@page "/printer-config"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IPrinterApiService PrinterApi
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>Printer Configuration</PageTitle>
+
+<h5 class="fw-bold mt-3">Printer Configuration</h5>
+
+<div class="row g-3">
+    <div class="col-12 col-lg-4">
+        <div class="card">
+            <div class="card-header d-flex gap-2 align-items-center">
+                <input class="form-control form-control-sm"
+                       placeholder="Location"
+                       @bind="locationCode"
+                       maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.LocationCode)))" />
+                <button class="btn btn-sm btn-primary" @onclick="LoadPrinters">Load</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="NewPrinter">New</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    @foreach (var p in printers)
+                    {
+                        <button class="list-group-item list-group-item-action @(selectedPrinterId == p.Id ? "active" : "")"
+                                @onclick="() => SelectPrinter(p.Id)">
+                            <div class="d-flex justify-content-between">
+                                <strong>@p.PrinterName</strong>
+                                <span class="badge @(p.IsOnline ? "text-bg-success" : "text-bg-secondary")">
+                                    @(p.IsOnline ? "Online" : "Offline")
+                                </span>
+                            </div>
+                            <div class="small">Type: @TypeText(p.Type) | Mode: @ModeText(p.Mode)</div>
+                            <div class="small">IP: @p.IpAddress</div>
+                            <div class="small">Last print: @(p.LastPrintedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</div>
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label">PrinterName</label>
+                        <input class="form-control"
+                               @bind="model.PrinterName"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.PrinterName)))" />
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">Description</label>
+                        <input class="form-control"
+                               @bind="model.Description"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.Description)))" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" @bind="model.Mode">
+                            <option value="0">Windows</option>
+                            <option value="1">TCP</option>
+                            <option value="2">File</option>
+                            <option value="3">Email</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" @bind="model.Type">
+                            <option value="0">Receipt</option>
+                            <option value="1">Label</option>
+                            <option value="2">A4</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">LabelFormat</label>
+                        <select class="form-select" @bind="model.LabelFormat">
+                            <option value="0">None</option>
+                            <option value="1">ZPL</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">LocationCode</label>
+                        <input class="form-control"
+                               @bind="model.LocationCode"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.LocationCode)))" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">IpAddress</label>
+                        <input class="form-control"
+                               @bind="model.IpAddress"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.IpAddress)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">TcpPort</label>
+                        <input class="form-control" type="number" @bind="model.TcpPort" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">LocalPortName</label>
+                        <input class="form-control"
+                               @bind="model.LocalPortName"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.LocalPortName)))" />
+                    </div>
+
+                    <div class="col-md-2 form-check mt-4 ms-2">
+                        <input class="form-check-input" type="checkbox" id="shared" @bind="model.Shared" />
+                        <label class="form-check-label" for="shared">Shared</label>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">ShareHostAddress</label>
+                        <input class="form-control"
+                               @bind="model.ShareHostAddress"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.ShareHostAddress)))" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">ShareName</label>
+                        <input class="form-control"
+                               @bind="model.ShareName"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.ShareName)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">ShareUsername</label>
+                        <input class="form-control"
+                               @bind="model.ShareUsername"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.ShareUsername)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">SharePassword</label>
+                        <input class="form-control"
+                               @bind="model.SharePassword"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.SharePassword)))" />
+                    </div>
+
+                    <div class="col-md-2 form-check mt-4 ms-2">
+                        <input class="form-check-input" type="checkbox" id="logo" @bind="model.ReceiptPrintLogo" />
+                        <label class="form-check-label" for="logo">Receipt Logo</label>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">ReceiptLogoSize</label>
+                        <input class="form-control" type="number" @bind="model.ReceiptLogoSize" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Filename</label>
+                        <input class="form-control"
+                               @bind="model.Filename"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.Filename)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">FileExtension</label>
+                        <input class="form-control"
+                               @bind="model.FileExtension"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.FileExtension)))" />
+                    </div>
+                    <div class="col-md-2 form-check mt-4 ms-2">
+                        <input class="form-check-input" type="checkbox" id="uniq" @bind="model.FileEnsureUnique" />
+                        <label class="form-check-label" for="uniq">Unique File</label>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">EmailDestination</label>
+                        <input class="form-control"
+                               @bind="model.EmailDestination"
+                               maxlength="@(MaxLengthHelper.For<PrinterConfigDto>(nameof(PrinterConfigDto.EmailDestination)))" />
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex gap-2">
+                <button class="btn btn-primary" disabled="@(!CanSave)" @onclick="Save">Save</button>
+                <button class="btn btn-danger" disabled="@(model.Id == 0)" @onclick="Delete">Delete</button>
+                <input class="form-control form-control-sm w-auto"
+                       placeholder="TerminalCode"
+                       @bind="testTerminalCode"
+                       maxlength="@(MaxLengthHelper.For<PrinterTestRequestDto>(nameof(PrinterTestRequestDto.TerminalCode)))" />
+                <button class="btn btn-outline-dark" disabled="@(model.Id == 0 || string.IsNullOrWhiteSpace(testTerminalCode))" @onclick="TestPrint">Test Print</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header">Terminal Assignment</div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-2">
+                <label class="form-label">TerminalCode</label>
+                <input class="form-control"
+                       @bind="assignment.TerminalCode"
+                       maxlength="@(MaxLengthHelper.For<TerminalPrinterAssignmentDto>(nameof(TerminalPrinterAssignmentDto.TerminalCode)))" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">LocationCode</label>
+                <input class="form-control"
+                       @bind="assignment.LocationCode"
+                       maxlength="@(MaxLengthHelper.For<TerminalPrinterAssignmentDto>(nameof(TerminalPrinterAssignmentDto.LocationCode)))" />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-primary mt-4" @onclick="LoadTerminalAssignments">Load</button>
+            </div>
+        </div>
+        <div class="row g-2 mt-1">
+            <div class="col-md-4">
+                <label class="form-label">ReceiptPrinterId</label>
+                <select class="form-select" @bind="assignment.ReceiptPrinterId">
+                    @foreach (var p in catalogPrinters.Where(x => x.Type == 0))
+                    {
+                        <option value="@p.Id">@p.PrinterName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">LabelPrinterId</label>
+                <select class="form-select" @bind="assignment.LabelPrinterId">
+                    <option value="">(None)</option>
+                    @foreach (var p in catalogPrinters.Where(x => x.Type == 1))
+                    {
+                        <option value="@p.Id">@p.PrinterName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">A4PrinterId</label>
+                <select class="form-select" @bind="assignment.A4PrinterId">
+                    <option value="">(None)</option>
+                    @foreach (var p in catalogPrinters.Where(x => x.Type == 2))
+                    {
+                        <option value="@p.Id">@p.PrinterName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-success mt-2" @onclick="SaveTerminalAssignments">Save Assignment</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string locationCode = "01";
+    private List<PrinterListItemDto> printers = new();
+    private PrinterConfigDto model = new() { LocationCode = "01" };
+    private int selectedPrinterId;
+    private string testTerminalCode = "";
+    private TerminalPrinterAssignmentDto assignment = new();
+    private List<PrinterListItemDto> catalogPrinters = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPrinters();
+    }
+
+    private bool CanSave =>
+        !string.IsNullOrWhiteSpace(model.LocationCode) &&
+        !string.IsNullOrWhiteSpace(model.PrinterName) &&
+        !string.IsNullOrWhiteSpace(model.Description);
+
+    private async Task LoadPrinters()
+    {
+        var res = await PrinterApi.GetPrintersAsync(locationCode);
+        printers = res.Data ?? new();
+        if (!string.IsNullOrWhiteSpace(res.Message))
+        {
+            if (res.Success)
+                AppSnackbar.Show(res.Message, SnackbarType.Info);
+            else
+                AppSnackbar.Show(res.Message, SnackbarType.Error);
+        }
+    }
+
+    private async Task SelectPrinter(int id)
+    {
+        selectedPrinterId = id;
+        var res = await PrinterApi.GetPrinterAsync(id);
+        if (res.Success && res.Data != null)
+        {
+            model = res.Data;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(res.Message))
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+    }
+
+    private void NewPrinter()
+    {
+        selectedPrinterId = 0;
+        model = new PrinterConfigDto
+        {
+            LocationCode = locationCode,
+            Mode = 0,
+            Type = 0,
+            LabelFormat = 0
+        };
+    }
+
+    private async Task Save()
+    {
+        ApiResponse<PrinterConfigDto> res;
+        if (model.Id == 0)
+            res = await PrinterApi.CreatePrinterAsync(model);
+        else
+            res = await PrinterApi.UpdatePrinterAsync(model);
+
+        if (res.Success)
+            AppSnackbar.Show(res.Message ?? "Saved", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res.Message ?? "Save failed", SnackbarType.Error);
+        if (res.Success)
+            await LoadPrinters();
+    }
+
+    private async Task Delete()
+    {
+        if (model.Id == 0)
+            return;
+
+        var res = await PrinterApi.DeletePrinterAsync(model.Id);
+        if (res.Success)
+            AppSnackbar.Show(res.Message ?? "Deleted", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res.Message ?? "Delete failed", SnackbarType.Error);
+        if (res.Success)
+        {
+            NewPrinter();
+            await LoadPrinters();
+        }
+    }
+
+    private async Task TestPrint()
+    {
+        var res = await PrinterApi.TestPrinterAsync(model.Id, testTerminalCode);
+        if (res.Success)
+            AppSnackbar.Show(res.Message ?? "Test print sent", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res.Message ?? "Test print failed", SnackbarType.Error);
+        if (res.Success)
+            await LoadPrinters();
+    }
+
+    private async Task LoadTerminalAssignments()
+    {
+        var res = await PrinterApi.GetTerminalPrintersAsync(assignment.TerminalCode, assignment.LocationCode);
+        if (!res.Success || res.Data == null)
+        {
+            if (!string.IsNullOrWhiteSpace(res.Message))
+                AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        catalogPrinters = res.Data.Printers;
+        assignment = res.Data.Assignment;
+        AppSnackbar.Show("Terminal printer catalog loaded", SnackbarType.Success);
+    }
+
+    private async Task SaveTerminalAssignments()
+    {
+        if (string.IsNullOrWhiteSpace(assignment.TerminalCode))
+        {
+            AppSnackbar.Show("TerminalCode is required.", SnackbarType.Warning);
+            return;
+        }
+
+        var res = await PrinterApi.SaveTerminalPrintersAsync(assignment);
+        if (res.Success)
+            AppSnackbar.Show(res.Message ?? "Assignment saved", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res.Message ?? "Assignment save failed", SnackbarType.Error);
+    }
+
+    private static string TypeText(int type)
+        => type switch
+        {
+            0 => "Receipt",
+            1 => "Label",
+            2 => "A4",
+            _ => "-"
+        };
+
+    private static string ModeText(int mode)
+        => mode switch
+        {
+            0 => "Windows",
+            1 => "TCP",
+            2 => "File",
+            3 => "Email",
+            _ => "-"
+        };
+}
+

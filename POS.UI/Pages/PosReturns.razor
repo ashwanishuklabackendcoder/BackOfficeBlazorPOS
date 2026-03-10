@@ -1,0 +1,313 @@
+@page "/pos-returns"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+
+@inject IReturnService ReturnService
+@inject AppSnackbarService AppSnackbar
+@inject NavigationManager Nav
+
+<PageTitle>POS Returns</PageTitle>
+
+<div class="card shadow-sm">
+
+    <div class="card-header fw-bold">
+        Customer Returns
+    </div>
+
+    <div class="card-body">
+
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label>From Date</label>
+                <InputDate TValue="DateTime?"
+                           class="form-control"
+                           @bind-Value="FromDateFilter" />
+            </div>
+
+            <div class="col-md-4">
+                <label>To Date</label>
+                <InputDate TValue="DateTime?"
+                           class="form-control"
+                           @bind-Value="ToDateFilter" />
+            </div>
+
+            <div class="col-md-4">
+                <label>Customer Account No</label>
+                <input class="form-control"
+                       @bind="CustomerAccNoFilter"
+                       placeholder="Optional" />
+            </div>
+
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100"
+                        @onclick="LoadInvoices">
+                    LOAD INVOICES
+                </button>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-8">
+                <label>Invoice</label>
+                <select class="form-select"
+                        @bind="SelectedInvoiceNo">
+                    <option value="">-- Select Invoice --</option>
+                    @foreach (var invoice in Invoices)
+                    {
+                        <option value="@invoice.InvoiceNo">
+                            @($"{invoice.InvoiceNo} | {invoice.CustomerAccNo} | {FormatInvoiceDate(invoice.InvoiceDate)}")
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-outline-primary w-100"
+                        @onclick="LoadInvoiceLines">
+                    LOAD LINES
+                </button>
+            </div>
+        </div>
+
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Select</th>
+                    <th>Part</th>
+                    <th>Description</th>
+                    <th>StockNo</th>
+                    <th>Qty</th>
+                    <th>Sell</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var line in Lines)
+                {
+                    <tr>
+                        <td>
+                            <input type="checkbox"
+                                   @bind="line.IsSelected" />
+                        </td>
+
+                        <td>@line.PartNumber</td>
+                        <td>@line.Description</td>
+                        <td>@line.StockNo</td>
+                        <td>@line.Quantity</td>
+                        <td>@line.Sell</td>
+
+                        <td>
+                            <select class="form-select"
+                                    @bind="line.ReturnReason">
+                                <option value="">Select</option>
+                                <option>UNSUITABLE</option>
+                                <option>FAULTY</option>
+                                <option>SECOND HAND</option>
+                                <option>CUSTOM</option>
+                            </select>
+
+                            @if (line.ReturnReason == "CUSTOM")
+                            {
+                                <input class="form-control mt-1"
+                                       placeholder="Enter custom reason"
+                                       @bind="line.CustomReturnReason" />
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="row mt-3">
+            <div class="col-md-3">
+                <label>Refund Cash</label>
+                <input type="number"
+                       class="form-control"
+                       @bind="RefundCash" />
+            </div>
+
+            <div class="col-md-3">
+                <label>Refund Card</label>
+                <input type="number"
+                       class="form-control"
+                       @bind="RefundCard" />
+            </div>
+        </div>
+
+        <hr />
+
+        <div class="d-flex justify-content-end gap-2">
+            <button class="btn btn-secondary"
+                    @onclick="Cancel">
+                Cancel
+            </button>
+
+            <button class="btn btn-danger"
+                    @onclick="ProcessReturn">
+                PROCESS RETURN
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+    List<ReturnInvoiceLookupDto> Invoices = new();
+    string? SelectedInvoiceNo;
+    string? CustomerAccNoFilter;
+    DateTime? FromDateFilter = DateTime.Today;
+    DateTime? ToDateFilter = DateTime.Today;
+
+    List<ReturnLineVm> Lines = new();
+
+    decimal RefundCash;
+    decimal RefundCard;
+    string CurrentLocation = "01";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInvoices();
+    }
+
+    private async Task LoadInvoices()
+    {
+        var res = await ReturnService.GetInvoicesAsync(FromDateFilter, ToDateFilter, CustomerAccNoFilter);
+        if (!res.Success)
+        {
+            await AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        Invoices = res.Data
+            .OrderByDescending(x => x.InvoiceDate)
+            .ToList();
+    }
+
+    async Task LoadInvoiceLines()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedInvoiceNo))
+        {
+            await AppSnackbar.Show("Select invoice", SnackbarType.Warning);
+            return;
+        }
+
+        try
+        {
+            var res = await ReturnService.GetSaleLinesAsync(SelectedInvoiceNo);
+
+            if (!res.Success)
+            {
+                await AppSnackbar.Show(res.Message, SnackbarType.Error);
+                return;
+            }
+
+            Lines = res.Data.Select(x => new ReturnLineVm
+            {
+                PartNumber = x.PartNumber,
+                StockNo = x.StockNo,
+                Quantity = x.Quantity,
+                Terminal = x.Terminal,
+                Location = x.Location,
+                Sell = x.Sell
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            await AppSnackbar.Show(ex.Message, SnackbarType.Error);
+        }
+    }
+
+    async Task ProcessReturn()
+    {
+        var selected = Lines.Where(x => x.IsSelected).ToList();
+        if (!selected.Any())
+        {
+            await AppSnackbar.Show("Select items", SnackbarType.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedInvoiceNo))
+        {
+            await AppSnackbar.Show("Select invoice", SnackbarType.Warning);
+            return;
+        }
+
+        if (selected.Any(x => string.IsNullOrWhiteSpace(x.GetReason())))
+        {
+            await AppSnackbar.Show("Select reason for each selected line (or fill custom reason)", SnackbarType.Warning);
+            return;
+        }
+
+        var dto = new ReturnProcessDto
+        {
+            InvoiceNo = SelectedInvoiceNo,
+            Location = CurrentLocation,
+
+            Lines = selected.Select(x => new ReturnLineDto
+            {
+                PartNumber = x.PartNumber,
+                Qty = x.Quantity,
+                StockNo = x.StockNo,
+                Terminal = x.Terminal,
+                Location = x.Location,
+                Reason = x.GetReason()
+            }).ToList(),
+
+            RefundCash = RefundCash,
+            RefundCard = RefundCard
+        };
+
+        ApiResponse<bool> result;
+        try
+        {
+            result = await ReturnService.ProcessReturnAsync(dto);
+        }
+        catch (Exception ex)
+        {
+            await AppSnackbar.Show(ex.Message, SnackbarType.Error);
+            return;
+        }
+
+        if (!result.Success)
+        {
+            await AppSnackbar.Show(result.Message, SnackbarType.Error);
+            return;
+        }
+
+        await AppSnackbar.Show("Return processed", SnackbarType.Success);
+        Nav.NavigateTo("/pos-sell", true);
+    }
+
+    void Cancel()
+        => Nav.NavigateTo("/pos-sell");
+
+    class ReturnLineVm
+    {
+        public bool IsSelected { get; set; }
+
+        public string PartNumber { get; set; } = "";
+        public string StockNo { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Terminal { get; set; } = "";
+        public string Location { get; set; } = "";
+        public int Quantity { get; set; }
+        public decimal Sell { get; set; }
+
+        public string? ReturnReason { get; set; }
+        public string? CustomReturnReason { get; set; }
+
+        public string GetReason()
+        {
+            if (string.Equals(ReturnReason, "CUSTOM", StringComparison.OrdinalIgnoreCase))
+                return CustomReturnReason?.Trim() ?? string.Empty;
+
+            return ReturnReason?.Trim() ?? string.Empty;
+        }
+    }
+
+    private static string FormatInvoiceDate(DateTime? dt)
+        => dt.HasValue ? dt.Value.ToString("dd-MMM-yyyy HH:mm") : "-";
+}

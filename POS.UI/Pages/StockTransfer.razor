@@ -1,0 +1,344 @@
+@page "/stock-transfer"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.State
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
+@inject IProductApiService ProductApi
+@inject IStockService StockService
+@inject IStockTransferUiService StockTransferService
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>Stock Transfer</PageTitle>
+
+<style>
+    .transfer-box {
+        border: 1px solid #ddd;
+        padding: 10px;
+        border-radius: 4px;
+        background: #fafafa;
+    }
+
+    .session-grid {
+        max-height: 220px;
+        overflow-y: auto;
+    }
+</style>
+
+<div class="card shadow-sm">
+    <div class="card-header fw-bold">
+        Stock Transfer
+    </div>
+
+    <div class="card-body">
+
+        <!-- PART -->
+        <div class="row mb-3">
+            <label class="col-sm-2 fw-bold">Part No</label>
+            <div  class="col-sm-3">
+                <input id="partNumber"
+                       class="form-control"
+                       @bind-value="PartNumber"
+                       maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.PartNumber)))"
+                       @bind-value:event="oninput"
+                       @onkeydown="OnPartKeyDown" />
+                @* <input id="partNumber" class="form-control"
+                       @bind="PartNumber"
+                       @onkeydown="OnPartKeyDown" /> *@
+            </div>
+            <div class="col-sm-2">
+                <button class="btn btn-primary w-100" @onclick="SearchProduct">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <!-- PRODUCT INFO -->
+        <div class="row mb-3">
+            <div class="col-sm-3">
+                <div class="form-control readonly">@Product?.Make</div>
+            </div>
+            <div class="col-sm-3">
+                <div class="form-control readonly">@Product?.Details</div>
+            </div>
+        </div>
+
+        <div class="row">
+
+            <!-- LEFT: TRANSFER INPUT -->
+            <div class="col-md-6 transfer-box">
+
+                <div class="row mb-2">
+                    <label class="col-sm-4">Transfer From</label>
+                    <div class="col-sm-8">
+                        <LocationSelector @bind-Value="FromLocation" @bind-Value:after="OnFromLocationChanged" />
+                    
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <label class="col-sm-4">Transfer To</label>
+                    <div class="col-sm-8">
+                        <LocationSelector @bind-Value="ToLocation" />
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <label class="col-sm-4">Quantity (Available: @AvailableFromStock)</label>
+                    <div class="col-sm-4">
+                        <input type="number" class="form-control" @bind="Quantity" />
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <label class="col-sm-4">Sales Code</label>
+                    <div class="col-sm-4">
+                        <input class="form-control"
+                               @bind="SalesCode"
+                               maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.SalesCode)))" />
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <label class="col-sm-4">Notes</label>
+                    <div class="col-sm-8">
+                        <input class="form-control"
+                               @bind="Notes"
+                               maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.Notes)))" />
+                    </div>
+                </div>
+
+                <button class="btn btn-success" @onclick="Transfer">
+                    Transfer
+                </button>
+
+            </div>
+
+            <!-- RIGHT: SESSION TRANSFERS -->
+            <div class="col-md-6">
+
+                <h6 class="fw-bold">Transfers This Session</h6>
+
+                <div class="session-grid">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Part</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Qty</th>
+                                <th>Sales</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in SessionTransfers)
+                            {
+                                <tr>
+                                    <td>@t.PartNumber</td>
+                                    <td>@t.FromLocation</td>
+                                    <td>@t.ToLocation</td>
+                                    <td>@t.Quantity</td>
+                                    <td>@t.SalesCode</td>
+                                </tr>
+                            }
+                            @if (!SessionTransfers.Any())
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        No transfers yet
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+@code {
+
+    string? PartNumber;
+    ProductDto? Product;
+    DotNetObjectReference<StockTransfer>? dotNetRef;
+    string? FromLocation;
+    private string? _fromLocation;
+    string? ToLocation;
+    int Quantity = 1;
+    int AvailableFromStock;
+    string? SalesCode;
+    string? Notes;
+
+    List<StockTransferInputDto> SessionTransfers = new();
+
+
+
+    protected override void OnInitialized()
+    {
+        FromLocation = GetCurrentLocation();
+
+    }
+    string GetCurrentLocation()
+     => string.IsNullOrWhiteSpace(PosWorkflowState.PosLocation) ? "01" : PosWorkflowState.PosLocation;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (string.IsNullOrWhiteSpace(FromLocation))
+                FromLocation = "01";
+
+            await RefreshAvailableFromStockAsync();
+        }
+
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+
+        await JS.InvokeVoidAsync("enableProductShortcuts", dotNetRef);
+        await JS.InvokeVoidAsync("enableEnterNavigation");
+
+        await JS.InvokeVoidAsync(
+            "eval",
+            "document.getElementById('partNumber')?.focus()"
+        );
+    }
+    async Task OnPartKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Task.Yield(); // allow bind to complete
+            await SearchProduct();
+        }
+    }
+    async Task SearchProduct()
+    {
+        if (string.IsNullOrWhiteSpace(PartNumber))
+        {
+           await AppSnackbar.Show("Enter Part Number", SnackbarType.Warning);
+            return;
+        }
+
+        var res = await ProductApi.GetProduct(PartNumber);
+
+        if (res?.Success != true || res.Data == null)
+        {
+            Product = null;
+            await AppSnackbar.Show("Product not found", SnackbarType.Error);
+            return;
+        }
+
+        Product = res.Data;
+        await RefreshAvailableFromStockAsync();
+       await AppSnackbar.Show("Product loaded", SnackbarType.Success);
+    }
+
+    // async Task OnPartKeyDown(KeyboardEventArgs e)
+    // {
+    //     if (e.Key == "Enter")
+    //         await SearchProduct();
+    // }
+
+    async Task Transfer()
+    {
+        if (Product == null)
+        {
+            await AppSnackbar.Show("Load product first", SnackbarType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(FromLocation) ||
+            string.IsNullOrWhiteSpace(ToLocation))
+        {
+            await AppSnackbar.Show("Select both From and To locations", SnackbarType.Error);
+            return;
+        }
+
+        if (FromLocation == ToLocation)
+        {
+            await AppSnackbar.Show("From and To locations cannot be same", SnackbarType.Error);
+            return;
+        }
+
+        if (Quantity <= 0)
+        {
+            await AppSnackbar.Show("Quantity must be greater than zero", SnackbarType.Error);
+            return;
+        }
+
+        if (Quantity > AvailableFromStock)
+        {
+            Quantity = AvailableFromStock;
+            await AppSnackbar.Show($"Only {AvailableFromStock} item(s) available in {FromLocation}", SnackbarType.Warning);
+            return;
+        }
+
+        var dto = new StockTransferInputDto
+        {
+            PartNumber = Product.PartNumber,
+            FromLocation = FromLocation,
+            ToLocation = ToLocation,
+            Quantity = Quantity,
+            SalesCode = SalesCode ?? "",
+            Notes = Notes ?? ""
+        };
+
+        var result = await StockTransferService.ApplyTransferAsync(dto);
+        if (!result.Success)
+        {
+            await AppSnackbar.Show(result.Message, SnackbarType.Error);
+            return;
+        }
+
+        SessionTransfers.Add(dto);
+        await AppSnackbar.Show(result.Message ?? "Stock transferred successfully", SnackbarType.Success);
+        await RefreshAvailableFromStockAsync();
+        Quantity = 1;
+        Notes = null;
+    }
+
+    async Task OnFromLocationChanged()
+    {
+       
+        await RefreshAvailableFromStockAsync();
+    }
+
+    async Task RefreshAvailableFromStockAsync()
+    {
+        if (string.IsNullOrWhiteSpace(PartNumber) || string.IsNullOrWhiteSpace(FromLocation))
+        {
+            AvailableFromStock = 0;
+            Quantity = 0;
+            return;
+        }
+
+        var levels = await StockService.GetStockLevelsAsync(PartNumber);
+
+        AvailableFromStock = levels
+            .FirstOrDefault(x => string.Equals(x.LocationCode, FromLocation, StringComparison.OrdinalIgnoreCase))
+            ?.Quantity ?? 0;
+
+        // Adjust quantity when location changes
+        if (AvailableFromStock == 0)
+        {
+            Quantity = 0;
+        }
+        else if (Quantity > AvailableFromStock)
+        {
+            Quantity = AvailableFromStock;
+        }
+        else if (Quantity == 0)
+        {
+            Quantity = 1;
+        }
+
+        StateHasChanged();
+    }
+}
+

@@ -1,0 +1,25 @@
+@using MudBlazor
+
+<MudNumericField T="decimal?"
+                 @bind-Value="Value"
+                 Label="@Label"
+                 Variant="Variant.Outlined"
+                 Dense="true"
+                 Margin="Margin.Dense"
+                 Format="0.00"
+                 HideSpinButtons="true"
+                 Adornment="Adornment.Start"
+                 AdornmentText="@Currency"
+                 Immediate="true" />
+
+@code {
+    [Parameter] public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public decimal? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<decimal?> ValueChanged { get; set; }
+
+    [Parameter] public string Currency { get; set; } = "€";
+}

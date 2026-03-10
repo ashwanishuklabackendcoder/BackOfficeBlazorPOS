@@ -1,0 +1,91 @@
+﻿@using BackOfficeBlazor.Shared.DTOs
+@typeparam TItem
+
+<div class="card card-outline card-warning">
+    <div class="card-header d-flex justify-content-between">
+        <strong>@Title</strong>
+
+        <input class="form-control form-control-sm w-25"
+               placeholder="Search..."
+               @bind="searchText"
+               @bind:event="oninput" />
+    </div>
+
+    <div class="card-body p-0">
+
+        <table class="table table-sm table-hover table-bordered mb-0">
+            <thead class="table-light">
+                <tr>
+                    @foreach (var col in Columns)
+                    {
+                        <th @onclick="() => Sort(col)">
+                            @col.Title
+                            @if (sortColumn == col)
+                            {
+                                <span>@(sortAsc ? "▲" : "▼")</span>
+                            }
+                        </th>
+                    }
+                </tr>
+            </thead>
+
+            <tbody>
+                @if (items == null)
+                {
+                    <tr><td colspan="@Columns.Count">Loading...</td></tr>
+                }
+                else if (!items.Any())
+                {
+                    <tr><td colspan="@Columns.Count">No records found</td></tr>
+                }
+                else
+                {
+                    @foreach (var item in items)
+                    {
+                        <tr>
+                            @foreach (var col in Columns)
+                            {
+                                <td>@col.Value(item)</td>
+                            }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+
+    </div>
+</div>
+
+@code {
+
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public Func<Task<List<TItem>>> LoadData { get; set; } = default!;
+    [Parameter] public List<GridColumn<TItem>> Columns { get; set; } = new();
+
+    List<TItem>? items;
+    string searchText = "";
+    GridColumn<TItem>? sortColumn;
+    bool sortAsc = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        items = await LoadData();
+    }
+
+    void Sort(GridColumn<TItem> column)
+    {
+        if (items == null) return;
+
+        if (sortColumn == column)
+            sortAsc = !sortAsc;
+        else
+        {
+            sortColumn = column;
+            sortAsc = true;
+        }
+
+        items = sortAsc
+            ? items.OrderBy(column.Value).ToList()
+            : items.OrderByDescending(column.Value).ToList();
+    }
+}

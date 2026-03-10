@@ -1,0 +1,123 @@
+﻿@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using Microsoft.AspNetCore.Components.Web
+
+@inject IProductApiService ProductApi
+
+<div class="border rounded p-2">
+
+    <!-- SEARCH BAR -->
+    <div class="row g-2 mb-2">
+        <div class="col-md-4">
+            <input class="form-control"
+                   placeholder="Part Number / Search"
+                   @bind="searchText"
+                   @onkeydown="OnSearchKeyDown" />
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary w-100" @onclick="Search">
+                Search
+            </button>
+        </div>
+    </div>
+
+    <!-- GRID -->
+    <table class="table table-sm table-hover table-bordered">
+        <thead class="table-light">
+            <tr>
+                <th>Part No</th>
+                <th>Make</th>
+                <th>Supplier</th>
+                <th>Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_loading)
+            {
+                <tr>
+                    <td colspan="4" class="text-center">Loading...</td>
+                </tr>
+            }
+            else if (!_products.Any())
+            {
+                <tr>
+                    <td colspan="4" class="text-center text-muted">
+                        No products found
+                    </td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var p in _products)
+                {
+                    <tr style="cursor:pointer"
+                        @onclick="() => Select(p)">
+                        <td>@p.PartNumber</td>
+                        <td>@p.Make</td>
+                        <td>@p.Supplier1Code</td>
+                        <td>@p.CostPrice</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+
+</div>
+
+@code {
+
+    [Parameter]
+    public EventCallback<ProductDto> OnSelected { get; set; }
+
+    string? searchText;
+    List<ProductDto> _products = new();
+    bool _loading;
+
+    async Task Search()
+    {
+        _loading = true;
+        var term = searchText?.Trim();
+
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            _products = new();
+            _loading = false;
+            return;
+        }
+
+        // 1) Exact part number lookup first for fast selection.
+        var exact = await ProductApi.GetProduct(term);
+        if (exact?.Success == true && exact.Data != null)
+        {
+            _products = new List<ProductDto> { exact.Data };
+            _loading = false;
+            return;
+        }
+
+        // 2) Fallback to broader search (contains on supported fields).
+        var filter = new ProductFilterDto
+        {
+            Search1 = term,
+            Details = term,
+            MfrPartNumber = term,
+            Website = null,
+            Gender = null
+        };
+
+        var res = await ProductApi.GetProductsAsync(filter);
+        _products = res?.Success == true ? res.Data : new();
+        _loading = false;
+    }
+
+    async Task Select(ProductDto product)
+    {
+        if (OnSelected.HasDelegate)
+            await OnSelected.InvokeAsync(product);
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Search();
+    }
+}

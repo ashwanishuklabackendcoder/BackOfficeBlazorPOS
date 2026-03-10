@@ -1,0 +1,32 @@
+<button class="pos-shortcut-btn"
+        style="@ButtonStyle"
+        @onclick="() => OnClick.InvokeAsync(PartNumber)">
+    <div class="fw-bold">@Title</div>
+    @if (!string.IsNullOrWhiteSpace(SubTitle))
+    {
+        <div class="small">@SubTitle</div>
+    }
+</button>
+
+@code {
+    [Parameter] public string PartNumber { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? SubTitle { get; set; }
+    [Parameter] public string? BackgroundColor { get; set; }
+    [Parameter] public string? ForegroundColor { get; set; }
+    [Parameter] public EventCallback<string> OnClick { get; set; }
+
+    private string ButtonStyle
+    {
+        get
+        {
+            var styles = new List<string>();
+            if (!string.IsNullOrWhiteSpace(BackgroundColor))
+                styles.Add($"background:{BackgroundColor}");
+            if (!string.IsNullOrWhiteSpace(ForegroundColor))
+                styles.Add($"color:{ForegroundColor}");
+
+            return styles.Count == 0 ? string.Empty : string.Join(";", styles) + ";";
+        }
+    }
+}

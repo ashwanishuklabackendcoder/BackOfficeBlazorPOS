@@ -1,0 +1,262 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IManufacturerService BrandService
+@inject IJSRuntime JS
+
+
+<div class="position-relative" @ref="root">
+    <!-- Selector -->
+    <div class="form-control d-flex justify-content-between align-items-center"
+         style="cursor:pointer"
+         @onclick="ToggleDropdown">
+        <span>@(string.IsNullOrWhiteSpace(Value) ? "Select Brand" : Value)</span>
+        <i class="bi bi-chevron-down"></i>
+    </div>
+
+    @if (isOpen)
+    {
+        <div class="border rounded shadow bg-white w-100 p-2"
+             style="position:absolute;
+                    top:100%;
+                    left:0;
+                    z-index:1055;">
+
+            <!-- Search (fixed) -->
+            <div class="p-2 border-bottom">
+                <input class="form-control border"
+                       placeholder="Search..."
+                       @bind="search"
+                       @bind:event="oninput" />
+         
+            </div>
+         
+            <!-- Scrollable list -->
+            <div style="max-height:220px; overflow:auto">
+                @foreach (var b in FilteredBrands)
+                {
+                    <button type="button"
+                            class="list-group-item list-group-item-action @(Value == b.Name ? "active" : "")"
+                            @onclick="() => SelectBrand(b)">
+                        @b.Name
+                    </button>
+                }
+            </div>
+
+            <!-- Manage (fixed bottom) -->
+            <div class="border-top p-2 bg-light">
+                <button class="btn text-primary p-0"
+                        @onclick="OpenManageModal">
+                    ? Manage Brands
+                </button>
+            </div>
+        </div>
+    }
+
+</div>
+
+@if (showManage)
+{
+    <div class="modal fade show d-block"
+         style="background:rgba(0,0,0,.5);">
+
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" style="max-height:90vh;">
+
+                <!-- Header (fixed) -->
+                <div class="modal-header">
+                    <h5 class="modal-title">Manage Brands</h5>
+                    <button class="btn-close" @onclick="CloseManage"></button>
+                </div>
+
+                <!-- Body (scrollable) -->
+                <div class="modal-body" style="overflow-y:auto;">
+
+                    <button class="btn btn-primary mb-3"
+                            @onclick="NewBrand">
+                        + New Brand
+                    </button>
+
+                    @if (isEditing)
+                    {
+                        <div class="border p-3 mb-3 rounded">
+                            <label class="form-label text-danger">Brand Code *</label>
+                            <input class="form-control"
+                                   @bind="editId"
+                                   maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Code)))" />
+                            <label class="form-label text-danger">Brand Name *</label>
+                            <input class="form-control"
+                                   @bind="editBrandName"
+                                   maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Name)))" />
+
+                            <div class="mt-2">
+                                <button class="btn btn-success me-2"
+                                        @onclick="SaveBrand">
+                                    Save and Select
+                                </button>
+                                <button class="btn btn-secondary"
+                                        @onclick="CancelEdit">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    }
+
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            @foreach (var b in brands)
+                            {
+                                <tr>
+                                    <td>@b.Name</td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-link"
+                                                @onclick="() => EditBrand(b)">
+                                            Edit
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    List<ManufacturerDto> brands = new();
+
+    bool isOpen;
+    bool showManage;
+    bool isEditing;
+
+    string search = "";
+    string editId;
+    string editBrandName = "";
+    ElementReference root;
+    IJSObjectReference? module;
+    IJSObjectReference? outsideHandler;
+    DotNetObjectReference<BrandSelector>? dotNetRef;
+    protected override void OnInitialized()
+    {
+        Value ??= "";
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./clickOutside.js");
+
+            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
+                "registerClickOutside", root, dotNetRef);
+
+        }
+    }
+
+    [JSInvokable]
+    public void OnClickOutside()
+    {
+        if (isOpen)
+        {
+            isOpen = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        brands = await BrandService.GetAllAsync();
+    }
+
+    IEnumerable<ManufacturerDto> FilteredBrands =>
+        string.IsNullOrWhiteSpace(search)
+            ? brands
+            : brands.Where(x =>
+                x.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+
+    void ToggleDropdown() => isOpen = !isOpen;
+
+    async Task SelectBrand(ManufacturerDto b)
+    {
+        Value = b.Name;
+        await ValueChanged.InvokeAsync(Value);
+        isOpen = false;
+    }
+
+    void OpenManageModal()
+    {
+        isOpen = false;
+        showManage = true;
+    }
+
+    void CloseManage()
+    {
+        showManage = false;
+        CancelEdit();
+    }
+
+    void NewBrand()
+    {
+        isEditing = true;
+        editId = "";
+        editBrandName = "";
+    }
+
+    void EditBrand(ManufacturerDto b)
+    {
+        isEditing = true;
+        editId = b.Code;
+        editBrandName = b.Name;
+    }
+    async Task SaveBrand()
+    {
+        if (string.IsNullOrWhiteSpace(editBrandName))
+            return;
+
+        var dto = new ManufacturerDto
+        {
+            Code = editId,          
+            Name = editBrandName
+        };
+
+        var response = await BrandService.SaveManufacturer(dto);
+
+        if (response?.Success != true)
+        {
+            // TODO: replace with toast / alert UI if you have
+            Console.WriteLine(response?.Message ?? "Save failed");
+            return;
+        }
+
+        // Refresh dropdown list
+        brands = await BrandService.GetAllAsync();
+
+        // Auto-select saved brand
+        Value = response.Data?.Name ?? editBrandName;
+        await ValueChanged.InvokeAsync(Value);
+
+        CloseManage();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (outsideHandler != null)
+            await outsideHandler.InvokeVoidAsync("dispose");
+
+        dotNetRef?.Dispose();
+    }
+  
+    void CancelEdit()
+    {
+        isEditing = false;
+        editId = "";
+        editBrandName = "";
+    }
+}
+

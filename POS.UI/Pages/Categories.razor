@@ -1,0 +1,285 @@
+﻿@page "/category"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ICategoryService CategoryService
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+
+<PageTitle>Category Maintenance</PageTitle>
+
+<h5 class="fw-bold mt-3">Category Maintenance</h5>
+
+<div id="category-form" class="card card-warning card-outline" data-shortcuts-scope>
+    <div class="card-body">
+
+        <!-- Category Code -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Category Code</label>
+
+            <div class="col-sm-1">
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Code"
+                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Code)))"
+                       @onkeydown="OnCodeKeyDown"
+                       data-enter-skip="true"
+                       disabled="@isCodeLocked"
+                       @ref="codeInput" />
+            </div>
+
+            <div class="col-sm-1">
+                <button type="button"
+                        class="btn btn-primary w-100"
+                        @onclick="Search">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Description</label>
+
+            <div class="col-sm-3">
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Name"
+                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Name)))"
+                       @ref="nameInput" />
+            </div>
+        </div>
+
+        <!-- Included In -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Included In</label>
+
+            <div class="col-sm-2">
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           role="switch"
+                           id="catA"
+                           @bind="model.A" />
+                    <label class="form-check-label" for="catA">Cat A</label>
+                </div>
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           role="switch"
+                           id="catB"
+                           @bind="model.B" />
+                    <label class="form-check-label" for="catB">Cat B</label>
+                </div>
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           role="switch"
+                           id="catC"
+                           @bind="model.C" />
+                    <label class="form-check-label" for="catC">Cat C</label>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Major -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Major Item</label>
+
+            <div class="col-sm-2">
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           role="switch"
+                           id="major"
+                           @bind="model.Major" />
+                    <label class="form-check-label" for="major">Major</label>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card-footer text-end">
+        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
+        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
+
+        @if (recordExists)
+        {
+            <button type="button"
+                    class="btn btn-danger float-start"
+                    @onclick="Delete">
+                Delete
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+
+    CategoryDto model = new();
+    bool recordExists = false;
+    bool isCodeLocked = false;
+
+    ElementReference codeInput;
+    ElementReference nameInput;
+
+
+    DotNetObjectReference<Categories>? dotNetRef;
+    string? shortcutRegistrationId;
+
+    [JSInvokable]
+    public async Task OnEsc()
+    {
+        await Reset();
+        await AppSnackbar.Show("Enter Code to search Category", SnackbarType.Info);
+    }
+
+    // 🔥 ENTER ON CODE
+    async Task OnCodeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter")
+            return;
+        await Task.Yield();
+        // 🔹 Blank → New Mode
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            model = new CategoryDto();
+            recordExists = false;
+            isCodeLocked = true;
+
+            await AppSnackbar.Show(
+                "New category mode activated.",
+                SnackbarType.Info);
+
+            await Task.Delay(50);
+            await nameInput.FocusAsync();
+            return;
+        }
+
+        // 🔹 Otherwise search
+        await Search();
+
+        await Task.Delay(50);
+        await nameInput.FocusAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+        shortcutRegistrationId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
+            {
+                scopeSelector = "#category-form",
+                enableEsc = true,
+                enableEnter = true
+            });
+
+        await codeInput.FocusAsync();
+    }
+    async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            await AppSnackbar.Show("Enter Category Code", SnackbarType.Warning);
+            return;
+        }
+
+        var response = await CategoryService.GetCategory(model.Code);
+
+        if (response?.Success == true && response.Data != null)
+        {
+            model = response.Data;
+            recordExists = true;
+
+            await AppSnackbar.Show("Category loaded", SnackbarType.Success);
+        }
+        else
+        {
+            recordExists = false;
+            var code = model.Code;
+
+            model = new CategoryDto { Code = code };
+
+            await AppSnackbar.Show(
+                "No record found. New category will be created.",
+                SnackbarType.Info);
+        }
+    }
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            await AppSnackbar.Show("Category Code required", SnackbarType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            await AppSnackbar.Show("Description required", SnackbarType.Error);
+            return;
+        }
+
+        var res = await CategoryService.SaveCategory(model);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+
+        recordExists = true;
+    }
+
+    async Task Delete()
+    {
+        if (!recordExists) return;
+
+        var res = await CategoryService.DeleteCategory(model.Code);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
+        else
+            await 
+            AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
+
+        await Reset();
+    }
+
+    async Task Reset()
+    {
+        model = new CategoryDto();
+        recordExists = false;
+        isCodeLocked = false;   // 🔴 IMPORTANT
+
+        await InvokeAsync(StateHasChanged);
+        await codeInput.FocusAsync();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+        if (!string.IsNullOrWhiteSpace(shortcutRegistrationId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", shortcutRegistrationId);
+            }
+            catch
+            {
+                // Ignore JS disconnection during teardown.
+            }
+        }
+    }
+
+}

@@ -1,0 +1,79 @@
+@page "/feedback-integration"
+@using POS.UI.Services
+@inject IAuthService AuthService
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>Feedback Integration</PageTitle>
+
+<div class="container-fluid mt-3">
+    @if (isAdmin)
+    {
+        <div class="card">
+            <div class="card-header d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                <div>
+                    <div class="fw-semibold">Feedback Integration</div>
+                    <div class="text-muted small">Configure customer feedback providers for your store.</div>
+                </div>
+                <span class="badge bg-info text-dark">Admin only</span>
+            </div>
+            <div class="card-body">
+
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabMailchimp ? "active" : "")"
+                                @onclick="() => SwitchTab(TabMailchimp)">
+                            Mailchimp
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabTrustPilot ? "active" : "")"
+                                @onclick="() => SwitchTab(TabTrustPilot)">
+                            TrustPilot
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == TabGoogleReviews ? "active" : "")"
+                                @onclick="() => SwitchTab(TabGoogleReviews)">
+                            Google Reviews
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="text-muted">Configuration for this provider will be available soon.</div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isAdmin;
+    private bool infoShown;
+    private const string TabMailchimp = "Mailchimp";
+    private const string TabTrustPilot = "TrustPilot";
+    private const string TabGoogleReviews = "GoogleReviews";
+
+    private string activeTab = TabMailchimp;
+
+    protected override void OnInitialized()
+    {
+        isAdmin = AuthService.CurrentUser?.IsAdmin == true;
+        if (!isAdmin)
+        {
+            AppSnackbar.Show("You do not have permission to view this page.", SnackbarType.Warning);
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || !isAdmin || infoShown)
+            return;
+
+        infoShown = true;
+        AppSnackbar.Show("Changes are stored only in the UI for now. Save functionality will be added later.", SnackbarType.Info);
+    }
+
+    private void SwitchTab(string tab)
+    {
+        activeTab = tab;
+    }
+}

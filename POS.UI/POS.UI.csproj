@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
+    <StripePublishableKey Condition="'$(StripePublishableKey)'==''">SET_STRIPE_PUBLISHABLE_KEY</StripePublishableKey>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.20" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.20" PrivateAssets="all" />
+    <PackageReference Include="MudBlazor" Version="8.15.0" />
+    <PackageReference Include="MudBlazor.Extensions" Version="8.15.0" />
+    <PackageReference Include="MudBlazor.ThemeManager" Version="3.0.0" />
+    <PackageReference Include="Syncfusion.Blazor.Inputs" Version="32.1.21" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
+  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\BackOfficeBlazor.Shared\BackOfficeBlazor.Shared.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="wwwroot\uploads\" />
+	</ItemGroup>
+
+  <Target Name="ReplaceStripePublishableKey" AfterTargets="Publish"
+          Condition="Exists('$(PublishDir)wwwroot\\appsettings.json')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;(Get-Content '$(PublishDir)wwwroot\\appsettings.json' -Raw) -replace 'SET_STRIPE_PUBLISHABLE_KEY','$(StripePublishableKey)' | Set-Content '$(PublishDir)wwwroot\\appsettings.json'&quot;" />
+  </Target>
+</Project>

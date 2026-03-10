@@ -1,0 +1,121 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ICategoryService CategoryService
+@inject AppSnackbarService AppSnackbar
+
+
+<div class="card card-warning card-outline">
+    <div class="card-body">
+
+        <div class="row mb-3">
+            <label class="col-sm-2 col-form-label">Category Code</label>
+            <div class="col-sm-3">
+                <input class="form-control"
+                       @bind="model.Code"
+                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Code)))" />
+            </div>
+            <div class="col-sm-2">
+                <button class="btn btn-primary w-100" @onclick="Search">Search</button>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <label class="col-sm-2 col-form-label">Description</label>
+            <div class="col-sm-4">
+                <input class="form-control"
+                       @bind="model.Name"
+                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Name)))" />
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <label class="col-sm-2 col-form-label">Included In</label>
+            <div class="col-sm-6">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.A" id="catA" />
+                    <label class="form-check-label" for="catA">Cat A</label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.B" id="catB" />
+                    <label class="form-check-label" for="catB">Cat B</label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.C" id="catC" />
+                    <label class="form-check-label" for="catC">Cat C</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <label class="col-sm-2 col-form-label">Major Item</label>
+            <div class="col-sm-2">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.Major" id="majorItem" />
+                    <label class="form-check-label" for="majorItem">Major</label>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card-footer text-end">
+        <button class="btn btn-success" @onclick="Save">Save</button>
+        <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<CategoryDto> OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    CategoryDto model = new();
+    bool recordExists;
+    async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            AppSnackbar.Show("Enter Category Code", SnackbarType.Warning);
+            return;
+        }
+
+        var res = await CategoryService.GetCategory(model.Code);
+
+        if (res?.Success == true && res.Data != null)
+        {
+            model = res.Data;
+            recordExists = true;
+        }
+        else
+        {
+            recordExists = false;
+            var code = model.Code;
+            model = new CategoryDto { Code = code };
+            AppSnackbar.Show("New category will be created.", SnackbarType.Info);
+        }
+    }
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.Code) ||
+            string.IsNullOrWhiteSpace(model.Name))
+        {
+            AppSnackbar.Show("Code and Description required", SnackbarType.Error);
+            return;
+        }
+
+        var res = await CategoryService.SaveCategory(model);
+        if (res?.Success == true)
+            AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        else
+            AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+
+        if (res?.Success == true)
+            await OnSaved.InvokeAsync(model);
+    }
+
+    async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}
+

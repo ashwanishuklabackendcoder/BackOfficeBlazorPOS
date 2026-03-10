@@ -1,0 +1,169 @@
+﻿@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ISupplierService SupplierService
+@inject IJSRuntime JS
+
+<div class="position-relative" @ref="root">
+    <div class="form-control d-flex justify-content-between"
+         style="cursor:pointer"
+         @onclick="Toggle">
+        <span>@(string.IsNullOrEmpty(Display) ? "NA" : Display)</span>
+        <i class="bi bi-chevron-down"></i>
+    </div>
+
+    @if (open)
+    {
+        <div class="border bg-white shadow w-100 p-2"
+             style="position:absolute; top:100%; z-index:1055">
+
+            
+            <div class="p-2 border-bottom">
+                <input class="form-control border"
+                       placeholder="Search..."
+                       @bind="search"
+                       @bind:event="oninput" />
+            </div>
+
+            <div style="max-height:220px; overflow:auto">
+                @foreach (var s in Filtered)
+                {
+                    <button class="list-group-item list-group-item-action"
+                            @onclick="() => Select(s)">
+                        @s.AccountNo - @(string.IsNullOrEmpty(s.Name) ? "NA" : s.Name)
+                    </button>
+                }
+            </div>
+
+            <div class="border-top p-2 bg-light">
+                <button class="btn text-primary p-0"
+                        @onclick="OpenManage">
+                    ⚙ Manage Suppliers
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (showManage)
+{
+    <div class="modal fade show d-block"
+         style="background:rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5>Manage Suppliers</h5>
+                    <button class="btn-close" @onclick="CloseManage"></button>
+                </div>
+
+                <div class="modal-body">
+                    <SupplierEditor OnSaved="OnSupplierSaved"
+                                    OnCancel="CloseManage" />
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    List<SupplierDto> suppliers = new();
+    bool open, showManage;
+    string search = "";
+    string Display = "";
+    ElementReference root;
+    IJSObjectReference? module;
+    IJSObjectReference? outsideHandler;
+    DotNetObjectReference<SupplierSelector>? dotNetRef;
+    protected override async Task OnInitializedAsync()
+    {
+        suppliers = await SupplierService.GetAllAsync();
+        SyncDisplay();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SyncDisplay();
+    }
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./clickOutside.js");
+
+            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
+                "registerClickOutside", root, dotNetRef);
+
+        }
+    }
+
+    [JSInvokable]
+    public void OnClickOutside()
+    {
+        if (open)
+        {
+            open = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+    IEnumerable<SupplierDto> Filtered =>
+        string.IsNullOrEmpty(search)
+            ? suppliers
+            : suppliers.Where(x =>
+                x.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.AccountNo.Contains(search));
+
+    void Toggle() => open = !open;
+
+    async Task Select(SupplierDto s)
+    {
+        Value = s.AccountNo;
+        Display = s.Name;
+        await ValueChanged.InvokeAsync(Value);
+        open = false;
+    }
+
+    void OpenManage()
+    {
+        open = false;
+        showManage = true;
+    }
+
+    async Task OnSupplierSaved(SupplierDto s)
+    {
+        suppliers = await SupplierService.GetAllAsync();
+        await Select(s);
+        showManage = false;
+    }
+
+    void CloseManage() => showManage = false;
+
+    void SyncDisplay()
+    {
+        if (string.IsNullOrWhiteSpace(Value))
+        {
+            Display = "";
+            return;
+        }
+
+        var match = suppliers.FirstOrDefault(x =>
+            string.Equals(x.AccountNo, Value, StringComparison.OrdinalIgnoreCase));
+
+        Display = match?.Name ?? Value ?? "";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (outsideHandler != null)
+            await outsideHandler.InvokeVoidAsync("dispose");
+
+        dotNetRef?.Dispose();
+    }
+}

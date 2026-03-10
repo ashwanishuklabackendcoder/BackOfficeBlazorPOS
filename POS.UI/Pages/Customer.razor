@@ -1,0 +1,527 @@
+﻿@page "/customer"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ICustomerService CustomerService
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+
+
+<PageTitle>Customer Maintenance</PageTitle>
+
+<h5 class="fw-bold mt-3">Customer Maintenance</h5>
+
+<div id="customer-form" class="card card-warning card-outline" data-shortcuts-scope>
+    <div class="card-body">
+
+        <!-- Account No + Search -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Account No</label>
+            <div class="col-sm-1">
+@* 
+                <input id="partNumber"
+                       class="form-control"
+                       @bind="model.PartNumber"
+                       maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.PartNumber)))"
+                       @onblur="OnPartNumberBlur"
+                       @onkeydown="OnFieldKeyDown"
+                       disabled="@isPartNumberDisabled" /> *@
+                <input id="AccNo"    
+                       class="form-control"
+                       @bind="model.AccNo"
+                       maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.AccNo)))"
+                       @onkeydown="OnAccKeyDown"
+                       data-enter-skip="true"
+                       disabled="@isAccLocked"
+                       @ref="accInput" />
+            </div>
+            <div class="col-sm-1">
+                <button type="button"
+                        class="btn btn-primary w-100"
+                        @onclick="Search">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <hr />
+
+        <!-- Customer Details -->
+        <h5 class="fw-bold text-primary">Billing Details</h5>
+
+        <div class="row">
+            <div class="col-md-6">
+
+                <div class="row mb-2">
+                    <div class="col-sm-3">
+                        <label>Title</label>
+                        <input class="form-control"
+                               @bind="model.Title"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Title)))"
+                               @ref="titleInput" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Initials</label>
+                        <input class="form-control"
+                               @bind="model.Initials"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Initials)))" />
+                    </div>
+              
+        @*             <div class="col-sm-2">
+                        <label>House Name</label>
+                        <input class="form-control" @bind="model.HouseName" />
+                    </div> *@
+                    <div class="col-sm-3">
+                        <label>Firstname</label>
+                        <input class="form-control"
+                               @bind="model.Firstname"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Firstname)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Surname</label>
+                        <input class="form-control"
+                               @bind="model.Surname"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Surname)))" />
+                    </div>
+                </div>
+                <div class="row mb-2">
+             
+                </div>
+                <div class="row mb-2">
+
+                    <div class="col-sm-3">
+                        <label>Address 1</label>
+                        <input class="form-control"
+                               @bind="model.Address1"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address1)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 2</label>
+                        <input class="form-control mb-1"
+                               @bind="model.Address2"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address2)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 3</label>
+                        <input class="form-control mb-1"
+                               @bind="model.Address3"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address3)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 4</label>
+                        <input class="form-control mb-2"
+                               @bind="model.Address4"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address4)))" />
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-sm-3">
+                        <label>Country</label>
+                        <input class="form-control"
+                               @bind="model.Country"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Country)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Postcode</label>
+                        <input class="form-control"
+                               @bind="model.Postcode"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Postcode)))" />
+                    </div>
+          
+                </div>
+                <div class="row mb-2">
+                    <div class="col-sm-3">
+                        <label>Email</label>
+                        <input class="form-control"
+                               @bind="model.Email"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Email)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Telephone</label>
+                        <input class="form-control"
+                               @bind="model.Telephone"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Telephone)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Mobile</label>
+                        <input class="form-control"
+                               @bind="model.Mobile"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Mobile)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Work Phone</label>
+                        <input class="form-control"
+                               @bind="model.WorkPhone"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.WorkPhone)))" />
+                    </div>
+                 
+                </div>
+            
+
+               
+
+            </div>
+
+            <div class="col-md-6">
+                <div class="row mb-2">
+                    <div class="col-sm-2">
+                        <label>Category</label>
+                        <input class="form-control"
+                               @bind="model.Category"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Category)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Loyalty No</label>
+                        <input class="form-control"
+                               @bind="model.LoyaltyNo"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.LoyaltyNo)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Date of Birth</label>
+                        <input type="date"
+                               class="form-control"
+                                
+                               @bind="model.DOB" />
+                    </div>
+                </div>
+                <label>Credit & Discounts</label>
+                <div class="row mb-2">
+                    <div class="col-sm-6">
+                        <input type="number"
+                               step="0.01"
+                               class="form-control"
+                               @bind="model.CreditLimit"
+                                
+                               placeholder="Credit Limit" />
+                    </div>
+                    <div class="col-sm-6">
+                        <input type="number"
+                               step="0.01"
+                               class="form-control"
+                               @bind="model.Balance"
+                                
+                               placeholder="Balance" />
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <div class="col-sm-6">
+                        <input type="number"
+                               class="form-control"
+                               @bind="model.DiscountMinor"
+                                
+                               placeholder="Minor Discount" />
+                    </div>
+                    <div class="col-sm-6">
+                        <input type="number"
+                               class="form-control"
+                               @bind="model.DiscountMajor"
+                                
+                               placeholder="Major Discount" />
+                    </div>
+                </div>
+
+            
+
+              
+
+              
+
+           
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch"  @bind="model.Stop" id="custStop" />
+                    <label class="form-check-label" for="custStop">Stop</label>
+                </div>
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch"   @bind="model.SendLetter" id="custSendLetter" />
+                    <label class="form-check-label" for="custSendLetter">Send Letter</label>
+                </div>
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch"   @bind="model.VATExempt" id="custVatExempt" />
+                    <label class="form-check-label" for="custVatExempt">VAT Exempt</label>
+                </div>
+
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch"   @bind="model.Autopay" id="custAutopay" />
+                    <label class="form-check-label" for="custAutopay">Autopay</label>
+                </div>
+
+            </div>
+        </div>
+
+        <hr />
+
+        <!-- Delivery Details -->
+        <h5 class="fw-bold text-primary">Delivery Details</h5>
+
+        <div class="row">
+            <div class="col-md-6">
+
+                <div class="row mb-2">
+                    <div class="col-sm-3">
+                        <label>Title</label>
+                        <input class="form-control"
+                               @bind="model.DeliveryTitle"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryTitle)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Initials</label>
+                        <input class="form-control"
+                               @bind="model.DeliveryInitials"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryInitials)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Firstname</label>
+                        <input class="form-control"
+                               @bind="model.DeliveryFirstname"
+                                
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryFirstname)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Surname</label>
+                        <input class="form-control"
+                               @bind="model.DeliverySurname"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliverySurname)))" />
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-sm-3">
+                        <label>House Name</label>
+                        <input class="form-control"
+                               @bind="model.DeliveryHousename"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryHousename)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 1</label>
+                        <input class="form-control mb-1"
+                               @bind="model.DeliveryAddress1"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress1)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 2</label>
+                        <input class="form-control mb-1"
+                               @bind="model.DeliveryAddress2"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress2)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 3</label>
+                        <input class="form-control mb-1"
+                               @bind="model.DeliveryAddress3"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress3)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Address 4</label>
+                        <input class="form-control mb-2"
+                               @bind="model.DeliveryAddress4"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress4)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Postcode</label>
+                        <input class="form-control"
+                               @bind="model.DeliveryPostcode"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryPostcode)))" />
+                    </div>
+                    <div class="col-sm-3">
+                        <label>Country</label>
+                        <input class="form-control"
+                               @bind="model.DeliveryCountry"
+                               maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryCountry)))" />
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card-footer text-end">
+        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
+        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
+
+        @if (recordExists)
+        {
+            <button type="button" class="btn btn-danger float-start" @onclick="Delete">Delete</button>
+        }
+    </div>
+
+</div>
+
+@code {
+    CustomerDto model = new();
+    bool recordExists = false;
+    bool isAccLocked = false;
+
+    ElementReference accInput;
+    ElementReference titleInput;
+    DotNetObjectReference<Customer>? dotNetRef;
+    string? shortcutRegistrationId;
+    async Task OnAccKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter")
+            return;
+        await Task.Yield();
+        // 🔹 CASE 1 — Blank Account No → New Customer Mode
+        if (string.IsNullOrWhiteSpace(model.AccNo))
+        {
+            model = new CustomerDto();
+            recordExists = false;
+
+            isAccLocked = true;
+
+            await AppSnackbar.Show(
+                "New customer mode activated.",
+                SnackbarType.Info);
+
+            await Task.Delay(50); // allow render
+
+            await titleInput.FocusAsync();
+
+            return;
+        }
+
+        // 🔹 CASE 2 — Search Existing
+        await Search();
+        await titleInput.FocusAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+        shortcutRegistrationId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
+            {
+                scopeSelector = "#customer-form",
+                enableEsc = true,
+                enableEnter = true
+            });
+
+        await accInput.FocusAsync();
+    }
+   
+    [JSInvokable]
+    public async Task OnEsc()
+    {
+        await Reset();
+        await AppSnackbar.Show("Enter Account Number to search customer", SnackbarType.Info);
+    }
+    async Task Search()
+    {
+        // 🔹 Case 1: Blank → New Customer Mode
+        if (string.IsNullOrWhiteSpace(model.AccNo))
+        {
+            model = new CustomerDto();
+            recordExists = false;
+
+            await AppSnackbar.Show(
+                "New customer mode activated. Enter details and Save.",
+                SnackbarType.Info);
+            await accInput.FocusAsync();
+            return;
+        }
+
+        // 🔹 Case 2: Search Existing
+        var res = await CustomerService.GetAsync(model.AccNo);
+
+        if (res?.Success == true && res.Data != null)
+        {
+            model = res.Data;
+            recordExists = true;
+
+            await AppSnackbar.Show("Customer loaded", SnackbarType.Success);
+        }
+        else
+        {
+            var acc = model.AccNo;
+
+            model = new CustomerDto { AccNo = acc };
+            recordExists = false;
+
+            await AppSnackbar.Show(
+                "Customer not found. New record will be created.",
+                SnackbarType.Warning);
+        }
+    }
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.AccNo))
+        {
+            await AppSnackbar.Show("Account No is required", SnackbarType.Error);
+           
+            return;
+        }
+
+        var res = await CustomerService.SaveAsync(model);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+        if (res?.Success == true)
+            recordExists = true;
+    }
+
+    async Task Delete()
+    {
+        if (!recordExists) return;
+
+        var res = await CustomerService.DeleteAsync(model.AccNo);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
+        await Reset();
+    }
+
+    async Task Reset()
+    {
+        model = new CustomerDto();
+        recordExists = false;
+        isAccLocked = false;   // 🔴 IMPORTANT
+
+        await InvokeAsync(StateHasChanged);
+        await accInput.FocusAsync();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+        if (!string.IsNullOrWhiteSpace(shortcutRegistrationId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", shortcutRegistrationId);
+            }
+            catch
+            {
+                // Ignore JS disconnection during teardown.
+            }
+        }
+    }
+}
+

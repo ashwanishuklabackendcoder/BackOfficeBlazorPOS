@@ -1,0 +1,186 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ICustomerService CustomerService
+@inject NavigationManager Nav
+<div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">Select Customer</h5>
+                <button class="btn-close" @onclick="Cancel"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <!-- SEARCH -->
+                <div class="mb-3">
+                    <label class="form-label">Search Customer</label>
+                    <input class="form-control"
+                           @bind="SearchText"
+                           @bind:event="oninput"
+                           placeholder="Name / Account / Phone" />
+                </div>
+
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Account</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @if (!isLoading && Customers.Any())
+                        {
+                            @foreach (var c in Customers)
+                            {
+                                <tr>
+                                    <td>@c.AccNo</td>
+                                    <td>@c.Firstname</td>
+                                    <td>@c.Mobile</td>
+                                    <td>
+                                        <button class="btn btn-success btn-sm"
+                                                @onclick="() => SelectCustomer(c)">
+                                            Select
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else if (!isLoading)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-center">No customers found</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <hr />
+
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-primary"
+                            @onclick="GoToAddCustomer">
+                        Add New Customer
+                    </button>
+                    <button class="btn btn-outline-secondary"
+                            @onclick="UseWalkIn">
+                        Use WALK-IN Customer
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<CustomerDto> OnSelected { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    List<CustomerDto> Customers = new();
+    List<CustomerDto> AllCustomers = new();
+
+    bool isLoading;
+    string? error;
+
+    string searchText = "";
+    string SearchText
+    {
+        get => searchText;
+        set
+        {
+            searchText = value;
+            ApplyFilter();
+        }
+    }
+
+    void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(SearchText))
+        {
+            Customers = AllCustomers.ToList();
+            return;
+        }
+
+        var txt = SearchText.Trim().ToLower();
+
+        Customers = AllCustomers
+            .Where(x =>
+                (x.AccNo ?? "").ToLower().Contains(txt) ||
+                (x.Firstname ?? "").ToLower().Contains(txt) ||
+                (x.Mobile ?? "").ToLower().Contains(txt))
+            .ToList();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCustomers();
+    }
+
+    async Task LoadCustomers()
+    {
+        try
+        {
+            isLoading = true;
+            error = null;
+
+            var res = await CustomerService.GetAllAsync();
+
+            if (res?.Success == true && res.Data != null)
+            {
+                AllCustomers = res.Data.ToList();
+
+                AllCustomers.Insert(0, new CustomerDto
+                {
+                    AccNo = "WALKIN",
+                    Firstname = "Walk In Customer",
+                    Mobile = "00000"
+                });
+
+                Customers = AllCustomers.ToList();
+            }
+            else
+            {
+                error = res?.Message ?? "Failed to load customers";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    async Task SelectCustomer(CustomerDto c)
+    {
+        await OnSelected.InvokeAsync(c);
+    }
+
+    async Task UseWalkIn()
+    {
+        await OnSelected.InvokeAsync(new CustomerDto
+        {
+            AccNo = "WALKIN",
+            Firstname = "Walk In"
+        });
+    }
+
+    async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+            await OnCancel.InvokeAsync();
+    }
+
+    async Task GoToAddCustomer()
+    {
+        await Cancel();
+        Nav.NavigateTo("/customer");
+    }
+}

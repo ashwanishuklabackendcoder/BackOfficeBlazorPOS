@@ -1,0 +1,346 @@
+﻿@page "/supplier"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ISupplierService SupplierService
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+
+<PageTitle>Supplier Maintenance</PageTitle>
+
+<h5 class="fw-bold mt-3">Supplier Maintenance</h5>
+
+<div id="supplier-form" class="card card-warning card-outline" data-shortcuts-scope>
+    <div class="card-body">
+
+        <!-- Supplier Number + Search -->
+        <div class="row mb-3">
+            <label class="col-sm-2 col-form-label">Supplier Number</label>
+            <div class="col-sm-1">
+                <input type="text"
+                       class="form-control"
+                       @bind="model.AccountNo"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.AccountNo)))"
+                       @onkeydown="OnAccKeyDown"
+                       data-enter-skip="true"
+                       disabled="@isAccLocked"
+                       @ref="accInput" />
+            </div>
+            <div class="col-sm-1">
+                <button type="button" class="btn btn-primary w-100" @onclick="Search">Search</button>
+            </div>
+        </div>
+
+        <hr />
+
+        <div class="row mb-2">
+        
+                <div class="col-sm-3">
+                    <label class="form-label">Name</label>
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Name"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Name)))"
+                       @ref="nameInput" />
+                </div>
+
+
+         </div>
+         <div class="row mb-2">
+            <div class="col-sm-3">
+                <label>Address 1</label>
+                <input class="form-control mb-1"
+                       @bind="model.Address1"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address1)))" />
+           
+            </div>
+            <div class="col-sm-3">
+                <label>Address 2</label>
+                <input class="form-control mb-1"
+                       @bind="model.Address2"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address2)))" />
+            </div>
+   
+
+         </div>
+         <div class="row mb-2">
+            <div class="col-sm-3">
+                <label>Address 3</label>
+                <input class="form-control mb-1"
+                       @bind="model.Address3"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address3)))" />
+            </div>
+            <div class="col-sm-3">
+                <label>Address 4</label>
+                <input class="form-control mb-2"
+                       @bind="model.Address4"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address4)))" />
+            </div>
+         </div>
+         <div class="row mb-2">
+            <div class="col-sm-2">
+                <label class="form-label">Postcode</label>
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Postcode"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Postcode)))" />
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label">Telephone</label>
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Telephone"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Telephone)))" />
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label">Fax</label>
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Fax"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Fax)))" />
+            </div>
+
+          
+        </div>
+        <div class="row mb-2">
+            <div class="col-sm-2">
+                <label class="form-label">Email</label>
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Email"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Email)))" />
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label">B2B File Name</label>
+                <input type="text"
+                       class="form-control"
+                       @bind="model.B2BFileName"
+                       maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.B2BFileName)))" />
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label">B2B File Type</label>
+                <input type="number" class="form-control" @bind="model.B2BFileType" />
+            </div>
+    
+            
+        </div>
+        <div class="row mb-2">
+            <div class="col-sm-2">
+                <label class="form-label">Settlement Discount</label>
+                <input type="number" step="0.01" class="form-control" @bind="model.SettlementDiscount" />
+            </div>
+            <div class="col-sm-2 ">
+                <label class="form-label">Carriage Paid Amount</label>
+                <input type="number" step="0.01" class="form-control" @bind="model.CarriagePaidAmount" />
+            </div>
+            <div class="col-sm-3">
+
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           role="switch"
+                           id="chkHeader"
+                           @bind="model.B2BFileHasHeaderRow" />
+                    <label class="form-check-label" for="chkHeader">
+                        Has Header Row
+                    </label>
+                </div>
+
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           role="switch"
+                           id="chkAppendLoc"
+                           @bind="model.B2BFileAppendLocationCode" />
+                    <label class="form-check-label" for="chkAppendLoc">
+                        Append Location Code
+                    </label>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card-footer text-end">
+        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
+        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
+
+        @if (recordExists)
+        {
+            <button type="button" class="btn btn-danger float-start" @onclick="Delete">
+                Delete
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    SupplierDto model = new();
+    bool recordExists = false;
+    bool isAccLocked = false;
+
+    ElementReference accInput;
+    ElementReference nameInput;
+    DotNetObjectReference<Supplier>? dotNetRef;
+    string? shortcutRegistrationId;
+    async Task OnAccKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter")
+            return;
+        await Task.Yield();
+        // 🔹 Blank → New Supplier Mode
+        if (string.IsNullOrWhiteSpace(model.AccountNo))
+        {
+            model = new SupplierDto();
+            recordExists = false;
+
+            isAccLocked = true;
+
+            await AppSnackbar.Show(
+                "New supplier mode activated.",
+                SnackbarType.Info);
+
+            await Task.Delay(50);
+
+            await nameInput.FocusAsync();
+
+            return;
+        }
+
+        // 🔹 Filled → Search
+        await Search();
+        await nameInput.FocusAsync();
+    }
+    [JSInvokable]
+    public async Task OnEsc()
+    {
+        await Reset();
+
+        await AppSnackbar.Show("Enter Supplier Number to search supplier", SnackbarType.Info);
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+        shortcutRegistrationId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
+            {
+                scopeSelector = "#supplier-form",
+                enableEsc = true,
+                enableEnter = true
+            });
+
+        await accInput.FocusAsync();
+    }
+    // protected override async Task OnAfterRenderAsync(bool firstRender)
+    // {
+    //     if (firstRender)
+    //     {
+    //         await JS.InvokeVoidAsync("enableEnterNavigation");
+
+    //         await JS.InvokeVoidAsync(
+    //             "eval",
+    //             "document.querySelector('input')?.focus()");
+    //     }
+    // }
+
+    async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(model.AccountNo))
+        {
+           await AppSnackbar.Show("Enter Supplier Number", SnackbarType.Warning);
+            return;
+        }
+
+        var res = await SupplierService.GetSupplier(model.AccountNo);
+
+        if (res?.Success == true && res.Data != null)
+        {
+            model = res.Data;
+            recordExists = true;
+        }
+        else
+        {
+            recordExists = false;
+            var acc = model.AccountNo;
+            model = new SupplierDto { AccountNo = acc };
+            await AppSnackbar.Show(res?.Message ?? "Supplier not found. A new record will be created.", SnackbarType.Warning);
+        }
+    }
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.AccountNo))
+        {
+            await AppSnackbar.Show("Supplier Number is required", SnackbarType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            await AppSnackbar.Show("Supplier Name is required", SnackbarType.Error);
+            return;
+        }
+
+        var res = await SupplierService.SaveSupplier(model);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+        if (res?.Success == true)
+        {
+            recordExists = true;
+        }
+    }
+
+    async Task Delete()
+    {
+        if (!recordExists)
+            return;
+
+        var res = await SupplierService.DeleteSupplier(model.AccountNo);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
+        if (res?.Success == true)
+        {
+            await Reset();
+        }
+    }
+
+    async Task Reset()
+    {
+        model = new SupplierDto();
+        recordExists = false;
+        isAccLocked = false;   // 🔴 IMPORTANT
+
+        await InvokeAsync(StateHasChanged);
+        await accInput.FocusAsync();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+        if (!string.IsNullOrWhiteSpace(shortcutRegistrationId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", shortcutRegistrationId);
+            }
+            catch
+            {
+                // Ignore JS disconnection during teardown.
+            }
+        }
+    }
+}
+

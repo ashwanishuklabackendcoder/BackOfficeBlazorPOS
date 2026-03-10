@@ -1,0 +1,184 @@
+﻿@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ICategoryService CategoryService
+@inject IJSRuntime JS
+
+<div class="position-relative" @ref="root">
+    <div class="form-control d-flex justify-content-between"
+         style="cursor:pointer"
+         @onclick="Toggle">
+        <span>@Display</span>
+        <i class="bi bi-chevron-down"></i>
+    </div>
+
+    @if (open)
+    {
+        <div class="border bg-white shadow w-100 p-2"
+             style="position:absolute; top:100%; z-index:1055">
+            <div class="p-2 border-bottom">
+                <input class="form-control border"
+                       placeholder="Search..."
+                       @oninput="OnInput" />
+
+            </div>
+           
+
+            <div style="max-height:220px; overflow:auto">
+                @foreach (var c in filtered)
+                {
+                    <button class="list-group-item list-group-item-action"
+                            @onclick="() => Select(c)">
+                        @c.Code - @c.Name
+                    </button>
+                }
+            </div>
+
+            <div class="border-top p-2 bg-light">
+                <button class="btn text-primary p-0"
+                        @onclick="OpenManage">
+                    ⚙ Manage Categories
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (showManage)
+{
+    <div class="modal fade show d-block"
+         style="background:rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5>Manage Categories</h5>
+                    <button class="btn-close" @onclick="CloseManage"></button>
+                </div>
+
+                <div class="modal-body">
+                    <CategoryEditor OnSaved="OnCategorySaved"
+                                    OnCancel="CloseManage" />
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Level { get; set; } = "A";
+
+    [Parameter] public string? Code { get; set; }
+    [Parameter] public EventCallback<string?> CodeChanged { get; set; }
+
+    [Parameter] public string? Name { get; set; }
+    [Parameter] public EventCallback<string?> NameChanged { get; set; }
+
+    bool open, showManage;
+    string search = "";
+    List<CategoryDto> list = new();
+    ElementReference root;
+    IJSObjectReference? module;
+    IJSObjectReference? outsideHandler;
+    DotNetObjectReference<CategorySelector>? dotNetRef;
+    string Display =>
+     !string.IsNullOrEmpty(Name)
+         ? Name
+         : !string.IsNullOrEmpty(Code)
+             ? Code
+             : "Select Category";
+
+
+    IEnumerable<CategoryDto> filtered => list;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+            module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./clickOutside.js");
+
+            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
+                "registerClickOutside", root, dotNetRef);
+
+        }
+    }
+
+    [JSInvokable]
+    public void OnClickOutside()
+    {
+        if (open)
+        {
+            open = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+    void Toggle() => open = !open;
+    protected override async Task OnInitializedAsync()
+    {
+        list = await CategoryService.GetAllCategory(Level);
+
+        // Default binding (Code → Name)
+        if (!string.IsNullOrWhiteSpace(Code))
+        {
+            var match = list.FirstOrDefault(x =>
+                x.Code.Equals(Code, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null)
+            {
+                Name = match.Name;
+                await NameChanged.InvokeAsync(Name);
+            }
+        }
+    }
+
+    async Task OnInput(ChangeEventArgs e)
+    {
+        search = e.Value?.ToString() ?? "";
+
+        if (search.Length < 3)
+        {
+            list = await CategoryService.GetAllCategory(Level);
+            return;
+        }
+
+        list = await CategoryService.Suggest(Level, search)
+               ?? new List<CategoryDto>();
+    }
+
+    async Task Select(CategoryDto c)
+    {
+        Code = c.Code;
+        Name = c.Name;
+
+        await CodeChanged.InvokeAsync(Code);
+        await NameChanged.InvokeAsync(Name);
+
+        open = false;
+    }
+
+    void OpenManage()
+    {
+        open = false;
+        showManage = true;
+    }
+
+    async Task OnCategorySaved(CategoryDto c)
+    {
+        Code = c.Code;
+        Name = c.Name;
+
+        await CodeChanged.InvokeAsync(Code);
+        await NameChanged.InvokeAsync(Name);
+
+        showManage = false;
+    }
+
+    void CloseManage() => showManage = false; public async ValueTask DisposeAsync()
+    {
+        if (outsideHandler != null)
+            await outsideHandler.InvokeVoidAsync("dispose");
+
+        dotNetRef?.Dispose();
+    }
+}

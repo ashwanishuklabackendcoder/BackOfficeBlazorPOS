@@ -1,0 +1,272 @@
+@page "/pos-receipt/{InvoiceNo}"
+@using System.Net.Http.Json
+@using BackOfficeBlazor.Shared.DTOs
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject POS.UI.Services.ISysOptionsService SysOptionsService
+
+<style>
+    :root {
+        --receipt-width: 58mm;
+        --receipt-font: 13px;
+        --receipt-line: 1.3;
+        --receipt-padding: 2mm;
+    }
+
+    @@media print {
+        @@page {
+            size: 58mm auto;
+            margin: 0;
+        }
+
+        body {
+            width: var(--receipt-width);
+            font-family: monospace;
+            font-size: var(--receipt-font);
+            line-height: var(--receipt-line);
+            margin: 0;
+            padding: 0;
+        }
+
+        .no-print {
+            display: none !important;
+        }
+    }
+
+    .receipt {
+        width: var(--receipt-width);
+        font-family: monospace;
+        font-size: var(--receipt-font);
+        line-height: var(--receipt-line);
+        color: #000;
+        word-break: break-word;
+        padding: 0 var(--receipt-padding);
+        box-sizing: border-box;
+    }
+
+    .center {
+        text-align: center;
+    }
+
+    .divider {
+        border-top: 1px dashed #000;
+        margin: 4px 0;
+    }
+
+    .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+    }
+
+    .item-code {
+        white-space: pre-wrap;
+    }
+
+    .muted {
+        color: #444;
+    }
+</style>
+
+<div class="receipt">
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="muted">Error: @_error</div>
+    }
+    else if (_receipt == null)
+    {
+        <div class="muted">Loading receipt...</div>
+    }
+    else
+    {
+        @if (_sysOptions?.MakeOnInvice == true && !string.IsNullOrWhiteSpace(_sysOptions.CompanyName))
+        {
+            <div class="center">@_sysOptions.CompanyName</div>
+        }
+        <div class="center">RECEIPT</div>
+        <div class="center">INVOICE @_receipt.InvoiceNumber</div>
+        <div class="divider"></div>
+
+        <div>Location: @_receipt.Location</div>
+        <div>Terminal: @_receipt.Terminal</div>
+        <div>Customer: @_receipt.Customer</div>
+        @if (!string.IsNullOrWhiteSpace(_receipt.SalesPerson))
+        {
+            <div>Sales Person: @_receipt.SalesPerson</div>
+        }
+        <div>Date: @FormatDate(_receipt.ReceiptDateTime)</div>
+
+        <div class="divider"></div>
+
+        @foreach (var line in _receipt.Lines)
+        {
+            <div class="item-code">@GetItemCode(line)</div>
+            <div class="row">
+                <span>@($"{line.Quantity} x {line.Sell:0.00}")</span>
+                <span>@($"{line.Net:0.00}")</span>
+            </div>
+        }
+
+        <div class="divider"></div>
+
+        <div class="row">
+            <span>SubTotal</span>
+            <span>@_receipt.SubTotal.ToString("0.00")</span>
+        </div>
+        @if (TotalDiscount > 0)
+        {
+            <div class="row">
+                <span>Discount</span>
+                <span>@TotalDiscount.ToString("0.00")</span>
+            </div>
+        }
+        <div class="row">
+            <span>VAT</span>
+            <span>@_receipt.VatAmount.ToString("0.00")</span>
+        </div>
+        <div class="row">
+            <span>NetTotal</span>
+            <span>@_receipt.NetTotal.ToString("0.00")</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div>Payment Details</div>
+        @if (_receipt.Payment.Cash > 0)
+        {
+            <div class="row"><span>Cash</span><span>@_receipt.Payment.Cash.ToString("0.00")</span></div>
+        }
+        @if (_receipt.Payment.Cheque > 0)
+        {
+            <div class="row"><span>Cheque</span><span>@_receipt.Payment.Cheque.ToString("0.00")</span></div>
+        }
+        @if (_receipt.Payment.MasterCard > 0)
+        {
+            <div class="row"><span>MasterCard</span><span>@_receipt.Payment.MasterCard.ToString("0.00")</span></div>
+        }
+        @if (_receipt.Payment.Visa > 0)
+        {
+            <div class="row"><span>Visa</span><span>@_receipt.Payment.Visa.ToString("0.00")</span></div>
+        }
+        @if (_receipt.Payment.Credit > 0)
+        {
+            <div class="row"><span>Credit</span><span>@_receipt.Payment.Credit.ToString("0.00")</span></div>
+        }
+        <div class="row">
+            <span>Total Paid</span>
+            <span>@_receipt.Payment.TotalTendered.ToString("0.00")</span>
+        </div>
+        <div class="row">
+            <span>Change</span>
+            <span>@ChangeAmount.ToString("0.00")</span>
+        </div>
+
+        <div class="divider"></div>
+        @if (!string.IsNullOrWhiteSpace(_sysOptions?.TillMsg))
+        {
+            <div class="center">@_sysOptions.TillMsg</div>
+            <div class="divider"></div>
+        }
+        <div class="center">THANK YOU</div>
+        @if (!string.IsNullOrWhiteSpace(_sysOptions?.InvoiceMsg))
+        {
+            <div class="center">@_sysOptions.InvoiceMsg</div>
+        }
+    }
+</div>
+
+<button class="no-print btn btn-primary" @onclick="Print">
+    Print
+</button>
+
+@code {
+    [Parameter] public string InvoiceNo { get; set; } = "";
+
+    private PosReceiptDto? _receipt;
+    private string? _error;
+    private bool _printed;
+    private SysOptionsDto? _sysOptions;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _receipt = null;
+        _error = null;
+        _printed = false;
+        _sysOptions = null;
+
+        if (string.IsNullOrWhiteSpace(InvoiceNo))
+        {
+            _error = "Invoice number is missing.";
+            return;
+        }
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApiResponse<PosReceiptDto>>(
+                $"api/returns/receipt/{InvoiceNo}");
+
+            if (result?.Success == true && result.Data != null)
+                _receipt = result.Data;
+            else
+                _error = result?.Message ?? "Failed to load receipt.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+
+        try
+        {
+            var optResult = await SysOptionsService.GetAsync();
+            if (optResult.Success && optResult.Data != null)
+                _sysOptions = optResult.Data;
+        }
+        catch
+        {
+            _sysOptions = null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_receipt != null && !_printed && string.IsNullOrWhiteSpace(_error))
+        {
+            _printed = true;
+            await JS.InvokeVoidAsync("window.print");
+        }
+    }
+
+    private string GetItemCode(PosSaleLineDto line)
+    {
+        var code = string.IsNullOrWhiteSpace(line.PartNumber) ? line.StockNo : line.PartNumber;
+        if (_sysOptions?.MakeOnInvice == true && !string.IsNullOrWhiteSpace(line.Make))
+            return $"{line.Make} {code}";
+
+        return code;
+    }
+
+    private static string FormatDate(DateTime? dt)
+    {
+        return dt.HasValue ? dt.Value.ToString("yyyy-MM-dd HH:mm:ss") : "";
+    }
+
+    private decimal ChangeAmount
+        => _receipt == null
+            ? 0m
+            : (_receipt.Payment.Cash > _receipt.NetTotal
+                ? _receipt.Payment.Cash - _receipt.NetTotal
+                : 0m);
+
+    private decimal TotalDiscount
+        => _receipt == null
+            ? 0m
+            : _receipt.Lines.Sum(x =>
+            {
+                var gross = x.Sell * x.Quantity;
+                var discount = gross - x.Net;
+                return discount > 0 ? discount : 0m;
+            });
+
+    private async Task Print()
+        => await JS.InvokeVoidAsync("window.print");
+}

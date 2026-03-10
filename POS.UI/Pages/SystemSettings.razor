@@ -1,0 +1,415 @@
+﻿@page "/system-settings"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IAuthService AuthService
+@inject ISysOptionsService SysOptionsService
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>System Settings</PageTitle>
+
+<div class="container-fluid mt-3">
+    @if (isAdmin)
+    {
+    <div class="card mb-3">
+        <div class="card-header d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+            <div>
+                <div class="fw-semibold">System Settings</div>
+                <div class="text-muted small">These options apply to all locations and modules.</div>
+            </div>
+            <span class="badge bg-info text-dark">Admin only</span>
+        </div>
+    </div>
+
+        
+        @if(isLoading)
+        {
+            <div class="text-muted">Loading settings...</div>
+        }
+        else if (model != null)
+        {
+            <div class="card">
+                <div class="card-body">
+
+                    <!-- TABS -->
+                    <ul class="nav nav-tabs mb-3">
+                        @foreach (var tab in Tabs)
+                        {
+                            <li class="nav-item">
+                                <button class="nav-link @(activeTab == tab ? "active" : "")"
+                                        @onclick="() => SwitchTab(tab)">
+                                    @tab
+                                </button>
+                            </li>
+                        }
+                    </ul>
+
+                    <!-- SECURITY -->
+                    @if (activeTab == "Security")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Security</div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Password 1</label>
+                                    <input class="form-control"
+                                           type="@(showPassword1 ? "text" : "password")"
+                                           @bind="model.Password1" />
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input" type="checkbox" @bind="showPassword1" />
+                                        <label class="form-check-label">Show</label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Password 2</label>
+                                    <input class="form-control"
+                                           type="@(showPassword2 ? "text" : "password")"
+                                           @bind="model.Password2" />
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input" type="checkbox" @bind="showPassword2" />
+                                        <label class="form-check-label">Show</label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-0">
+                                    <label class="form-label">Password 3</label>
+                                    <input class="form-control"
+                                           type="@(showPassword3 ? "text" : "password")"
+                                           @bind="model.Password3" />
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input" type="checkbox" @bind="showPassword3" />
+                                        <label class="form-check-label">Show</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- COMPANY -->
+                    @if (activeTab == "Company")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Company</div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Company No</label>
+                                    <input class="form-control" @bind="model.CompanyNo" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Company Name</label>
+                                    <input class="form-control" @bind="model.CompanyName" />
+                                </div>
+                                <div>
+                                    <label class="form-label">Base Currency</label>
+                                    <input class="form-control" @bind="model.BaseCurrency" />
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- PURCHASE ORDERS -->
+                    @if (activeTab == "Purchase Orders")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Purchase Orders</div>
+                            <div class="card-body">
+                                <label class="form-label">Purchase Order Message</label>
+                                <textarea class="form-control" rows="4"
+                                          @bind="model.PurchaseOrderMessage"></textarea>
+
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" @bind="model.AutoInvoice" />
+                                    <label class="form-check-label">Auto Invoice</label>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- STOCK & PRICING -->
+                    @if (activeTab == "Stock & Pricing")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Stock & Pricing</div>
+                            <div class="card-body">
+
+                                <div class="mb-3">
+                                    <label class="form-label">Stock Turn Value</label>
+                                    <input class="form-control" type="number" @bind="model.StockTurnValue" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Round Down Web RRP Value</label>
+                                    <input class="form-control" type="number" step="0.01" @bind="model.RoundDownWebRRPVal" />
+                                </div>
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.QuickStockInput" />
+                                    <label class="form-check-label">Quick Stock Input</label>
+                                </div>
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.UpdateCostOnInput" />
+                                    <label class="form-check-label">Update Cost On Input</label>
+                                </div>
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.UseLabelManager" />
+                                    <label class="form-check-label">Use Label Manager</label>
+                                </div>
+
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" @bind="model.WebPrice99" />
+                                    <label class="form-check-label">Web Price .99</label>
+                                </div>
+
+                                <div class="form-check form-switch mt-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.AutoStockNo" />
+                                    <label class="form-check-label">Auto Stock No</label>
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+
+                    <!-- LAYAWAY -->
+                    @if (activeTab == "Layaway")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Layaway</div>
+                            <div class="card-body">
+
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" @bind="model.Layaway" />
+                                    <label class="form-check-label">Enable Layaway</label>
+                                </div>
+
+                                <label class="form-label">Layaway Reserved For Days</label>
+                                <input class="form-control" type="number" @bind="model.LayawayReservedForDays" />
+
+                            </div>
+                        </div>
+                    }
+
+                    <!-- TILL -->
+                    @if (activeTab == "Till")
+                    {
+                        <div class="d-flex flex-column gap-3">
+                            <div class="card">
+                                <div class="card-header fw-semibold">Till</div>
+                                <div class="card-body">
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Till Message</label>
+                                        <textarea class="form-control" rows="3"
+                                                  @bind="model.TillMsg"></textarea>
+                                    </div>
+
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" @bind="model.EnterPinOnTill" />
+                                        <label class="form-check-label">Enter PIN On Till</label>
+                                    </div>
+
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="model.CreaditOnDayAcc" />
+                                        <label class="form-check-label">Credit On Day Account</label>
+                                    </div>
+
+                                </div>
+                            </div>
+
+                            <QuickItemsManager />
+                        </div>
+                    }
+
+                    <!-- INVOICES -->
+                    @if (activeTab == "Invoices")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Invoices</div>
+                            <div class="card-body">
+
+                                <div class="mb-3">
+                                    <label class="form-label">Invoice Message</label>
+                                    <textarea class="form-control" rows="3"
+                                              @bind="model.InvoiceMsg"></textarea>
+                                </div>
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.AutoPrintServiceInv" />
+                                    <label class="form-check-label">Auto Print Service Invoice</label>
+                                </div>
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.MakeOnInvice" />
+                                    <label class="form-check-label">Make On Invoice</label>
+                                </div>
+
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" @bind="model.DefaultWebProd" />
+                                    <label class="form-check-label">Default Web Product</label>
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+
+                    <!-- CUSTOMER ORDERS -->
+                    @if (activeTab == "Customer Orders")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Customer Orders</div>
+                            <div class="card-body">
+
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" @bind="model.CustomerOrderPrint" />
+                                    <label class="form-check-label">Print Customer Order</label>
+                                </div>
+
+                                <div class="mt-3">
+                                    <label class="form-label">Quote Message</label>
+                                    <textarea class="form-control" rows="3"
+                                              @bind="model.QuoteMessage"></textarea>
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+
+                    <!-- INSURANCE -->
+                    @if (activeTab == "Insurance")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Insurance</div>
+                            <div class="card-body">
+
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" @bind="model.VeloLifeInsurance" />
+                                    <label class="form-check-label">VeloLife Insurance</label>
+                                </div>
+
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" @bind="model.BikmoInsurance" />
+                                    <label class="form-check-label">Bikmo Insurance</label>
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+
+                    <!-- SYSTEM MESSAGES -->
+                    @if (activeTab == "System Messages")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">System Messages</div>
+                            <div class="card-body">
+
+                                <label class="form-label">Service Message</label>
+                                <textarea class="form-control" rows="3"
+                                          @bind="model.ServiceMessage"></textarea>
+
+                            </div>
+                        </div>
+                    }
+
+                    <!-- NUMBER SEQUENCES -->
+                    @if (activeTab == "Number Sequences")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Number Sequences</div>
+                            <div class="card-body">
+                                <div class="row g-3">
+
+                                    <div class="col-md-4"><label class="form-label">Next Part No</label><input class="form-control" @bind="model.NxtPartNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Despatch No</label><input class="form-control" @bind="model.NxtDespNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Stock No</label><input class="form-control" @bind="model.NxtStockNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Order No</label><input class="form-control" @bind="model.NxtOrderNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Order Ref No</label><input class="form-control" @bind="model.NxtOrderRefNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Invoice No</label><input class="form-control" @bind="model.NxtInvoiceNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Batch No</label><input class="form-control" @bind="model.NxtBatchNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Next Quote No</label><input class="form-control" @bind="model.NxtQuoteNo" /></div>
+                                    <div class="col-md-4"><label class="form-label">Warehouse Shop No</label><input class="form-control" @bind="model.WhareHouseShopNo" /></div>
+
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="d-flex justify-content-end mt-3">
+                        <button class="btn btn-primary" @onclick="Save" disabled="@isSaving">
+                            Save
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        }
+    }
+   
+
+</div>
+
+@code {
+    private SysOptionsDto? model;
+    private bool isAdmin;
+    private bool isLoading = true;
+    private bool isSaving;
+
+
+    private bool showPassword1;
+    private bool showPassword2;
+    private bool showPassword3;
+
+    private string activeTab = "Security";
+
+    private readonly string[] Tabs =
+    {
+    "Security","Company","Purchase Orders","Stock & Pricing","Layaway",
+    "Till","Invoices","Customer Orders","Insurance",
+    "System Messages","Number Sequences"
+};
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAdmin = AuthService.CurrentUser?.IsAdmin == true;
+        if (!isAdmin)
+        {
+            await AppSnackbar.Show("You do not have permission to view this page.", SnackbarType.Warning);
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        var res = await SysOptionsService.GetAsync();
+        isLoading = false;
+
+        if (res.Success && res.Data != null)
+            model = res.Data;
+        else
+            await AppSnackbar.Show(res.Message ?? "Unable to load system settings.", SnackbarType.Error);
+    }
+
+    private async Task Save()
+    {
+        if (model == null || isSaving) return;
+
+        isSaving = true;
+        var res = await SysOptionsService.SaveAsync(model);
+        isSaving = false;
+
+        if (res.Success)
+            await AppSnackbar.Show(res.Message ?? "Saved", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res.Message ?? "Save failed", SnackbarType.Error);
+
+        if (res.Success && res.Data != null)
+            model = res.Data;
+    }
+
+    private void SwitchTab(string tab) => activeTab = tab;
+
+
+}

@@ -1,0 +1,145 @@
+﻿@using BackOfficeBlazor.Shared.DTOs
+@using Microsoft.AspNetCore.Components.Forms
+@using POS.UI.Services
+@inject IImageApiService ImageApi
+<div class="image-upload-box p-3 text-center">
+
+    <label class="w-100" style="cursor:pointer">
+        <InputFile OnChange="OnFilesSelected"
+                   multiple
+                   accept="image/*"
+                   hidden />
+
+        <i class="bi bi-image" style="font-size:2rem;color:#ccc"></i>
+
+        <p class="mb-1 small text-muted">Select image(s) or</p>
+
+        <span class="text-primary small fw-bold text-decoration-none">
+            Browse images
+        </span>
+
+        <p class="mt-2 text-muted" style="font-size:10px;">
+            Max 4 images (5MB each)
+        </p>
+    </label>
+</div>
+
+@if (_previews.Any())
+{
+    <div class="row mt-3 g-2">
+        @for (int i = 0; i < _previews.Count; i++)
+        {
+            <div class="col-3 text-center">
+                <img src="@_previews[i]"
+                     class="img-thumbnail"
+                     style="height:90px;object-fit:cover" />
+
+                <div class="mt-1">
+                    <input type="radio"
+                           name="primary"
+                           value="@i"
+                           checked="@(i == 0)"
+                           @onchange="() => SetPrimary(i)" />
+                    <small>Primary</small>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+
+
+@code {
+    [Parameter, EditorRequired]
+    public ProductDto Model { get; set; } = default!;
+
+    const long MaxSize = 5 * 1024 * 1024;
+    const int MaxFiles = 4;
+
+    readonly List<string> _previews = new();
+
+    [Inject] HttpClient Http { get; set; } = default!;
+
+    async Task OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var content = new MultipartFormDataContent();
+
+            foreach (var file in e.GetMultipleFiles(MaxFiles))
+            {
+                if (file.Size > MaxSize)
+                    continue;
+
+                var stream = file.OpenReadStream(MaxSize);
+                var fileContent = new StreamContent(stream);
+
+                fileContent.Headers.ContentType =
+                    new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+
+                content.Add(fileContent, "files", file.Name);
+            }
+
+            var response = await ImageApi.UploadImage(content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Console.Error.WriteLine($"Upload failed: {response.StatusCode} - {error}");
+                return;
+            }
+
+            var paths = await response.Content.ReadFromJsonAsync<List<string>>();
+
+            if (paths == null || paths.Count == 0)
+            {
+                Console.Error.WriteLine("Upload returned no file paths.");
+                return;
+            }
+
+            _previews.Clear();
+            _previews.AddRange(paths);
+
+            MapToProduct();
+        }
+        catch (OperationCanceledException)
+        {
+            // Happens if user selects new files or navigates away
+            Console.Error.WriteLine("Upload cancelled.");
+        }
+        catch (HttpRequestException ex)
+        {
+            // CORS, DNS, network, 5xx, blocked by browser, etc.
+            Console.Error.WriteLine($"Network error while uploading: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            // Anything else (serialization, JS interop, Blazor runtime)
+            Console.Error.WriteLine($"Unexpected upload error: {ex}");
+        }
+    }
+
+    void SetPrimary(int index) 
+    {
+        if (index < 0 || index >= _previews.Count)
+            return;
+
+        if (index == 0)
+            return; // already primary
+
+        var img = _previews[index];
+        _previews.RemoveAt(index);
+        _previews.Insert(0, img);
+
+        MapToProduct();
+    }
+
+
+    void MapToProduct()
+    {
+        Model.ImageMain = _previews.ElementAtOrDefault(0);
+        Model.Image2 = _previews.ElementAtOrDefault(1);
+        Model.Image3 = _previews.ElementAtOrDefault(2);
+        Model.Image4 = _previews.ElementAtOrDefault(3);
+    }
+}

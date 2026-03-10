@@ -1,0 +1,148 @@
+@using POS.UI.Pages
+@using POS.UI.Services
+@using BackOfficeBlazor.Shared.DTOs
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+
+<Router AppAssembly="@typeof(App).Assembly" OnNavigateAsync="HandleNavigationAsync">
+    <Found Context="routeData">
+        @if (CanRender(routeData))
+        {
+            <AppErrorBoundary @ref="_routeErrorBoundary">
+                <ChildContent>
+                    <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+                    <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+                </ChildContent>
+                <ErrorContent>
+                    <LayoutView Layout="@typeof(MainLayout)">
+                        <div class="alert alert-danger mt-3" role="alert">
+                            Unexpected error occurred while rendering this page.
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="RecoverFromRouteError">
+                            Recover
+                        </button>
+                    </LayoutView>
+                </ErrorContent>
+            </AppErrorBoundary>
+        }
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <p role="alert">Sorry, there's nothing at this address.</p>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    private AppErrorBoundary? _routeErrorBoundary;
+
+    private static bool IsLoginRoute(RouteData routeData)
+        => routeData.PageType == typeof(Login);
+
+    private bool CanRender(RouteData routeData)
+    {
+        var isLogin = IsLoginRoute(routeData);
+
+        if (!AuthService.IsAuthenticated && !isLogin)
+            return false;
+
+        if (AuthService.IsAuthenticated && isLogin)
+            return false;
+
+        if (AuthService.IsAuthenticated && !isLogin)
+        {
+            var path = Nav.ToBaseRelativePath(Nav.Uri).Trim('/').ToLowerInvariant();
+            if (!HasRouteAccess(path))
+                return false;
+        }
+
+        return true;
+    }
+
+    private Task HandleNavigationAsync(Microsoft.AspNetCore.Components.Routing.NavigationContext context)
+    {
+        _routeErrorBoundary?.Recover();
+
+        var path = context.Path.Trim('/').ToLowerInvariant();
+        var isLogin = path == "login";
+
+        if (!AuthService.IsAuthenticated && !isLogin)
+        {
+            Nav.NavigateTo("/login", true);
+            return Task.CompletedTask;
+        }
+
+        if (AuthService.IsAuthenticated && isLogin)
+        {
+            Nav.NavigateTo("/", true);
+            return Task.CompletedTask;
+        }
+
+        if (AuthService.IsAuthenticated && !isLogin && !HasRouteAccess(path))
+        {
+            Nav.NavigateTo("/", true);
+            return Task.CompletedTask;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void RecoverFromRouteError()
+    {
+        _routeErrorBoundary?.Recover();
+        Nav.NavigateTo("/", true);
+    }
+
+    private bool HasRouteAccess(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return true;
+
+        if (RouteIs(path, "staff-users") || RouteIs(path, "user-permissions"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "branch-location-setup"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "system-settings"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "payment-integration"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "shipping-integration"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "feedback-integration"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "insurance-integration"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "printer-config"))
+            return false;
+
+        if (RouteIs(path, "category"))
+            return AuthService.HasAccess(PermissionKeys.Category);
+        if (RouteIs(path, "manufacturer"))
+            return AuthService.HasAccess(PermissionKeys.Brand);
+        if (RouteIs(path, "supplier"))
+            return AuthService.HasAccess(PermissionKeys.Supplier);
+        if (RouteIs(path, "customer"))
+            return AuthService.HasAccess(PermissionKeys.Customer);
+
+        if (RouteIs(path, "product") || RouteIs(path, "products"))
+            return AuthService.HasAccess(PermissionKeys.ProductAdd);
+        if (RouteIs(path, "stock-input") || RouteIs(path, "stock-transfer"))
+            return AuthService.HasAccess(PermissionKeys.StockInput);
+
+        if (RouteIs(path, "pos-sell") || RouteIs(path, "pos-payment") || RouteIs(path, "pos-receipt"))
+            return AuthService.HasAccess(PermissionKeys.Till);
+        if (RouteIs(path, "pos-layaway"))
+            return AuthService.HasAccess(PermissionKeys.Layaway);
+        if (RouteIs(path, "customer-sales-returns-report") || RouteIs(path, "pos-returns"))
+            return AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+
+        return true;
+    }
+
+    private static bool RouteIs(string path, string routeRoot)
+    {
+        return path.Equals(routeRoot, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(routeRoot + "/", StringComparison.OrdinalIgnoreCase);
+    }
+}

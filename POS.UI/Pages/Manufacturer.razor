@@ -1,0 +1,230 @@
+﻿@page "/manufacturer"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IManufacturerService ManufacturerService
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+
+<PageTitle>Manufacturer Maintenance</PageTitle>
+
+<h5 class="fw-bold mt-3">Brand Maintenance</h5>
+
+<div id="manufacturer-form" class="card card-warning card-outline" data-shortcuts-scope>
+    <div class="card-body">
+
+        <!-- Code + Search -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Code</label>
+
+            <div class="col-sm-1">
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Code"
+                       maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Code)))"
+                       @onkeydown="OnCodeKeyDown"
+                       data-enter-skip="true"
+                       disabled="@isCodeLocked"
+                       @ref="codeInput" />
+            </div>
+
+            <div class="col-sm-1">
+                <button type="button"
+                        class="btn btn-primary w-100"
+                        @onclick="Search">
+                    Search
+                </button>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="row mb-3">
+            <label class="col-sm-1 col-form-label">Description</label>
+
+            <div class="col-sm-3">
+                <input type="text"
+                       class="form-control"
+                       @bind="model.Name"
+                       maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Name)))"
+                       @ref="nameInput" />
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card-footer text-end">
+        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
+        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
+
+        @if (recordExists)
+        {
+            <button type="button"
+                    class="btn btn-danger float-start"
+                    @onclick="Delete">
+                Delete
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+
+    ManufacturerDto model = new();
+    bool recordExists = false;
+    bool isCodeLocked = false;
+
+    ElementReference codeInput;
+    ElementReference nameInput;
+    DotNetObjectReference<Manufacturer>? dotNetRef;
+    string? shortcutRegistrationId;
+
+
+    [JSInvokable]
+    public async Task OnEsc()
+    {
+        await Reset();
+        await AppSnackbar.Show("Enter Code to search Manufacturer", SnackbarType.Info);
+    }
+
+    // 🔥 ENTER ON CODE FIELD
+    async Task OnCodeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter")
+            return;
+        await Task.Yield();
+        // 🔹 Blank → New Mode
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            model = new ManufacturerDto();
+            recordExists = false;
+            isCodeLocked = true;
+
+            await AppSnackbar.Show(
+                "New manufacturer mode activated.",
+                SnackbarType.Info);
+
+            await Task.Delay(50);
+            await nameInput.FocusAsync();
+            return;
+        }
+
+        // 🔹 Otherwise → Search
+        await Search();
+
+        await Task.Delay(50);
+        await nameInput.FocusAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+        shortcutRegistrationId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
+            {
+                scopeSelector = "#manufacturer-form",
+                enableEsc = true,
+                enableEnter = true
+            });
+
+        await codeInput.FocusAsync();
+    }
+    async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            await AppSnackbar.Show("Enter Manufacturer Code", SnackbarType.Warning);
+            return;
+        }
+
+        var response = await ManufacturerService.GetManufacturer(model.Code);
+
+        if (response?.Success == true && response.Data != null)
+        {
+            model = response.Data;
+            recordExists = true;
+
+            await AppSnackbar.Show("Manufacturer loaded", SnackbarType.Success);
+        }
+        else
+        {
+            recordExists = false;
+            var code = model.Code;
+
+            model = new ManufacturerDto { Code = code };
+
+            await AppSnackbar.Show(
+                "No record found. New manufacturer will be created.",
+                SnackbarType.Warning);
+        }
+    }
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(model.Code))
+        {
+            await AppSnackbar.Show("Manufacturer Code required", SnackbarType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            await AppSnackbar.Show("Description required", SnackbarType.Error);
+            return;
+        }
+
+        var res = await ManufacturerService.SaveManufacturer(model);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+
+        recordExists = true;
+    }
+
+    async Task Delete()
+    {
+        if (!recordExists) return;
+
+        var res = await ManufacturerService.DeleteManufacturer(model.Code);
+
+        if (res?.Success == true)
+            await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
+        else
+            await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
+
+        await Reset();
+    }
+
+    async Task Reset()
+    {
+        model = new ();
+        recordExists = false;
+        isCodeLocked = false;   // 🔴 IMPORTANT
+
+        await InvokeAsync(StateHasChanged);
+        await codeInput.FocusAsync();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+        if (!string.IsNullOrWhiteSpace(shortcutRegistrationId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", shortcutRegistrationId);
+            }
+            catch
+            {
+                // Ignore JS disconnection during teardown.
+            }
+        }
+    }
+}

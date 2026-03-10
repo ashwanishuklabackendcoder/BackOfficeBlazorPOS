@@ -1,0 +1,834 @@
+@page "/pos-layaway"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.State
+
+@inject ILayawayService LayawayService
+@inject IProductApiService ProductApi
+@inject IStockService StockService
+@inject AppSnackbarService AppSnackbar
+@inject NavigationManager Nav
+@inject IAuthService AuthService
+
+<PageTitle>Layaway</PageTitle>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">New Layaway Cart</div>
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                Customer:
+                <b>@DraftCustomerName (@DraftCustomerAccount)</b>
+                <span class="ms-2 text-muted">Location: <b>@DraftLocation</b></span>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" @onclick="() => ShowCustomerPicker = true">
+                    Select Customer
+                </button>
+                <button class="btn btn-outline-secondary" @onclick="SetDraftWalkIn">
+                    Walk-in
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-2">
+                <label class="form-label">Part Number</label>
+                <input class="form-control"
+                       @bind="DraftPartNumber"
+                       maxlength="@(MaxLengthHelper.For<LayawayLineDto>(nameof(LayawayLineDto.PartNumber)))" />
+            </div>
+@*             <div class="col-md-2">
+                <label class="form-label">Qty</label>
+                <input type="number" class="form-control" @bind="DraftQty" min="1" />
+            </div> *@
+            <div class="col-md-2">
+                <button class="btn btn-success w-100" @onclick="AddToDraftCart">
+                    Add Layaway
+                </button>
+            </div>
+        </div>
+
+        @if (DraftIsMajor)
+        {
+            <div class="row g-2 align-items-end mb-2">
+                <div class="col-md-4">
+                    <label class="form-label">Stock Number</label>
+                    <select class="form-select" @bind="DraftSelectedStockNumber">
+                        <option value="">-- Select Stock Number --</option>
+                        @foreach (var sn in DraftAvailableStockNumbers)
+                        {
+                            <option value="@sn.StockNumber">@sn.StockNumber</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        }
+
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Part</th>
+                    <th>Stock No</th>
+                    <th>Qty</th>
+                    <th>Sell</th>
+                    <th>Net</th>
+                    <th style="width:120px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!DraftCart.Any())
+                {
+                    <tr><td colspan="6">No layaway cart items</td></tr>
+                }
+                else
+                {
+                    @foreach (var line in DraftCart)
+                    {
+                        <tr>
+                            <td>@line.PartNumber</td>
+                            <td>@line.StockNumber</td>
+                            <td style="width:120px;">
+                                <input type="number"
+                                       class="form-control form-control-sm"
+                                       value="@line.Qty"
+                                       min="1"
+                                       disabled="@line.IsMajor"
+                                       @onchange="async e => await ChangeDraftQty(line, e)" />
+                            </td>
+                            <td style="width:140px;">
+                                <input type="number"
+                                       class="form-control form-control-sm"
+                                       value="@line.UnitPrice"
+                                       step="0.01"
+                                       min="0"
+                                       @onchange="e => ChangeDraftPrice(line, e)" />
+                            </td>
+                            <td>@(line.Qty * line.UnitPrice)</td>
+                            <td>
+                             @*    <button class="btn btn-sm btn-primary me-1"
+                                        @onclick="async () => await UpdateDraftLine(line)">
+                                    Save
+                                </button> *@
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="() => RemoveDraftLine(line)">
+                                    Remove
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+
+        <div class="d-flex justify-content-end gap-2">
+            <button class="btn btn-danger" @onclick="ClearDraftCart">Clear</button>
+            <button class="btn btn-success" @onclick="CreateLayawayFromDraft">Create Layaway</button>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">LAYAWAY LIST</div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-3">
+                <label class="form-label">Customer Account (optional)</label>
+                <input class="form-control"
+                       @bind="FilterCustomer"
+                       maxlength="@(MaxLengthHelper.For<LayawayDetailDto>(nameof(LayawayDetailDto.CustomerAccNo)))" />
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" @onclick="LoadLayaways">
+                    LOAD
+                </button>
+            </div>
+        </div>
+
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Layaway No</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Items</th>
+                    <th style="width:240px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Layaways == null)
+                {
+                    <tr><td colspan="6">Load layaways</td></tr>
+                }
+                else if (!Layaways.Any())
+                {
+                    <tr><td colspan="6">No active layaways</td></tr>
+                }
+                else
+                {
+                    @foreach (var l in Layaways)
+                    {
+                        <tr class="@(SelectedLayawayNo == l.LayawayNo ? "table-primary" : "")">
+                            <td>@l.LayawayNo</td>
+                            <td>@l.CustomerAccNo</td>
+                            <td>@l.DateCreated.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@l.TotalNet.ToString("0.00")</td>
+                            <td>@l.ItemsCount</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-success"
+                                            @onclick="() => SellLayaway(l.LayawayNo)">
+                                        Sale
+                                    </button>
+                                    <button class="btn btn-sm btn-primary"
+                                            @onclick="() => EditLayaway(l.LayawayNo)">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-danger"
+                                            @onclick="() => ReverseLayaway(l.LayawayNo)">
+                                        Reverse
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (SelectedDetail != null)
+{
+    <div class="card shadow-sm">
+        <div class="card-header fw-bold">
+            EDIT LAYAWAY — @SelectedDetail.LayawayNo
+        </div>
+        <div class="card-body">
+            <div class="mb-2">
+                Customer: <b>@SelectedDetail.CustomerAccNo</b> |
+                Location: <b>@SelectedDetail.Location</b>
+            </div>
+
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>Part</th>
+                        <th>StockNo</th>
+                        <th>Qty</th>
+                        <th>Sell</th>
+                        <th>Net</th>
+                        <th style="width:140px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in SelectedDetail.Lines)
+                    {
+                        <tr>
+                            <td>@line.PartNumber</td>
+                            <td>@line.StockNo</td>
+                            <td>@line.Quantity</td>
+                            <td>@line.Sell.ToString("0.00")</td>
+                            <td>@line.Net.ToString("0.00")</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-secondary"
+                                            disabled="@(line.IsMajor)"
+                                            @onclick="() => ChangeQty(line, -1)">
+                                        -
+                                    </button>
+                                    <button class="btn btn-sm btn-secondary"
+                                            disabled="@(line.IsMajor)"
+                                            @onclick="() => ChangeQty(line, 1)">
+                                        +
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => RemoveLine(line)">
+                                        Remove
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="mt-3 p-2 border rounded">
+                <div class="fw-bold mb-2">Add Item</div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">Part Number</label>
+                        <input class="form-control"
+                               @bind="NewPartNumber"
+                               maxlength="@(MaxLengthHelper.For<LayawayLineDto>(nameof(LayawayLineDto.PartNumber)))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Qty</label>
+                        <input type="number" class="form-control" @bind="NewQty" min="1" />
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary w-100" @onclick="LoadProductForAdd">
+                            Load Product
+                        </button>
+                    </div>
+                </div>
+
+                @if (NewIsMajor)
+                {
+                    <div class="row g-2 mt-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label">Stock Number</label>
+                            <select class="form-select" @bind="SelectedStockNumber">
+                                <option value="">-- Select Stock Number --</option>
+                                @foreach (var sn in AvailableStockNumbers)
+                                {
+                                    <option value="@sn.StockNumber">@sn.StockNumber</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-success w-100" @onclick="AddLine">
+                                Add Serialized
+                            </button>
+                        </div>
+                    </div>
+                }
+                else if (LoadedProduct != null)
+                {
+                    <div class="row g-2 mt-2 align-items-end">
+                        <div class="col-md-3">
+                            <button class="btn btn-success w-100" @onclick="AddLine">
+                                Add Item
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (ShowCustomerPicker)
+{
+    <PosCustomerPicker OnSelected="OnCustomerSelected"
+                       OnCancel="CloseCustomerPicker" />
+}
+
+@code {
+    bool ShowCustomerPicker;
+    string DraftCustomerAccount = "WALKIN";
+    string DraftCustomerName = "Walk In";
+    string DraftLocation = "01";
+    string? DraftPartNumber;
+    int DraftQty = 1;
+    bool DraftIsMajor;
+    decimal DraftUnitPrice;
+    List<StockNumberDto> DraftAvailableStockNumbers = new();
+    string? DraftSelectedStockNumber;
+    List<PosCartItemState> DraftCart = new();
+
+    string? FilterCustomer;
+    List<LayawaySummaryDto>? Layaways;
+    int? SelectedLayawayNo;
+    LayawayDetailDto? SelectedDetail;
+
+    string? NewPartNumber;
+    int NewQty = 1;
+    bool NewIsMajor;
+    ProductDto? LoadedProduct;
+    List<StockNumberDto> AvailableStockNumbers = new();
+    string? SelectedStockNumber;
+
+    protected override void OnInitialized()
+    {
+        if (!AuthService.HasAccess(PermissionKeys.Layaway))
+        {
+            AppSnackbar.Show("You do not have permission to access Layaway", SnackbarType.Warning);
+            Nav.NavigateTo("/", true);
+            return;
+        }
+
+        DraftCustomerAccount = PosWorkflowState.LayawayCustomerAccount;
+        DraftCustomerName = PosWorkflowState.LayawayCustomerName;
+        DraftLocation = string.IsNullOrWhiteSpace(PosWorkflowState.PosLocation)
+            ? "01"
+            : PosWorkflowState.PosLocation;
+        DraftCart = PosWorkflowState.LayawayDraftCart
+            .Select(x => new PosCartItemState
+            {
+                PartNumber = x.PartNumber,
+                Description = x.Description,
+                Qty = x.Qty,
+                UnitPrice = x.UnitPrice,
+                OriginalPrice = x.OriginalPrice,
+                DiscountPercent = x.DiscountPercent,
+                IsMajor = x.IsMajor,
+                StockNumber = x.StockNumber
+            })
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(DraftCustomerAccount) &&
+            DraftCustomerAccount != "WALKIN")
+        {
+            FilterCustomer = DraftCustomerAccount;
+        }
+    }
+
+    async Task LoadLayaways()
+    {
+        var res = await LayawayService.GetActiveAsync(FilterCustomer);
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        Layaways = res.Data;
+    }
+
+    async Task EditLayaway(int layawayNo)
+    {
+        SelectedLayawayNo = layawayNo;
+        var res = await LayawayService.GetAsync(layawayNo);
+
+        if (!res.Success || res.Data == null)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        SelectedDetail = res.Data;
+        ResetAddSection();
+    }
+
+    async Task SellLayaway(int layawayNo)
+    {
+        var res = await LayawayService.GetAsync(layawayNo);
+        if (!res.Success || res.Data == null)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        var detail = res.Data;
+        var reverse = await LayawayService.ReverseAsync(layawayNo);
+        if (!reverse.Success)
+        {
+            AppSnackbar.Show(reverse.Message, SnackbarType.Error);
+            return;
+        }
+
+        PosWorkflowState.PendingLayawayToSell = new PendingLayawayToSellState
+        {
+            LayawayNo = layawayNo,
+            CustomerAccNo = detail.CustomerAccNo,
+            CustomerName = detail.CustomerAccNo,
+            Location = detail.Location,
+            Lines = detail.Lines
+        };
+
+        AppSnackbar.Show("Layaway moved to POS cart. Complete sale from POS.", SnackbarType.Success);
+        Nav.NavigateTo("/pos-sell");
+    }
+
+    async Task ReverseLayaway(int layawayNo)
+    {
+        var res = await LayawayService.ReverseAsync(layawayNo);
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        AppSnackbar.Show("Layaway reversed", SnackbarType.Success);
+        await LoadLayaways();
+        SelectedLayawayNo = null;
+        SelectedDetail = null;
+    }
+
+    async Task ChangeQty(LayawayLineDto line, int delta)
+    {
+        if (SelectedLayawayNo == null)
+            return;
+
+        var newQty = line.Quantity + delta;
+        if (newQty < 0)
+            return;
+
+        var res = await LayawayService.UpdateLineAsync(SelectedLayawayNo.Value, new LayawayLineUpdateDto
+        {
+            PartNumber = line.PartNumber,
+            StockNo = line.StockNo,
+            NewQty = newQty
+        });
+
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        await EditLayaway(SelectedLayawayNo.Value);
+    }
+
+    async Task RemoveLine(LayawayLineDto line)
+    {
+        if (SelectedLayawayNo == null)
+            return;
+
+        var res = await LayawayService.UpdateLineAsync(SelectedLayawayNo.Value, new LayawayLineUpdateDto
+        {
+            PartNumber = line.PartNumber,
+            StockNo = line.StockNo,
+            NewQty = 0
+        });
+
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        await EditLayaway(SelectedLayawayNo.Value);
+    }
+
+    async Task LoadProductForAdd()
+    {
+        if (SelectedDetail == null || string.IsNullOrWhiteSpace(NewPartNumber))
+            return;
+
+        var res = await ProductApi.GetProduct(NewPartNumber);
+        if (res == null || !res.Success || res.Data == null)
+        {
+            AppSnackbar.Show("Product not found", SnackbarType.Error);
+            return;
+        }
+
+        LoadedProduct = res.Data;
+        NewIsMajor = LoadedProduct.Major;
+
+        if (NewIsMajor)
+        {
+            AvailableStockNumbers = await StockService.GetAvailableStockNumbersAsync(
+                LoadedProduct.PartNumber!, SelectedDetail.Location);
+        }
+    }
+
+    async Task AddLine()
+    {
+        if (SelectedLayawayNo == null || SelectedDetail == null || LoadedProduct == null)
+            return;
+
+        if (NewIsMajor && string.IsNullOrWhiteSpace(SelectedStockNumber))
+        {
+            AppSnackbar.Show("Select stock number", SnackbarType.Warning);
+            return;
+        }
+
+        var qty = NewIsMajor ? 1 : NewQty;
+
+        var line = new LayawayLineDto
+        {
+            PartNumber = LoadedProduct.PartNumber ?? "",
+            StockNo = NewIsMajor ? (SelectedStockNumber ?? "") : "",
+            Quantity = qty,
+            Cost = LoadedProduct.CostPrice,
+            Sell = LoadedProduct.CostPrice,
+            Vat = 0,
+            Net = LoadedProduct.CostPrice * qty,
+            IsMajor = NewIsMajor
+        };
+
+        var res = await LayawayService.AddLineAsync(SelectedLayawayNo.Value, line);
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        AppSnackbar.Show("Item added", SnackbarType.Success);
+        await EditLayaway(SelectedLayawayNo.Value);
+    }
+
+    void ResetAddSection()
+    {
+        NewPartNumber = null;
+        NewQty = 1;
+        NewIsMajor = false;
+        LoadedProduct = null;
+        AvailableStockNumbers.Clear();
+        SelectedStockNumber = null;
+    }
+
+    async Task AddToDraftCart()
+    {
+        if (string.IsNullOrWhiteSpace(DraftPartNumber))
+        {
+            AppSnackbar.Show("Part number required", SnackbarType.Warning);
+            return;
+        }
+
+        var res = await ProductApi.GetProduct(DraftPartNumber);
+        if (res == null || !res.Success || res.Data == null)
+        {
+            AppSnackbar.Show("Product not found", SnackbarType.Error);
+            return;
+        }
+
+        var product = res.Data;
+        DraftIsMajor = product.Major;
+        DraftUnitPrice = product.CostPrice;
+
+        if (DraftIsMajor)
+        {
+            DraftAvailableStockNumbers = await StockService.GetAvailableStockNumbersAsync(
+                product.PartNumber!, DraftLocation);
+
+            if (!DraftAvailableStockNumbers.Any())
+            {
+                AppSnackbar.Show("No serialized stock available at this location", SnackbarType.Warning);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(DraftSelectedStockNumber))
+            {
+                AppSnackbar.Show("Select stock number then click Add", SnackbarType.Warning);
+                return;
+            }
+
+            var serialExistsInStock = DraftAvailableStockNumbers.Any(x => x.StockNumber == DraftSelectedStockNumber);
+            if (!serialExistsInStock)
+            {
+                AppSnackbar.Show("Selected stock number is not available", SnackbarType.Warning);
+                return;
+            }
+        }
+
+        var qty = DraftIsMajor ? 1 : Math.Max(1, DraftQty);
+
+        var line = new PosCartItemState
+        {
+            PartNumber = product.PartNumber ?? "",
+            Description = product.Details ?? "",
+            Qty = qty,
+            UnitPrice = DraftUnitPrice,
+            OriginalPrice = DraftUnitPrice,
+            DiscountPercent = 0,
+            IsMajor = DraftIsMajor,
+            StockNumber = DraftIsMajor ? DraftSelectedStockNumber : ""
+        };
+
+        if (!line.IsMajor)
+        {
+            var availableAtLocation = await GetAvailableQtyAtLocation(line.PartNumber, DraftLocation);
+            var alreadyInCart = DraftCart
+                .Where(x => !x.IsMajor && x.PartNumber == line.PartNumber)
+                .Sum(x => x.Qty);
+
+            if (alreadyInCart + line.Qty > availableAtLocation)
+            {
+                AppSnackbar.Show(
+                    $"Only {Math.Max(0, availableAtLocation - alreadyInCart)} qty available at location {DraftLocation}",
+                    SnackbarType.Warning);
+                return;
+            }
+
+            var existing = DraftCart.FirstOrDefault(x =>
+                !x.IsMajor &&
+                x.PartNumber == line.PartNumber &&
+                string.IsNullOrWhiteSpace(x.StockNumber));
+
+            if (existing != null)
+            {
+                existing.Qty += line.Qty;
+            }
+            else
+            {
+                DraftCart.Add(line);
+            }
+        }
+        else
+        {
+            var duplicate = DraftCart.Any(x => x.IsMajor && x.StockNumber == line.StockNumber);
+            if (duplicate)
+            {
+                AppSnackbar.Show("This stock number already exists in layaway cart", SnackbarType.Warning);
+                return;
+            }
+            DraftCart.Add(line);
+        }
+
+        SaveDraftState();
+        ClearDraftProductSelection();
+    }
+
+    async Task ChangeDraftQty(PosCartItemState line, ChangeEventArgs e)
+    {
+        if (line.IsMajor)
+        {
+            line.Qty = 1;
+            return;
+        }
+
+        if (!int.TryParse(e.Value?.ToString(), out var newQty))
+            return;
+
+        line.Qty = Math.Max(1, newQty);
+        await UpdateDraftLine(line);
+    }
+
+    void ChangeDraftPrice(PosCartItemState line, ChangeEventArgs e)
+    {
+        if (!decimal.TryParse(e.Value?.ToString(), out var newPrice))
+            return;
+
+        line.UnitPrice = Math.Max(0, newPrice);
+    }
+
+    async Task UpdateDraftLine(PosCartItemState line)
+    {
+        if (!line.IsMajor)
+        {
+            var availableAtLocation = await GetAvailableQtyAtLocation(line.PartNumber, DraftLocation);
+            var otherLinesQty = DraftCart
+                .Where(x => !x.IsMajor && x.PartNumber == line.PartNumber && !ReferenceEquals(x, line))
+                .Sum(x => x.Qty);
+
+            if (line.Qty + otherLinesQty > availableAtLocation)
+            {
+                var maxAllowed = Math.Max(1, availableAtLocation - otherLinesQty);
+                line.Qty = maxAllowed;
+                AppSnackbar.Show(
+                    $"Qty adjusted. Max allowed at location {DraftLocation}: {maxAllowed}",
+                    SnackbarType.Warning);
+            }
+        }
+        else
+        {
+            line.Qty = 1;
+        }
+
+        SaveDraftState();
+    }
+
+    void RemoveDraftLine(PosCartItemState line)
+    {
+        DraftCart.Remove(line);
+        SaveDraftState();
+    }
+
+    void ClearDraftCart()
+    {
+        DraftCart.Clear();
+        SaveDraftState();
+    }
+
+    async Task CreateLayawayFromDraft()
+    {
+        if (!DraftCart.Any())
+        {
+            AppSnackbar.Show("Layaway cart is empty", SnackbarType.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(DraftCustomerAccount) || DraftCustomerAccount == "WALKIN")
+        {
+            ShowCustomerPicker = true;
+            return;
+        }
+
+        var req = new LayawayCreateDto
+        {
+            CustomerAccNo = DraftCustomerAccount,
+            Location = DraftLocation,
+            Terminal = "01",
+            SalesPerson = "AD",
+            Lines = DraftCart.Select(x => new LayawayLineDto
+            {
+                PartNumber = x.PartNumber,
+                StockNo = x.StockNumber ?? "",
+                Quantity = x.Qty,
+                Cost = x.OriginalPrice,
+                Sell = x.UnitPrice,
+                Vat = 0,
+                Net = x.Qty * x.UnitPrice,
+                IsMajor = x.IsMajor
+            }).ToList()
+        };
+
+        var res = await LayawayService.CreateAsync(req);
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        AppSnackbar.Show($"Layaway created: {res.Data}", SnackbarType.Success);
+        DraftCart.Clear();
+        SaveDraftState();
+        await LoadLayaways();
+    }
+
+    void SaveDraftState()
+    {
+        PosWorkflowState.PosLocation = DraftLocation;
+        PosWorkflowState.LayawayCustomerAccount = DraftCustomerAccount;
+        PosWorkflowState.LayawayCustomerName = DraftCustomerName;
+        PosWorkflowState.LayawayDraftCart = DraftCart
+            .Select(x => new PosCartItemState
+            {
+                PartNumber = x.PartNumber,
+                Description = x.Description,
+                Qty = x.Qty,
+                UnitPrice = x.UnitPrice,
+                OriginalPrice = x.OriginalPrice,
+                DiscountPercent = x.DiscountPercent,
+                IsMajor = x.IsMajor,
+                StockNumber = x.StockNumber
+            })
+            .ToList();
+    }
+
+    void ClearDraftProductSelection()
+    {
+        DraftPartNumber = null;
+        DraftQty = 1;
+        DraftIsMajor = false;
+        DraftUnitPrice = 0;
+        DraftAvailableStockNumbers.Clear();
+        DraftSelectedStockNumber = null;
+    }
+
+    void SetDraftWalkIn()
+    {
+        DraftCustomerAccount = "WALKIN";
+        DraftCustomerName = "Walk In";
+        SaveDraftState();
+    }
+
+    void OnCustomerSelected(CustomerDto c)
+    {
+        DraftCustomerAccount = c.AccNo;
+        DraftCustomerName = c.Firstname;
+        ShowCustomerPicker = false;
+        SaveDraftState();
+    }
+
+    void CloseCustomerPicker()
+    {
+        ShowCustomerPicker = false;
+    }
+
+    async Task<int> GetAvailableQtyAtLocation(string partNumber, string locationCode)
+    {
+        var levels = await StockService.GetStockLevelsAsync(partNumber);
+        if (levels == null)
+            return 0;
+
+        var row = levels.FirstOrDefault(x => x.LocationCode == locationCode);
+        return row?.Quantity ?? 0;
+    }
+}
+

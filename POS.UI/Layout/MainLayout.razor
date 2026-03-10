@@ -1,0 +1,38 @@
+@inherits LayoutComponentBase
+@using MudBlazor
+@using POS.UI.Pages
+@using POS.UI.Services
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row auth px-4">
+            @if (AuthService.IsAuthenticated)
+            {
+                <div class="topbar-user">
+                    <span class="text-muted small">Logged in as</span>
+                    <span class="fw-semibold ms-2">@AuthService.CurrentUser?.Username</span>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary ms-3" @onclick="Logout">Logout</button>
+            }
+        </div>
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+    <AppSnackbar />
+
+</div>
+
+@code {
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        Nav.NavigateTo("/login", true);
+    }
+}

@@ -1,0 +1,160 @@
+@page "/user-permissions"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IStaffUserService StaffUserApi
+@inject IAuthService Auth
+@inject NavigationManager Nav
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>User Permissions</PageTitle>
+
+<div class="container-fluid py-3">
+    <div class="card shadow-sm">
+        <div class="card-header fw-bold">User Permissions</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label">Select User</label>
+                    <select class="form-select" @bind="selectedUserId" @bind:after="OnUserChanged">
+                        <option value="0">-- Select User --</option>
+                        @foreach (var user in users)
+                        {
+                            <option value="@user.Id">@user.Username - @user.FullName (@user.StaffCode)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            @if (selectedUser != null)
+            {
+                <hr />
+
+                @foreach (var group in permissionGroups)
+                {
+                    <div class="mb-3">
+                        <div class="fw-semibold mb-2">@group.Key</div>
+
+                        <div class="row g-2">
+
+                            @foreach (var p in group)
+                            {
+                                <div class="col-md-3">
+
+                                    <div class="form-check form-switch">
+
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               role="switch"
+                                               id="perm_@p.Key"
+                                               checked="@selectedKeys.Contains(p.Key)"
+                                               @onchange="e => TogglePermission(p.Key, e)" />
+
+                                        <label class="form-check-label"
+                                               for="perm_@p.Key">
+                                            @p.Label
+                                        </label>
+
+                                    </div>
+
+                                </div>
+                            }
+
+                        </div>
+                    </div>
+                }
+                <div class="mt-3">
+                    <button class="btn btn-success" @onclick="SavePermissions">Save Permissions</button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<StaffUserDto> users = new();
+    private StaffUserDto? selectedUser;
+    private int selectedUserId;
+    private HashSet<string> selectedKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IEnumerable<IGrouping<string, PermissionDefinition>> permissionGroups =
+        PermissionCatalog.All.GroupBy(x => x.Group);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        if (Auth.CurrentUser?.IsAdmin != true)
+        {
+            Nav.NavigateTo("/", true);
+            return;
+        }
+
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        var res = await StaffUserApi.GetAllAsync();
+        if (!res.Success || res.Data == null)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        users = res.Data;
+    }
+
+    private async Task OnUserChanged()
+    {
+        selectedUser = users.FirstOrDefault(x => x.Id == selectedUserId);
+        selectedKeys.Clear();
+
+        if (selectedUser == null)
+            return;
+
+        var res = await StaffUserApi.GetPermissionKeysAsync(selectedUser.Id);
+        if (res.Success && res.Data != null)
+        {
+            selectedKeys = res.Data.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            var fallback = PermissionCatalog.ToKeys(selectedUser.Permissions ?? new StaffUserPermissionDto());
+            selectedKeys = fallback.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private void TogglePermission(string key, ChangeEventArgs e)
+    {
+        var isChecked = e.Value is bool b && b;
+        if (isChecked)
+            selectedKeys.Add(key);
+        else
+            selectedKeys.Remove(key);
+    }
+
+    private async Task SavePermissions()
+    {
+        if (selectedUser == null)
+            return;
+
+        var res = await StaffUserApi.SavePermissionKeysAsync(new UpdateStaffUserPermissionKeysDto
+        {
+            UserId = selectedUser.Id,
+            PermissionKeys = selectedKeys.ToList()
+        });
+
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        selectedUser.PermissionKeys = res.Data ?? selectedKeys.ToList();
+        selectedUser.Permissions = PermissionCatalog.ToLegacyDto(selectedUser.PermissionKeys);
+        AppSnackbar.Show("Permissions updated successfully", SnackbarType.Success);
+    }
+}

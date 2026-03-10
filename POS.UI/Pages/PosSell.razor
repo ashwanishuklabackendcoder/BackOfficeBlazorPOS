@@ -1,0 +1,1328 @@
+﻿@page "/pos-sell"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using Microsoft.AspNetCore.Components.Web
+@using POS.UI.State
+@inject IJSRuntime JS
+@inject IProductApiService ProductApi
+@inject IStockService StockService
+@inject ILayawayService LayawayService
+@inject AppSnackbarService AppSnackbar
+@inject NavigationManager Nav
+@inject IAuthService AuthService
+@inject ISysOptionsService SysOptionsService
+@inject IQuickShortcutService QuickShortcutService
+
+
+<PageTitle>POS Sell</PageTitle>
+<style>
+    .pos-right-panel {
+        height: 85vh;
+    }
+
+    .pos-cart-container {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .pos-cart-scroll {
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .pos-customer-fixed {
+        flex-shrink: 0;
+    }
+
+    .pos-total-fixed {
+        flex-shrink: 0;
+    }
+
+    .pos-shortcut-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 10px;
+    }
+
+    .pos-shortcut-btn {
+        height: 110px;
+        border: 2px solid #0d6efd;
+        border-radius: 10px;
+        background: #f8f9fa;
+        font-size: 14px;
+        text-align: center;
+        touch-action: manipulation;
+    }
+
+        .pos-shortcut-btn:active {
+            background: #0d6efd;
+            color: white;
+        }
+
+    .pin-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+    }
+
+    .pin-card {
+        width: 100%;
+        max-width: 380px;
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+
+    .pos-locked {
+        pointer-events: none;
+        opacity: 0.6;
+    }
+
+</style>
+<div class="@(IsLocked ? "pos-locked" : "")">
+<div class="row g-2">
+
+    <!-- ================= LEFT : PRODUCT ENTRY ================= -->
+    <div class="col-md-6">
+
+        <div class="card shadow-sm mb-2">
+            <div class="card-header fw-bold">Enter Product</div>
+            <div class="card-body">
+
+                <div class="col-md-4">
+                    <label class="form-label">Part No / Barcode / MPN</label>
+                        <input id="partNumber"
+                               class="form-control"
+                               autocomplete="new-password"
+                               autocorrect="off"
+                               autocapitalize="off"
+                               spellcheck="false"
+                               data-lpignore="true"
+                               name="pos_part_number"
+                               @bind="ProductCode"
+                               @onkeydown="OnProductKeyDown"
+                               placeholder="Scan or type and press Enter" />
+                </div>
+                @if (PendingMajorLine != null)
+
+                {
+                    <div class="row mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label small">Stock Number</label>
+
+                            <select class="form-select"
+                                    @bind="SelectedStockNumber"
+                                    @bind:after="OnStockNumberSelected">
+
+                                <option value="">-- Select Stock Number --</option>
+
+                                @foreach (var sn in AvailableStockNumbers)
+                                {
+                                    <option value="@sn.StockNumber">
+                                        @sn.StockNumber
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <hr />
+                }
+
+               @*  <div class="small text-muted">
+                    Current Location: <b>@CurrentLocation</b>
+                </div> *@
+
+            </div>
+        </div>
+        <div class="card shadow-sm mb-2">
+            <div class="card-header fw-bold">
+                Quick Items
+            </div>
+            <div class="card-body">
+                @if (!ShortcutProducts.Any())
+                {
+                    <div class="text-muted small">No quick items configured for this location.</div>
+                }
+                else
+                {
+                    <div class="pos-shortcut-grid">
+                        @foreach (var s in ShortcutProducts)
+                        {
+                            <PosShortcutButton PartNumber="@s.PartNumber"
+                                               Title="@s.Title"
+                                               SubTitle="@GetShortcutSubtitle(s)"
+                                               BackgroundColor="@s.ColorHex"
+                                               ForegroundColor="@s.ForeColorHex"
+                                               OnClick="OnShortcutClick" />
+                        }
+                    </div>
+                }
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ================= RIGHT : CART + EDIT ================= -->
+    <div class="col-md-6 d-flex flex-column pos-right-panel">
+
+
+        <!-- CART GRID -->
+        <!-- CART GRID -->
+        <div class="card shadow-sm mb-2 pos-cart-container">
+
+            <div class="card-header fw-bold">
+                Cart
+            </div>
+
+            <div class="card-body p-0 pos-cart-scroll">
+
+                <table class="table table-sm table-bordered mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Product</th>
+                            <th>Stock Number</th>
+                            <th style="width:90px">Qty</th>
+                            <th style="width:120px">Each</th>
+                            <th style="width:120px">Disc</th>
+                            <th style="width:120px">Total</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @if (!Cart.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center text-muted p-3">
+                                    No items
+                                </td>
+                            </tr>
+                        }
+
+                        @foreach (var line in Cart)
+                        {
+                            <tr class="@(SelectedLine == line ? "table-primary" : "")"
+                                style="cursor:pointer"
+                                @onclick="() => SelectLine(line)">
+
+                                    <td>
+                                        <b>@line.PartNumber</b>
+
+                                        @if (line.IsPromo)
+                                        {
+                                            <span class="badge bg-danger ms-1">PROMO</span>
+                                        }
+
+                                        <br />
+
+                                        <small>@line.Description</small>
+
+                                        @if (line.IsPromo && !string.IsNullOrWhiteSpace(line.PromoName))
+                                        {
+                                            <div class="text-danger small">
+                                                @line.PromoName
+                                            </div>
+                                        }
+                                    </td>
+
+                                <td>@line.StockNumber</td>
+
+                                <td class="text-center fw-bold">
+                                    @line.Qty
+                                </td>
+
+                                <td class="text-end">
+                                    @line.UnitPrice.ToString("0.00")
+                                </td>
+
+                                <td class="text-end">
+                                    @line.DiscountAmount.ToString("0.00")
+                                    <div class="small text-muted">
+                                        @line.DiscountPercent.ToString("0.##")%
+                                    </div>
+                                </td>
+
+                                <td class="text-end fw-bold">
+                                    @line.LineTotal.ToString("0.00")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+            </div>
+        </div>
+
+
+        <!-- EXPANDED EDIT PANEL -->
+        @if (SelectedLine != null)
+        {
+            <div class="card shadow-sm mb-2">
+                <div class="card-header fw-bold">
+                    Edit Line — @SelectedLine.PartNumber
+                </div>
+                <div class="card-body">
+
+                    <div class="row g-2 align-items-center">
+
+                        <!-- CHANGE PRICE -->
+                        <div class="col-md-3">
+                            <label class="form-label small">Change Price</label>
+                            <input type="number"
+                                   class="form-control"
+                                   step="0.01"
+                                   @bind-value="EditPrice"
+                                   @bind-value:event="oninput" />
+                        </div>
+                        <div class="col-md-1 pt-4">
+                            <button class="btn btn-sm btn-primary w-100"
+                                    @onclick="ApplyPrice">
+                                OK
+                            </button>
+                        </div>
+
+                        <!-- DISCOUNT -->
+                        <div class="col-md-3">
+                            <label class="form-label small">Discount Mode</label>
+                            <InputRadioGroup @bind-Value="EditDiscountMode" class="d-flex gap-2">
+                                <label class="form-check form-check-inline">
+                                    <InputRadio class="form-check-input"
+                                                Value="DiscountMode.Percent"
+                                                disabled="@(SelectedLine?.AllowDiscount != true)" />
+                                    <span class="form-check-label">Percent</span>
+                                </label>
+                                <label class="form-check form-check-inline">
+                                    <InputRadio class="form-check-input"
+                                                Value="DiscountMode.Amount"
+                                                disabled="@(SelectedLine?.AllowDiscount != true)" />
+                                    <span class="form-check-label">Amount</span>
+                                </label>
+                            </InputRadioGroup>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label small">Discount %</label>
+                            <input type="number"
+                                   class="form-control"
+                                   step="0.01"
+                                   @bind-value="EditDiscountPercent"
+                                   @bind-value:event="oninput"
+                                   disabled="@(SelectedLine?.AllowDiscount != true || EditDiscountMode != DiscountMode.Percent)" />
+                        </div>
+                        <div class="col-md-1 pt-4">
+                            <button class="btn btn-sm btn-primary w-100"
+                                    @onclick="ApplyDiscount"
+                                    disabled="@(SelectedLine?.AllowDiscount != true || EditDiscountMode != DiscountMode.Percent)">
+                                OK
+                            </button>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label small">Discount Amount</label>
+                            <input type="number"
+                                   class="form-control"
+                                   step="0.01"
+                                   @bind-value="EditDiscountAmount"
+                                   @bind-value:event="oninput"
+                                   disabled="@(SelectedLine?.AllowDiscount != true || EditDiscountMode != DiscountMode.Amount)" />
+                        </div>
+                        <div class="col-md-1 pt-4">
+                            <button class="btn btn-sm btn-primary w-100"
+                                    @onclick="ApplyDiscount"
+                                    disabled="@(SelectedLine?.AllowDiscount != true || EditDiscountMode != DiscountMode.Amount)">
+                                OK
+                            </button>
+                        </div>
+
+                        <!-- CHANGE DESCRIPTION -->
+                        <div class="col-md-3">
+                            <label class="form-label small">Description</label>
+                            <input class="form-control"
+                                   @bind-value="EditDescription"
+                                   @bind-value:event="oninput" />
+                        </div>
+                        <div class="col-md-1 pt-4">
+                            <button class="btn btn-sm btn-primary w-100"
+                                    @onclick="ApplyDescription">
+                                OK
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <!-- QUANTITY CONTROLS -->
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-danger btn-lg"
+                                disabled="@(SelectedLine?.IsMajor == true)"
+                                @onclick="DecreaseQty">
+
+                            −
+                        </button>
+
+                        <div class="fs-3 fw-bold">
+                            @(SelectedLine?.Qty)
+                        </div>
+
+                        <button class="btn btn-success btn-lg"
+                                disabled="@(SelectedLine?.IsMajor == true)"
+                                @onclick="IncreaseQty">
+                            +
+                        </button>
+
+                        <button class="btn btn-outline-danger ms-auto"
+                                @onclick="RemoveSelected">
+                            Remove Item
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        }
+    
+        
+        <div class="card shadow-sm mb-2 pos-customer-fixed">
+
+            <div class="card-body d-flex justify-content-between align-items-center">
+
+                <div>
+                    Customer:
+                    <b>@SelectedCustomerName (@SelectedCustomerAccount)</b>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-lg"
+                            @onclick="() => SetWalkInCustomer()">
+                        No (Walk-in)
+                    </button>
+
+                    <button class="btn btn-primary btn-lg"
+                            @onclick="() => ShowCustomerPicker = true">
+                        Yes (Select Customer)
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TOTALS -->
+        <div class="card shadow-sm pos-total-fixed">
+
+            <div class="card-body">
+
+                <div class="row">
+                    <div class="col-md-6 small">
+                        Items: <b>@TotalItems</b>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <div>Total: <b>@GrossTotal.ToString("0.00")</b></div>
+                        <div>Discount: <b>@TotalDiscount.ToString("0.00")</b></div>
+                        <div>VAT: <b>0.00</b></div>
+                        <div class="fs-5">
+                            Due: <b>@SubTotal.ToString("0.00")</b>
+                        </div>
+                    </div>
+                </div>
+
+                <hr />
+
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-danger" @onclick="CancelAll">
+                        Cancel All
+                    </button>
+
+                    <button class="btn btn-secondary" @onclick="Quote">
+                        Quote
+                    </button>
+                    @if (AuthService.HasAccess(PermissionKeys.Layaway))
+                    {
+                        <button class="btn btn-outline-primary" @onclick="OpenLayawayWorkspace">
+                            Layaway
+                        </button>
+                    }
+
+                    <button class="btn btn-success" @onclick="Pay">
+                        Pay
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+</div>
+@if (ShowCustomerPicker)
+{
+    <PosCustomerPicker OnSelected="OnCustomerSelected"
+                       OnCancel="CloseCustomerPicker" />
+}
+@if (showPinModal)
+{
+    <div class="pin-overlay">
+        <div class="pin-card">
+            <div class="fw-bold mb-2">Enter PIN</div>
+            <div class="text-muted small mb-3">PIN is required before adding items.</div>
+            <input class="form-control mb-2"
+                   type="password"
+                   @bind="pinInput"
+                   @bind:event="oninput"
+                   autocomplete="new-password"
+                   inputmode="numeric"
+                   data-lpignore="true"
+                   name="pos_pin_input"
+                   @onkeydown="OnPinKeyDown" />
+            @if (!string.IsNullOrWhiteSpace(pinError))
+            {
+                <div class="text-danger small mb-2">@pinError</div>
+            }
+            <div class="d-flex gap-2 justify-content-end">
+                <button class="btn btn-secondary" @onclick="CancelPin">Cancel</button>
+                <button class="btn btn-primary" @onclick="SubmitPin">Unlock</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    string CurrentLocation = "01";
+
+    string? ProductCode;
+
+    List<PosCartLine> Cart = new();
+    PosCartLine? SelectedLine;
+    PosCartLine? PendingMajorLine;
+    DotNetObjectReference<PosSell>? dotNetRef;
+    decimal EditPrice;
+    decimal EditDiscountPercent;
+    decimal EditDiscountAmount;
+    DiscountMode EditDiscountMode = DiscountMode.Percent;
+    string EditDescription = "";
+    bool ShowCustomerPicker = false;
+    bool NavigateToLayawayAfterCustomerPick;
+
+    string SelectedCustomerAccount = "WALKIN";
+    string SelectedCustomerName = "Walk In";
+
+    int TotalItems => Cart.Sum(x => x.Qty);
+    decimal GrossTotal => Cart.Sum(x => x.GrossLineTotal);
+    decimal TotalDiscount => Cart.Sum(x => x.LineDiscountTotal);
+    decimal SubTotal => Cart.Sum(x => x.LineTotal);
+    bool IsMajorProduct;
+    List<StockNumberDto> AvailableStockNumbers = new();
+    string? SelectedStockNumber;
+    private const string TillPinVerifiedUntilKey = "pos_till_pin_verified_until";
+    private static readonly TimeSpan TillPinLifetime = TimeSpan.FromMinutes(1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadUiState();
+        ImportPendingLayawayToCart();
+        await LoadQuickItemsAsync();
+        await RestoreTillPinStateAsync();
+        await LoadSysOptionsAsync();
+    }
+
+    async Task OnProductKeyDown(KeyboardEventArgs e)
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        if (e.Key == "Enter")
+        {
+            await Task.Yield();
+            await LoadAndAddProduct();
+        }
+       
+    }
+    void OnStockNumberSelected()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedStockNumber) || PendingMajorLine == null)
+            return;
+
+        // Prevent duplicate serial in cart
+        var exists = Cart.Any(x =>
+            x.IsMajor &&
+            x.StockNumber == SelectedStockNumber);
+
+        if (exists)
+        {
+            AppSnackbar.Show("This Stock Number is already in cart", SnackbarType.Warning);
+            SelectedStockNumber = null;
+            return;
+        }
+
+        PendingMajorLine.StockNumber = SelectedStockNumber;
+
+        // Add finalized major line to cart
+        Cart.Add(PendingMajorLine);
+
+        AppSnackbar.Show($"Serial {SelectedStockNumber} added", SnackbarType.Success);
+
+        // Reset entry state
+        ProductCode = null;
+        PendingMajorLine = null;
+        AvailableStockNumbers.Clear();
+        SelectedStockNumber = null;
+        SaveUiState();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+
+        await JS.InvokeVoidAsync("enableProductShortcuts", dotNetRef);
+        await JS.InvokeVoidAsync("enableEnterNavigation");
+
+        if (!IsLocked)
+        {
+            await JS.InvokeVoidAsync(
+                "eval",
+                "document.getElementById('partNumber')?.focus()"
+            );
+        }
+    }
+
+    async Task LoadAndAddProduct()
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        if (string.IsNullOrWhiteSpace(ProductCode))
+            return;
+
+        var res = await ProductApi.GetProduct(ProductCode);
+
+        if (res?.Success != true || res.Data == null)
+        {
+            await AppSnackbar.Show("Product not found", SnackbarType.Error);
+            return;
+        }
+
+        var product = res.Data;
+        IsMajorProduct = product.Major;
+
+        // 🔹 Determine correct price (Promo or Cost)
+        var effectivePrice = product.IsUsingPromoPrice()  ? product.PromoPrice : product.CostPrice ;
+
+        // ================= MAJOR PRODUCT =================
+        if (IsMajorProduct)
+        {
+            AvailableStockNumbers =
+                await StockService.GetAvailableStockNumbersAsync(
+                    product.PartNumber, CurrentLocation);
+
+            if (!AvailableStockNumbers.Any())
+            {
+                await AppSnackbar.Show("No serialized stock available", SnackbarType.Warning);
+                return;
+            }
+
+            PendingMajorLine = new PosCartLine
+            {
+                PartNumber = product.PartNumber,
+                Description = product.Details,
+                Qty = 1,
+                UnitPrice = effectivePrice,
+                OriginalPrice = effectivePrice,
+                IsMajor = true,
+
+                IsPromo = product.IsUsingPromoPrice(),
+                PromoName = product.PromoName
+            };
+
+            ApplyProductDiscount(product, PendingMajorLine);
+            return;
+        }
+
+        // ================= MINOR PRODUCT =================
+        var available =
+            await GetAvailableStockForCurrentLocationAsync(product.PartNumber);
+
+        if (available <= 0)
+        {
+            await AppSnackbar.Show("Out of stock", SnackbarType.Warning);
+            return;
+        }
+
+        var existing = Cart.FirstOrDefault(x => x.PartNumber == product.PartNumber);
+
+        if (existing != null)
+        {
+            var maxAvailableQty = available < 0 ? 0 : available;
+            if (existing.Qty >= maxAvailableQty)
+            {
+                existing.Qty = maxAvailableQty;
+                await AppSnackbar.Show($"Only {maxAvailableQty} item(s) available in stock", SnackbarType.Warning);
+                SaveUiState();
+                return;
+            }
+
+            existing.Qty++;
+        }
+        else
+        {
+            var line = new PosCartLine
+            {
+                PartNumber = product.PartNumber,
+                Description = product.Details,
+                Qty = 1,
+                UnitPrice = effectivePrice,
+                OriginalPrice = effectivePrice,
+                IsMajor = false,
+
+                IsPromo = product.IsUsingPromoPrice(),
+                PromoName = product.PromoName
+            };
+
+
+
+
+
+
+
+            ApplyProductDiscount(product, line);
+            Cart.Add(line);
+        }
+
+        ProductCode = null;
+        SaveUiState();
+    }
+    
+    void SelectLine(PosCartLine line)
+    {
+        // If clicking same line again → collapse
+        if (SelectedLine == line)
+        {
+            SelectedLine = null;
+            return;
+        }
+
+        // Otherwise expand new line
+        SelectedLine = line;
+        EditPrice = line.UnitPrice;
+        EditDiscountPercent = line.DiscountPercent;
+        EditDiscountAmount = line.DiscountAmount;
+        EditDiscountMode = line.DiscountMode;
+        EditDescription = line.Description;
+    }
+
+
+    void ApplyPrice()
+    {
+        if (SelectedLine == null) return;
+        SelectedLine.UnitPrice = EditPrice;
+        SyncDiscountForLine(SelectedLine);
+        SaveUiState();
+    }
+
+    void ApplyDiscount()
+    {
+        if (SelectedLine == null) return;
+        SelectedLine.DiscountMode = EditDiscountMode;
+        if (!SelectedLine.AllowDiscount)
+        {
+            SelectedLine.DiscountPercent = 0;
+            SelectedLine.DiscountAmount = 0;
+        }
+        else if (EditDiscountMode == DiscountMode.Percent)
+        {
+            SetDiscountFromPercent(SelectedLine, EditDiscountPercent);
+        }
+        else
+        {
+            SetDiscountFromAmount(SelectedLine, EditDiscountAmount);
+        }
+        EditDiscountPercent = SelectedLine.DiscountPercent;
+        EditDiscountAmount = SelectedLine.DiscountAmount;
+        SaveUiState();
+    }
+
+    void ApplyDescription()
+    {
+        if (SelectedLine == null) return;
+        SelectedLine.Description = EditDescription;
+        SaveUiState();
+    }
+
+    async Task IncreaseQty()
+    {
+        if (SelectedLine == null || SelectedLine.IsMajor) return;
+
+        var available = await GetAvailableStockForCurrentLocationAsync(SelectedLine.PartNumber);
+        var maxAvailableQty = available < 0 ? 0 : available;
+
+        if (SelectedLine.Qty >= maxAvailableQty)
+        {
+            SelectedLine.Qty = maxAvailableQty;
+            await AppSnackbar.Show($"Only {maxAvailableQty} item(s) available in stock", SnackbarType.Warning);
+            SaveUiState();
+            return;
+        }
+
+        SelectedLine.Qty++;
+        SaveUiState();
+    }
+
+    void DecreaseQty()
+    {
+        if (SelectedLine == null || SelectedLine.IsMajor) return;
+
+        if (SelectedLine.Qty > 1)
+            SelectedLine.Qty--;
+        SaveUiState();
+    }
+
+
+    void RemoveSelected()
+    {
+        if (SelectedLine == null) return;
+        Cart.Remove(SelectedLine);
+        SelectedLine = null;
+        SaveUiState();
+    }
+
+    void CancelAll()
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        Cart.Clear();
+        SelectedLine = null;
+        AppSnackbar.Show("Cart cleared", SnackbarType.Info);
+        SaveUiState();
+    }
+
+    void Quote()
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        AppSnackbar.Show("Quote flow coming in Phase 2", SnackbarType.Info);
+    }
+
+    void Pay()
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        if (!Cart.Any())
+        {
+            AppSnackbar.Show("Cart is empty", SnackbarType.Warning);
+            return;
+        }
+
+        var sale = new PosSaleRequestDto
+        {
+            Location = CurrentLocation,
+            Terminal = "01",
+            SalesPerson = "AD",
+            Customer = SelectedCustomerAccount,
+
+            SubTotal = SubTotal,
+            VatAmount = 0,
+            NetTotal = SubTotal,
+
+            Lines = Cart.Select(x => new PosSaleLineDto
+            {
+                PartNumber = x.PartNumber,
+                StockNo = x.StockNumber ?? "",
+                Quantity = x.Qty,
+                Cost = x.OriginalPrice,
+                Sell = x.UnitPrice,
+                DiscountPercent = x.DiscountPercent,
+                DiscountAmount = x.DiscountAmount,
+                Vat = 0,
+                Net = x.LineTotal,
+                IsMajor = x.IsMajor
+            }).ToList()
+        };
+
+        POS.UI.State.PosPaymentState.CurrentSale = sale;
+        POS.UI.State.PosPaymentState.CurrentLayawayNo = null;
+
+        Nav.NavigateTo("/pos-payment");
+    }
+
+    void OpenLayawayWorkspace()
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        if (!AuthService.HasAccess(PermissionKeys.Layaway))
+        {
+            AppSnackbar.Show("You do not have permission to access Layaway", SnackbarType.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedCustomerAccount) ||
+            SelectedCustomerAccount == "WALKIN")
+        {
+            NavigateToLayawayAfterCustomerPick = true;
+            ShowCustomerPicker = true;
+            return;
+        }
+
+        NavigateToLayawayWorkspace();
+    }
+
+
+    void NavToPayment(PosSaleRequestDto sale)
+    {
+        // store in temp static state or scoped service if needed
+        PosPaymentState.CurrentSale = sale;
+        Nav.NavigateTo("/pos-payment");
+    }
+
+    void ApplyProductDiscount(ProductDto product, PosCartLine line)
+    {
+        line.AllowDiscount = product.AllowDiscount ?? true;
+        line.DiscountPercent = 0;
+        line.DiscountAmount = 0;
+        line.DiscountMode = DiscountMode.Percent;
+
+        if (!line.AllowDiscount)
+            return;
+
+        var percent = product.DiscountPercentage ?? 0m;
+        var amount = product.Discount ?? 0m;
+
+        if (percent > 0)
+        {
+            line.DiscountMode = DiscountMode.Percent;
+            SetDiscountFromPercent(line, percent);
+            return;
+        }
+
+        if (amount > 0)
+        {
+            line.DiscountMode = DiscountMode.Amount;
+            SetDiscountFromAmount(line, amount);
+        }
+    }
+
+    void SyncDiscountForLine(PosCartLine line)
+    {
+        if (!line.AllowDiscount)
+        {
+            line.DiscountPercent = 0;
+            line.DiscountAmount = 0;
+            return;
+        }
+
+        if (line.DiscountMode == DiscountMode.Percent)
+            SetDiscountFromPercent(line, line.DiscountPercent);
+        else
+            SetDiscountFromAmount(line, line.DiscountAmount);
+    }
+
+    void SetDiscountFromPercent(PosCartLine line, decimal percent)
+    {
+        percent = Clamp(percent, 0, 100);
+        line.DiscountPercent = percent;
+        line.DiscountAmount = line.UnitPrice * percent / 100m;
+    }
+
+    void SetDiscountFromAmount(PosCartLine line, decimal amount)
+    {
+        amount = Clamp(amount, 0, line.UnitPrice);
+        line.DiscountAmount = amount;
+        line.DiscountPercent = line.UnitPrice == 0 ? 0 : (amount / line.UnitPrice) * 100m;
+    }
+
+    static decimal Clamp(decimal value, decimal min, decimal max)
+        => value < min ? min : (value > max ? max : value);
+
+    List<QuickShortcutItemDto> ShortcutProducts = new();
+
+    private async Task LoadQuickItemsAsync()
+    {
+        var res = await QuickShortcutService.GetForPosAsync(CurrentLocation);
+        if (res.Success)
+        {
+            ShortcutProducts = (res.Data ?? new List<QuickShortcutItemDto>())
+                .OrderBy(x => x.DisplayOrder)
+                .ThenBy(x => x.PartNumber)
+                .ToList();
+        }
+        else
+        {
+            ShortcutProducts.Clear();
+            await AppSnackbar.Show(res.Message ?? "Unable to load quick items", SnackbarType.Warning);
+        }
+    }
+
+    private static string? GetShortcutSubtitle(QuickShortcutItemDto item)
+    {
+        var baseText = string.IsNullOrWhiteSpace(item.SubTitle) ? string.Empty : item.SubTitle.Trim();
+
+        if (item.ShowAvailableStock)
+        {
+            var stockText = $"Stock: {item.CurrentLocationStock ?? 0}";
+            return string.IsNullOrWhiteSpace(baseText) ? stockText : $"{baseText} | {stockText}";
+        }
+
+        return string.IsNullOrWhiteSpace(baseText) ? null : baseText;
+    }
+
+    async Task OnShortcutClick(string partNumber)
+    {
+        if (EnsureUnlocked() == false)
+            return;
+
+        ProductCode = partNumber;
+        await LoadAndAddProduct();
+    }
+
+    private async Task<int> GetAvailableStockForCurrentLocationAsync(string partNumber)
+    {
+        var levels = await StockService.GetStockLevelsAsync(partNumber);
+        var currentLocationStock = levels
+            .FirstOrDefault(x => string.Equals(x.LocationCode, CurrentLocation, StringComparison.OrdinalIgnoreCase))
+            ?.Quantity ?? 0;
+
+        return currentLocationStock < 0 ? 0 : currentLocationStock;
+    }
+
+    class PosCartLine
+    {
+        public string PartNumber { get; set; } = "";
+        public string Description { get; set; } = "";
+
+        public int Qty { get; set; }
+
+        public decimal UnitPrice { get; set; }
+        public decimal OriginalPrice { get; set; }
+
+        public decimal DiscountPercent { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public bool AllowDiscount { get; set; } = true;
+        public DiscountMode DiscountMode { get; set; } = DiscountMode.Percent;
+
+        // NEW
+        public bool IsMajor { get; set; }
+        public string? StockNumber { get; set; }
+        public bool IsPromo { get; set; }          // ⭐ NEW
+        public string? PromoName { get; set; }     // ⭐ OPTIONAL
+
+        public decimal GrossLineTotal => Qty * UnitPrice;
+
+        public decimal LineDiscountTotal => Qty * DiscountAmount;
+
+        public decimal LineTotal
+        {
+            get
+            {
+                var netUnit = UnitPrice - DiscountAmount;
+                if (netUnit < 0) netUnit = 0;
+                return Qty * netUnit;
+            }
+        }
+    }
+    void SetWalkInCustomer()
+    {
+        SelectedCustomerAccount = "WALKIN";
+        SelectedCustomerName = "Walk In";
+        ShowCustomerPicker = false;
+        NavigateToLayawayAfterCustomerPick = false;
+        SaveUiState();
+    }
+
+    void CloseCustomerPicker()
+    {
+        ShowCustomerPicker = false;
+        NavigateToLayawayAfterCustomerPick = false;
+    }
+
+    void OnCustomerSelected(CustomerDto c)
+    {
+        SelectedCustomerAccount = c.AccNo;
+        SelectedCustomerName = c.Firstname;
+        ShowCustomerPicker = false;
+        SaveUiState();
+
+        AppSnackbar.Show($"Customer set: {c.Firstname}", SnackbarType.Success);
+
+        if (NavigateToLayawayAfterCustomerPick)
+        {
+            NavigateToLayawayAfterCustomerPick = false;
+            NavigateToLayawayWorkspace();
+        }
+    }
+
+    void NavigateToLayawayWorkspace()
+    {
+        PosWorkflowState.LayawayCustomerAccount = SelectedCustomerAccount;
+        PosWorkflowState.LayawayCustomerName = SelectedCustomerName;
+        SaveUiState();
+        Nav.NavigateTo("/pos-layaway");
+    }
+
+    void LoadUiState()
+    {
+        CurrentLocation = PosWorkflowState.PosLocation;
+        SelectedCustomerAccount = PosWorkflowState.PosCustomerAccount;
+        SelectedCustomerName = PosWorkflowState.PosCustomerName;
+
+        Cart = PosWorkflowState.PosCart
+            .Select(x => new PosCartLine
+            {
+                PartNumber = x.PartNumber,
+                Description = x.Description,
+                Qty = x.Qty,
+                UnitPrice = x.UnitPrice,
+                OriginalPrice = x.OriginalPrice,
+                DiscountPercent = x.DiscountPercent,
+                DiscountAmount = x.DiscountAmount,
+                AllowDiscount = x.AllowDiscount,
+                DiscountMode = x.DiscountMode,
+                IsMajor = x.IsMajor,
+                StockNumber = x.StockNumber
+            })
+            .ToList();
+
+        foreach (var line in Cart)
+            SyncDiscountForLine(line);
+    }
+
+    void SaveUiState()
+    {
+        PosWorkflowState.PosLocation = CurrentLocation;
+        PosWorkflowState.PosCustomerAccount = SelectedCustomerAccount;
+        PosWorkflowState.PosCustomerName = SelectedCustomerName;
+        PosWorkflowState.PosCart = Cart
+            .Select(x => new PosCartItemState
+            {
+                PartNumber = x.PartNumber,
+                Description = x.Description,
+                Qty = x.Qty,
+                UnitPrice = x.UnitPrice,
+                OriginalPrice = x.OriginalPrice,
+                DiscountPercent = x.DiscountPercent,
+                DiscountAmount = x.DiscountAmount,
+                AllowDiscount = x.AllowDiscount,
+                DiscountMode = x.DiscountMode,
+                IsMajor = x.IsMajor,
+                StockNumber = x.StockNumber
+            })
+            .ToList();
+    }
+
+    void ImportPendingLayawayToCart()
+    {
+        var pending = PosWorkflowState.PendingLayawayToSell;
+        if (pending == null)
+            return;
+
+        foreach (var line in pending.Lines)
+        {
+            AddOrMergeImportedLine(line);
+        }
+
+        CurrentLocation = string.IsNullOrWhiteSpace(pending.Location)
+            ? CurrentLocation
+            : pending.Location;
+
+        SelectedCustomerAccount = string.IsNullOrWhiteSpace(pending.CustomerAccNo)
+            ? SelectedCustomerAccount
+            : pending.CustomerAccNo;
+
+        if (!string.IsNullOrWhiteSpace(pending.CustomerName))
+            SelectedCustomerName = pending.CustomerName;
+
+        PosWorkflowState.PendingLayawayToSell = null;
+        PosPaymentState.CurrentLayawayNo = null;
+        SaveUiState();
+        AppSnackbar.Show(
+            $"Layaway {pending.LayawayNo} items moved to POS cart",
+            SnackbarType.Success);
+    }
+
+    void AddOrMergeImportedLine(LayawayLineDto line)
+    {
+        if (line.IsMajor)
+        {
+            Cart.Add(new PosCartLine
+            {
+                PartNumber = line.PartNumber,
+                Description = "",
+                Qty = 1,
+                UnitPrice = line.Sell,
+                OriginalPrice = line.Cost,
+                DiscountPercent = 0,
+                DiscountAmount = 0,
+                AllowDiscount = true,
+                DiscountMode = DiscountMode.Percent,
+                IsMajor = true,
+                StockNumber = line.StockNo
+            });
+            return;
+        }
+
+        var existing = Cart.FirstOrDefault(x =>
+            !x.IsMajor &&
+            x.PartNumber == line.PartNumber &&
+            string.IsNullOrWhiteSpace(x.StockNumber));
+
+        if (existing == null)
+        {
+            Cart.Add(new PosCartLine
+            {
+                PartNumber = line.PartNumber,
+                Description = "",
+                Qty = line.Quantity,
+                UnitPrice = line.Sell,
+                OriginalPrice = line.Cost,
+                DiscountPercent = 0,
+                DiscountAmount = 0,
+                AllowDiscount = true,
+                DiscountMode = DiscountMode.Percent,
+                IsMajor = false,
+                StockNumber = ""
+            });
+        }
+        else
+        {
+            existing.Qty += line.Quantity;
+            existing.UnitPrice = line.Sell;
+            existing.OriginalPrice = line.Cost;
+        }
+    }
+
+    private SysOptionsDto? _sysOptions;
+    private DateTimeOffset? _tillPinVerifiedUntilUtc;
+    private bool showPinModal;
+    private string pinInput = string.Empty;
+    private string? pinError;
+    private bool IsLocked => _sysOptions?.EnterPinOnTill == true && !HasValidTillPin();
+
+    private async Task LoadSysOptionsAsync()
+    {
+        var res = await SysOptionsService.GetAsync();
+        if (res.Success && res.Data != null)
+        {
+            _sysOptions = res.Data;
+            if (_sysOptions.EnterPinOnTill == true && !HasValidTillPin())
+            {
+                showPinModal = true;
+            }
+            else
+            {
+                showPinModal = false;
+            }
+        }
+        else
+        {
+            _sysOptions = null;
+        }
+    }
+
+    private async Task SubmitPin()
+    {
+        var expected = _sysOptions?.Password1 ?? string.Empty;
+        if (string.Equals(pinInput.Trim(), expected.Trim(), StringComparison.Ordinal))
+        {
+            _tillPinVerifiedUntilUtc = DateTimeOffset.UtcNow.Add(TillPinLifetime);
+            showPinModal = false;
+            pinError = null;
+            pinInput = string.Empty;
+            await PersistTillPinStateAsync();
+            await InvokeAsync(StateHasChanged);
+            await FocusPartNumberAsync();
+        }
+        else
+        {
+            pinError = "Invalid PIN";
+            pinInput = string.Empty;
+            await Task.Yield();
+        }
+    }
+
+    private void CancelPin()
+    {
+        showPinModal = false;
+        pinError = null;
+        pinInput = string.Empty;
+        Nav.NavigateTo("/");
+    }
+
+    private async Task OnPinKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SubmitPin();
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelPin();
+        }
+    }
+
+    private bool EnsureUnlocked()
+    {
+        if (!IsLocked)
+            return true;
+
+        showPinModal = true;
+        pinError = null;
+        return false;
+    }
+
+    private bool HasValidTillPin()
+    {
+        if (_tillPinVerifiedUntilUtc == null)
+            return false;
+
+        if (_tillPinVerifiedUntilUtc <= DateTimeOffset.UtcNow)
+        {
+            _tillPinVerifiedUntilUtc = null;
+            _ = ClearTillPinStateAsync();
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task RestoreTillPinStateAsync()
+    {
+        var raw = await JS.InvokeAsync<string?>("localStorage.getItem", TillPinVerifiedUntilKey);
+        if (string.IsNullOrWhiteSpace(raw))
+            return;
+
+        if (DateTimeOffset.TryParse(raw, out var verifiedUntil) && verifiedUntil > DateTimeOffset.UtcNow)
+        {
+            _tillPinVerifiedUntilUtc = verifiedUntil;
+            return;
+        }
+
+        _tillPinVerifiedUntilUtc = null;
+        await ClearTillPinStateAsync();
+    }
+
+    private Task PersistTillPinStateAsync()
+    {
+        var value = _tillPinVerifiedUntilUtc?.ToString("O") ?? string.Empty;
+        return JS.InvokeVoidAsync("localStorage.setItem", TillPinVerifiedUntilKey, value).AsTask();
+    }
+
+    private Task ClearTillPinStateAsync()
+        => JS.InvokeVoidAsync("localStorage.removeItem", TillPinVerifiedUntilKey).AsTask();
+
+    private Task FocusPartNumberAsync()
+        => JS.InvokeVoidAsync(
+            "eval",
+            "document.getElementById('partNumber')?.focus()").AsTask();
+}

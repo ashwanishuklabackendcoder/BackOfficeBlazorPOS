@@ -1,0 +1,521 @@
+﻿@page "/pos-payment"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.State
+@using Microsoft.JSInterop
+@inject IPaymentService PaymentService
+@inject ILayawayService LayawayService
+@inject AppSnackbarService AppSnackbar
+@inject NavigationManager Nav
+@inject IConfiguration Config
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<h3>Payment</h3>
+
+@if (_missingSaleState)
+{
+    <div class="alert alert-warning">
+        No active sale found. Redirecting to POS sell screen.
+    </div>
+}
+else
+{
+<div class="row">
+
+    <!-- LEFT: TOTALS -->
+    <div class="col-md-4">
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+
+                <h4>Due: @Sale.NetTotal.ToString("0.00")</h4>
+
+                <div class="mt-2">
+                    Tendered: <b>@TotalTendered.ToString("0.00")</b>
+                </div>
+
+                <div class="mt-2"
+                     style="font-size:20px;
+                            color:@(Remaining > 0 ? "red" : "green")">
+                    Balance: <b>@Remaining.ToString("0.00")</b>
+                </div>
+
+                <div class="mt-2 text-success fs-5">
+                    Change: <b>@ChangeDue.ToString("0.00")</b>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- RIGHT: PAYMENTS -->
+    <div class="col-md-8">
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+
+                <div class="row g-2">
+
+                    <div class="col-md-3">
+                        <button class="btn btn-lg btn-success w-100"
+                                @onclick="() => SelectMethod(PaymentMethod.Cash)">
+                            CASH
+                        </button>
+                    </div>
+
+                    <div class="col-md-3">
+                        <button class="btn btn-lg btn-primary w-100"
+                                @onclick="() => SelectMethod(PaymentMethod.MasterCard)">
+                            MASTERCARD
+                        </button>
+                    </div>
+
+                    <div class="col-md-3">
+                        <button class="btn btn-lg btn-primary w-100"
+                                @onclick="() => SelectMethod(PaymentMethod.Visa)">
+                            VISA
+                        </button>
+                    </div>
+
+                    <div class="col-md-3">
+                        <button class="btn btn-lg btn-secondary w-100"
+                                @onclick="() => SelectMethod(PaymentMethod.Credit)">
+                            CREDIT
+                        </button>
+                    </div>
+
+                </div>
+
+                <div class="row g-2 mt-1">
+                    <div class="col-md-6">
+                        <button class="btn btn-lg btn-outline-dark w-100"
+                                @onclick="ShowStripeCardPayment">
+                            CARD (STRIPE)
+                        </button>
+                    </div>
+                </div>
+
+                <hr />
+
+                <div class="mb-3">
+                    <label class="form-label">Enter Amount</label>
+                    <input class="form-control form-control-lg text-end"
+                           placeholder="0.00"
+                           inputmode="decimal"
+                           @bind="Input"
+                           @bind:event="oninput"
+                           @onkeydown="OnAmountKeyDown" />
+                    <div class="small text-muted mt-1">
+                        Selected Method: <b>@GetMethodLabel(CurrentMethod)</b>
+                    </div>
+                </div>
+
+                <!-- KEYPAD -->
+                <div class="row g-2">
+                    @foreach (var key in Keys)
+                    {
+                        <div class="col-4">
+                            <button class="btn btn-outline-dark btn-lg w-100"
+                                    @onclick="() => PressKey(key)">
+                                @key
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <div class="mt-3">
+                    <button class="btn btn-warning btn-lg w-100"
+                            @onclick="ApplyAmount">
+                        APPLY
+                    </button>
+                </div>
+
+                <hr />
+
+                <div class="small">
+                    Cash: @Payment.Cash
+                    MasterCard: @Payment.MasterCard
+                    Visa: @Payment.Visa
+                    Credit: @Payment.Credit
+                </div>
+
+                @if (ShowStripeCard)
+                {
+                    <hr />
+                    <div class="mb-2">
+                        <div id="stripe-card-element" class="form-control"></div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(StripeError))
+                    {
+                        <div class="text-danger small">@StripeError</div>
+                    }
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-dark"
+                                disabled="@(Remaining <= 0 || StripeBusy)"
+                                @onclick="PayByStripeAsync">
+                            CHARGE REMAINING
+                        </button>
+                        <button class="btn btn-outline-secondary"
+                                @onclick="HideStripeCardPayment">
+                            Hide Card
+                        </button>
+                    </div>
+                }
+
+                <div class="mt-3 d-flex gap-2 justify-content-end">
+                    <button class="btn btn-danger"
+                            @onclick="Cancel">
+                        Cancel
+                    </button>
+
+                    <button class="btn btn-success btn-lg"
+                            disabled="@(!CanComplete)"
+                            @onclick="CompletePayment">
+                        COMPLETE SALE
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+}
+
+@code {
+
+    PosSaleRequestDto Sale = null!;
+    PosPaymentDto Payment = new();
+    DotNetObjectReference<PosPayment>? _dotNetRef;
+
+    string Input = "";
+    PaymentMethod CurrentMethod;
+    bool ShowStripeCard;
+    bool StripeMounted;
+    bool StripeBusy;
+    string? StripeError;
+    bool _missingSaleState;
+    const string StripeCurrency = "eur";
+
+    string[] Keys = { "7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "CLR" };
+
+    protected override void OnInitialized()
+    {
+        if (PosPaymentState.CurrentSale == null)
+        {
+            _missingSaleState = true;
+            Sale = new PosSaleRequestDto();
+            _ = AppSnackbar.Show("No active sale found.", SnackbarType.Warning);
+            return;
+        }
+
+        Sale = PosPaymentState.CurrentSale;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _missingSaleState)
+        {
+            Nav.NavigateTo("/pos-sell", true);
+            return;
+        }
+
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("paymentShortcuts.attach", _dotNetRef);
+        }
+
+        if (!ShowStripeCard || StripeMounted)
+            return;
+
+        var key = Config["Stripe:PublishableKey"];
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            StripeError = "Stripe publishable key is missing.";
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("stripePayments.init", key, "stripe-card-element");
+            StripeMounted = true;
+        }
+        catch (Exception ex)
+        {
+            StripeError = ex.Message;
+        }
+    }
+
+    decimal TotalTendered =>
+        Payment.Cash + Payment.MasterCard + Payment.Visa + Payment.Credit;
+
+    decimal Remaining =>
+        Sale.NetTotal - TotalTendered;
+
+    decimal ChangeDue =>
+        Payment.Cash > Sale.NetTotal
+            ? Payment.Cash - Sale.NetTotal
+            : 0;
+
+    bool CanComplete =>
+        Remaining <= 0 &&
+        (Payment.MasterCard + Payment.Visa + Payment.Credit)
+            <= Sale.NetTotal;
+
+    void SelectMethod(PaymentMethod method)
+    {
+        CurrentMethod = method;
+        Input = "";
+    }
+
+    void PressKey(string key)
+    {
+        if (key == "CLR") Input = "";
+        else Input += key;
+    }
+
+    void ApplyAmount()
+    {
+        if (!decimal.TryParse(Input, out var amt))
+        {
+            AppSnackbar.Show("Enter a valid amount", SnackbarType.Warning);
+            return;
+        }
+
+        if (CurrentMethod != PaymentMethod.Cash &&
+            amt > Remaining)
+        {
+            AppSnackbar.Show("Card payment cannot exceed balance",
+                SnackbarType.Error);
+            return;
+        }
+
+        switch (CurrentMethod)
+        {
+            case PaymentMethod.Cash: Payment.Cash += amt; break;
+            case PaymentMethod.MasterCard: Payment.MasterCard += amt; break;
+            case PaymentMethod.Visa: Payment.Visa += amt; break;
+            case PaymentMethod.Credit: Payment.Credit += amt; break;
+        }
+
+        Input = "";
+    }
+
+    void OnAmountKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyAmount();
+            return;
+        }
+
+        if (e.Key == "Escape")
+        {
+            Input = "";
+        }
+    }
+
+    [JSInvokable]
+    public Task HandleGlobalPaymentKey(string key)
+    {
+        switch (key)
+        {
+            case "CLR":
+                Input = "";
+                break;
+            case "BACK":
+                if (!string.IsNullOrEmpty(Input))
+                    Input = Input[..^1];
+                break;
+            case "APPLY":
+                ApplyAmount();
+                break;
+            default:
+                PressKey(key);
+                break;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    void ShowStripeCardPayment()
+    {
+        ShowStripeCard = true;
+        StripeError = null;
+    }
+
+    async Task HideStripeCardPayment()
+    {
+        ShowStripeCard = false;
+        StripeError = null;
+
+        if (StripeMounted)
+        {
+            await JS.InvokeVoidAsync("stripePayments.unmount");
+            StripeMounted = false;
+        }
+    }
+
+    async Task PayByStripeAsync()
+    {
+        var amount = Remaining;
+        if (amount <= 0)
+        {
+            AppSnackbar.Show("Balance already cleared", SnackbarType.Info);
+            return;
+        }
+
+        StripeBusy = true;
+        StripeError = null;
+
+        try
+        {
+            var intent = await PaymentService.CreateStripePaymentIntentAsync(
+                new StripePaymentIntentRequestDto
+                {
+                    Amount = amount,
+                    Currency = StripeCurrency,
+                    Reference = $"POS-{DateTime.UtcNow:yyyyMMddHHmmss}"
+                });
+
+            if (!intent.Success || intent.Data == null || string.IsNullOrWhiteSpace(intent.Data.ClientSecret))
+            {
+                StripeError = intent.Message;
+                return;
+            }
+
+            var result = await JS.InvokeAsync<StripeConfirmResult>(
+                "stripePayments.confirmCardPayment",
+                intent.Data.ClientSecret);
+
+            if (!result.Success)
+            {
+                StripeError = result.Message ?? "Card payment failed.";
+                return;
+            }
+
+            if (!string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase))
+            {
+                StripeError = $"Payment not completed. Status: {result.Status}";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(result.PaymentIntentId))
+            {
+                StripeError = "Missing payment intent id.";
+                return;
+            }
+
+            var verify = await PaymentService.VerifyStripePaymentAsync(
+                new StripePaymentVerifyRequestDto
+                {
+                    PaymentIntentId = result.PaymentIntentId
+                });
+
+            if (!verify.Success || verify.Data != true)
+            {
+                StripeError = verify.Message;
+                return;
+            }
+
+            Payment.MasterCard += amount;
+            AppSnackbar.Show("Card payment verified", SnackbarType.Success);
+        }
+        catch (Exception ex)
+        {
+            StripeError = ex.Message;
+        }
+        finally
+        {
+            StripeBusy = false;
+        }
+    }
+
+    async Task CompletePayment()
+    {
+        try
+        {
+            Sale.Payment = Payment;
+
+            string invoiceNo;
+
+            if (PosPaymentState.CurrentLayawayNo.HasValue)
+            {
+                var res = await LayawayService.SellAsync(new LayawaySellRequestDto
+                {
+                    LayawayNo = PosPaymentState.CurrentLayawayNo.Value,
+                    Payment = Payment
+                });
+
+                if (!res.Success || string.IsNullOrWhiteSpace(res.Data))
+                {
+                    AppSnackbar.Show(res.Message, SnackbarType.Error);
+                    return;
+                }
+
+                invoiceNo = res.Data;
+                PosPaymentState.CurrentLayawayNo = null;
+            }
+            else
+            {
+                invoiceNo = await PaymentService.ProcessSaleAsync(Sale);
+            }
+
+            AppSnackbar.Show($"Sale completed. Invoice: {invoiceNo}",
+                SnackbarType.Success);
+
+            Nav.NavigateTo($"/pos-receipt/{invoiceNo}", true);
+        }
+        catch (Exception ex)
+        {
+            AppSnackbar.Show(ex.Message, SnackbarType.Error);
+        }
+    }
+
+    void Cancel() => Nav.NavigateTo("/pos-sell");
+
+    enum PaymentMethod
+    {
+        Cash,
+        MasterCard,
+        Visa,
+        Credit
+    }
+
+    static string GetMethodLabel(PaymentMethod method) => method switch
+    {
+        PaymentMethod.Cash => "Cash",
+        PaymentMethod.MasterCard => "MasterCard",
+        PaymentMethod.Visa => "Visa",
+        PaymentMethod.Credit => "Credit",
+        _ => "Cash"
+    };
+
+    class StripeConfirmResult
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public string? Status { get; set; }
+        public string? PaymentIntentId { get; set; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("paymentShortcuts.detach");
+
+            if (StripeMounted)
+                await JS.InvokeVoidAsync("stripePayments.unmount");
+        }
+        catch
+        {
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

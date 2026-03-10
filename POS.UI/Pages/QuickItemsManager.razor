@@ -1,0 +1,255 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IQuickShortcutService QuickShortcutService
+@inject AppSnackbarService AppSnackbar
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Quick Items Configuration</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-primary" @onclick="OpenPicker">
+                Add Product
+            </button>
+            <button class="btn btn-sm btn-primary" disabled="@isSaving" @onclick="SaveAsync">
+                Save Quick Items
+            </button>
+        </div>
+    </div>
+
+    <div class="card-body">
+        @if (isLoading)
+        {
+            <div class="text-muted">Loading quick items...</div>
+        }
+        else
+        {
+            <table class="table table-sm table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Order</th>
+                        <th>Part No</th>
+                        <th>Title</th>
+                        <th>Sub Title</th>
+                        <th>Color</th>
+                        <th>Text Color</th>
+                        <th>Show Stock</th>
+                        <th>Active</th>
+                        <th style="width:80px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!items.Any())
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted">
+                                No quick items configured.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in items.OrderBy(x => x.DisplayOrder).ThenBy(x => x.PartNumber))
+                        {
+                            <tr>
+                                <td>
+                                    <input type="number"
+                                           min="1"
+                                           class="form-control form-control-sm"
+                                           value="@item.DisplayOrder"
+                                           @onchange="async e => await OnDisplayOrderChangedAsync(item, e)" />
+                                </td>
+                                <td class="fw-semibold">@item.PartNumber</td>
+                                <td>
+                                    <input class="form-control form-control-sm" @bind="item.Title" />
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm" @bind="item.SubTitle" />
+                                </td>
+                                <td>
+                                    <input type="color" class="form-control form-control-color" @bind="item.ColorHex" />
+                                </td>
+                                <td>
+                                    <input type="color" class="form-control form-control-color" @bind="item.ForeColorHex" />
+                                </td>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input" @bind="item.ShowAvailableStock" />
+                                </td>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input" @bind="item.IsActive" />
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger w-100" @onclick="() => Remove(item)">
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@if (showPicker)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.45)">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Product For Quick Item</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePicker"></button>
+                </div>
+                <div class="modal-body">
+                    <ProductSearchGrid OnSelected="OnProductSelected" />
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="ClosePicker">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<QuickShortcutItemDto> items = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool showPicker;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        var res = await QuickShortcutService.GetAdminAsync();
+        isLoading = false;
+
+        if (!res.Success)
+        {
+            await AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        items = (res.Data ?? new List<QuickShortcutItemDto>())
+            .OrderBy(x => x.DisplayOrder)
+            .ThenBy(x => x.PartNumber)
+            .ToList();
+    }
+
+    private void OpenPicker() => showPicker = true;
+    private void ClosePicker() => showPicker = false;
+
+    private void Remove(QuickShortcutItemDto item)
+    {
+        items.Remove(item);
+    }
+
+    private async Task OnDisplayOrderChangedAsync(QuickShortcutItemDto item, ChangeEventArgs e)
+    {
+        var rawValue = e.Value?.ToString();
+        if (!int.TryParse(rawValue, out var parsedValue))
+        {
+            await AppSnackbar.Show("Display order must be a valid number", SnackbarType.Warning);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (parsedValue < 1)
+        {
+            await AppSnackbar.Show("Display order cannot be less than 1", SnackbarType.Warning);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var duplicateExists = items.Any(x => !ReferenceEquals(x, item) && x.DisplayOrder == parsedValue);
+        if (duplicateExists)
+        {
+            await AppSnackbar.Show("Display order cannot be duplicated", SnackbarType.Warning);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        item.DisplayOrder = parsedValue;
+    }
+
+    private async Task OnProductSelected(ProductDto product)
+    {
+        if (string.IsNullOrWhiteSpace(product.PartNumber))
+            return;
+
+        if (items.Any(x => string.Equals(x.PartNumber, product.PartNumber, StringComparison.OrdinalIgnoreCase)))
+        {
+            await AppSnackbar.Show("Product already added in quick items", SnackbarType.Warning);
+            return;
+        }
+
+        items.Add(new QuickShortcutItemDto
+        {
+            PartNumber = product.PartNumber,
+            Title = string.IsNullOrWhiteSpace(product.Details) ? product.PartNumber : product.Details,
+            SubTitle = product.Make,
+            ColorHex = "#f8f9fa",
+            ForeColorHex = "#212529",
+            ShowAvailableStock = true,
+            IsActive = true,
+            DisplayOrder = items.Count + 1
+        });
+
+        showPicker = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (isSaving)
+            return;
+
+        if (items.Any(x => x.DisplayOrder < 1))
+        {
+            await AppSnackbar.Show("Display order cannot be less than 1", SnackbarType.Warning);
+            return;
+        }
+
+        var duplicateOrder = items
+            .GroupBy(x => x.DisplayOrder)
+            .FirstOrDefault(g => g.Key > 0 && g.Count() > 1);
+        if (duplicateOrder != null)
+        {
+            await AppSnackbar.Show($"Display order {duplicateOrder.Key} is duplicated", SnackbarType.Warning);
+            return;
+        }
+
+        isSaving = true;
+        var payload = items
+            .OrderBy(x => x.DisplayOrder)
+            .ThenBy(x => x.PartNumber)
+            .Select((x, i) =>
+            {
+                x.DisplayOrder = x.DisplayOrder <= 0 ? i + 1 : x.DisplayOrder;
+                if (string.IsNullOrWhiteSpace(x.Title))
+                    x.Title = x.PartNumber;
+                if (string.IsNullOrWhiteSpace(x.ColorHex))
+                    x.ColorHex = "#f8f9fa";
+                if (string.IsNullOrWhiteSpace(x.ForeColorHex))
+                    x.ForeColorHex = "#212529";
+                return x;
+            })
+            .ToList();
+
+        var res = await QuickShortcutService.SaveAdminAsync(payload);
+        isSaving = false;
+
+        if (!res.Success)
+        {
+            await AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        await AppSnackbar.Show(res.Message ?? "Quick items saved", SnackbarType.Success);
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,51 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+artifacts/
+TestResults/
+
+# Visual Studio / IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider
+*.DotSettings.user
+
+# Logs
+*.log
+logs/
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# App artifacts and local data
+**/wwwroot/uploads/
+**/uploads/
+*.db
+*.sqlite
+*.mdf
+*.ldf
+
+# Secrets and local overrides
+appsettings.Local.json
+appsettings.*.local.json
+.env
+.env.*
+
+# Publish profiles and deployment-specific files
+*.pubxml
+*.pubxml.user
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,344 @@
+@using POS.UI.Services
+@using BackOfficeBlazor.Shared.DTOs
+@inject IAuthService AuthService
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">POS.UI</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass nav-scrollable">
+    <nav class="flex-column">
+        @if (!AuthService.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="login">
+                    <span class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></span> Login
+                </NavLink>
+            </div>
+        }
+        else
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                </NavLink>
+            </div>
+
+            @if (ShowMaintenanceMenu())
+            {
+                <div class="nav-item px-3">
+                    <button class="nav-link section-toggle" @onclick="ToggleMaintenanceMenu" @onclick:stopPropagation="true">
+                        <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span>
+                        Maintenance
+                        <span class="ms-auto bi @(maintenanceMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
+                    </button>
+                </div>
+
+                @if (maintenanceMenuExpanded)
+                {
+                    @if (AuthService.HasAccess(PermissionKeys.ProductList))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="products">
+                                <span class="bi bi-box-seam me-2" aria-hidden="true"></span> Product Search
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.ProductAdd))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="product">
+                                <span class="bi bi-box-seam me-2" aria-hidden="true"></span> Products
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.Customer))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="customer">
+                                <span class="bi bi-people-fill me-2" aria-hidden="true"></span> Customers
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.Supplier))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="supplier">
+                                <span class="bi bi-truck me-2" aria-hidden="true"></span> Suppliers
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.Brand))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="manufacturer">
+                                <span class="bi bi-building me-2" aria-hidden="true"></span> Brands
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.Category))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="category">
+                                <span class="bi bi-tags-fill me-2" aria-hidden="true"></span> Categories
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.CurrentUser?.IsAdmin == true)
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="staff-users">
+                                <span class="bi bi-person-plus me-2" aria-hidden="true"></span> Users
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="user-permissions">
+                                <span class="bi bi-shield-lock me-2" aria-hidden="true"></span> Users Roles
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+
+            @if (ShowTillMenu())
+            {
+                <div class="nav-item px-3">
+                    <button class="nav-link section-toggle" @onclick="ToggleTillMenu" @onclick:stopPropagation="true">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Till
+                        <span class="ms-auto bi @(tillMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
+                    </button>
+                </div>
+
+                @if (tillMenuExpanded)
+                {
+                    @if (AuthService.HasAccess(PermissionKeys.Till))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="pos-sell">
+                                <span class="bi bi-cart-plus me-2" aria-hidden="true"></span> Till-Sale
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.CustomerSalesReturn))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="pos-returns">
+                                <span class="bi bi-arrow-counterclockwise me-2" aria-hidden="true"></span> Return
+                            </NavLink>
+                        </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.Layaway))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="pos-layaway">
+                                <span class="bi bi-bookmark-check me-2" aria-hidden="true"></span> Layaway
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+
+            @if (ShowStockMenu())
+            {
+                <div class="nav-item px-3">
+                    <button class="nav-link section-toggle" @onclick="ToggleStockMenu" @onclick:stopPropagation="true">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Stock
+                        <span class="ms-auto bi @(stockMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
+                    </button>
+                </div>
+
+                @if (stockMenuExpanded)
+                {
+                    @if (AuthService.HasAccess(PermissionKeys.StockInput))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="stock-input">
+                                <span class="bi bi-box-arrow-in-down me-2" aria-hidden="true"></span> Stock Input/Remove
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="stock-transfer">
+                                <span class="bi bi-arrow-left-right me-2" aria-hidden="true"></span> Stock Transfer
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+    
+            @if (ShowSettingsMenu())
+            {
+                <div class="nav-item px-3">
+                    <button class="nav-link section-toggle" @onclick="ToggleSettingsMenu" @onclick:stopPropagation="true">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Settings
+                        <span class="ms-auto bi @(settingsMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
+                    </button>
+                </div>
+
+                @if (settingsMenuExpanded)
+                {
+                    @if (AuthService.CurrentUser?.IsAdmin == true)
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="branch-location-setup">
+                                <span class="bi bi-diagram-3-fill me-2" aria-hidden="true"></span> Location Settings
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="system-settings">
+                                <span class="bi bi-diagram-3-fill me-2" aria-hidden="true"></span> System Settings
+                            </NavLink>
+                        </div>
+                        @*  <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="printer-config">
+                                <span class="bi bi-printer me-2" aria-hidden="true"></span> Printer Setting
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-5 submenu-item">
+                            <NavLink class="nav-link" href="printer-config">
+                                <span class="bi bi-file-earmark-text me-2" aria-hidden="true"></span> Report/Invoice Print A4
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-5 submenu-item">
+                            <NavLink class="nav-link" href="printer-config">
+                                <span class="bi bi-receipt me-2" aria-hidden="true"></span> Receipt Print
+                            </NavLink>
+                        </div>
+                         <div class="nav-item px-4 submenu-item">
+                            <span class="nav-link disabled">
+                                <span class="bi bi-sliders me-2" aria-hidden="true"></span> Global Settings
+                            </span>
+                        </div>
+                        <div class="nav-item px-5 submenu-item">
+                            <span class="nav-link disabled">
+                                <span class="bi bi-building me-2" aria-hidden="true"></span> Company Profile
+                            </span>
+                        </div>
+                        <div class="nav-item px-5 submenu-item">
+                            <span class="nav-link disabled">
+                                <span class="bi bi-image me-2" aria-hidden="true"></span> Logo
+                            </span>
+                        </div> *@
+                    }
+                }
+            }
+          
+            @if (ShowReportsMenu())
+            {
+                <div class="nav-item px-3">
+                    <button class="nav-link section-toggle" @onclick="ToggleReportsMenu" @onclick:stopPropagation="true">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Reports
+                        <span class="ms-auto bi @(reportsMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
+                    </button>
+                </div>
+
+                @if (reportsMenuExpanded)
+                {
+                    @if (AuthService.HasAccess(PermissionKeys.CustomerSalesReturn))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="customer-sales-returns-report">
+                                <span class="bi bi-clipboard-data me-2" aria-hidden="true"></span> Sales/Returns Report
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+
+            @if (AuthService.CurrentUser?.IsAdmin == true)
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="payment-integration">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Payment Integration
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="shipping-integration">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Shipping
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="feedback-integration">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Feedback
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="insurance-integration">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                        Insurance
+                    </NavLink>
+                </div>
+            }
+        }
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+    private bool maintenanceMenuExpanded;
+    private bool tillMenuExpanded;
+    private bool stockMenuExpanded;
+    private bool settingsMenuExpanded;
+    private bool reportsMenuExpanded;
+
+
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    private void ToggleMaintenanceMenu()
+    {
+        maintenanceMenuExpanded = !maintenanceMenuExpanded;
+    }
+
+
+    private void ToggleTillMenu() => tillMenuExpanded = !tillMenuExpanded;
+    private void ToggleStockMenu() => stockMenuExpanded = !stockMenuExpanded;
+    private void ToggleSettingsMenu() => settingsMenuExpanded = !settingsMenuExpanded;
+    private void ToggleReportsMenu() => reportsMenuExpanded = !reportsMenuExpanded;
+
+    private bool ShowMaintenanceMenu()
+    {
+        if (AuthService.CurrentUser?.IsAdmin == true)
+            return true;
+
+        return AuthService.HasAccess(PermissionKeys.Category)
+            || AuthService.HasAccess(PermissionKeys.Brand)
+            || AuthService.HasAccess(PermissionKeys.Supplier)
+            || AuthService.HasAccess(PermissionKeys.Customer)
+            || AuthService.HasAccess(PermissionKeys.ProductAdd);
+    }
+
+    private bool ShowTillMenu()
+        => AuthService.HasAccess(PermissionKeys.Till)
+            || AuthService.HasAccess(PermissionKeys.Layaway)
+            || AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+
+    private bool ShowStockMenu()
+        => AuthService.HasAccess(PermissionKeys.StockInput);
+
+    private bool ShowSettingsMenu()
+        => AuthService.CurrentUser?.IsAdmin == true;
+
+    private bool ShowReportsMenu()
+        => AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+
+}

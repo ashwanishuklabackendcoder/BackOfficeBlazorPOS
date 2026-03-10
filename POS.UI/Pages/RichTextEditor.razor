@@ -1,0 +1,150 @@
+﻿@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
+@using Microsoft.JSInterop
+
+
+<style>
+    .rte-editor {
+        min-height: 180px;
+        padding: 10px;
+        overflow-y: auto;
+        outline: none;
+        white-space: normal;
+    }
+
+    .rte-editor:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 .2rem rgba(13,110,253,.25);
+    }
+</style>
+
+<div class="border rounded">
+
+    <!-- TOOLBAR -->
+    <div class="border-bottom p-2 d-flex flex-wrap gap-1">
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("bold"))">
+            <i class="fa-solid fa-bold"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("italic"))">
+            <i class="fa-solid fa-italic"></i>
+        </button>
+        
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("underline"))">
+            <i class="fa-solid fa-underline"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("strikeThrough"))">
+            <i class="fa-solid fa-strikethrough"></i>
+        </button>
+        <div class="vr"></div>
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("insertUnorderedList"))">
+            <i class="fa-solid fa-list-ul"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("insertOrderedList"))">
+            <i class="fa-solid fa-list-ol"></i>
+        </button>
+        <div class="vr"></div>
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("justifyLeft"))">
+            <i class="fa-solid fa-align-left"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("justifyCenter"))">
+            <i class="fa-solid fa-align-center"></i>
+        </button>
+
+        <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => Cmd("justifyRight"))">
+            <i class="fa-solid fa-align-right"></i>
+        </button>
+        <div class="vr"></div>
+
+        <select class="form-select form-select-sm w-auto" @onchange="FormatChanged">
+            <option value="P">Paragraph</option>
+            <option value="H1">H1</option>
+            <option value="H2">H2</option>
+            <option value="H3">H3</option>
+            <option value="BLOCKQUOTE">Quote</option>
+            <option value="PRE">Code</option>
+        </select>
+        <input type="color"
+               class="form-control form-control-color form-control-sm"
+               style="width:40px; height:30px; padding:0;"
+               @onchange="ColorChanged" />
+
+    </div>
+
+    <!-- EDITOR -->
+    <div class="form-control border-0 rte-editor"
+         contenteditable="true"
+         @ref="editor"
+         @oninput="Update"
+         @onblur="Update">
+    </div>
+
+</div>
+
+@code {
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    private ElementReference editor;
+    private string? linkUrl;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrWhiteSpace(Value))
+        {
+            await JS.InvokeVoidAsync("rte.setHtml", editor, Value);
+        }
+    }
+
+    private async Task Cmd(string cmd)
+    {
+        await JS.InvokeVoidAsync("rte.exec", cmd);
+        await Update();
+    }
+
+    private async Task FormatChanged(ChangeEventArgs e)
+    {
+        await JS.InvokeVoidAsync("rte.exec", "formatBlock", e.Value!.ToString());
+        await Update();
+    }
+    private async Task ColorChanged(ChangeEventArgs e)
+    {
+        var color = e.Value?.ToString();
+
+        if (!string.IsNullOrWhiteSpace(color))
+        {
+            await JS.InvokeVoidAsync("rte.exec", "foreColor", color);
+            await Update();
+        }
+    }
+
+    private async Task InsertLink()
+    {
+        if (string.IsNullOrWhiteSpace(linkUrl)) return;
+
+        await JS.InvokeVoidAsync("rte.exec", "createLink", linkUrl);
+        linkUrl = null;
+        await Update();
+    }
+
+    private async Task Update()
+    {
+        Value = await JS.InvokeAsync<string>("rte.getHtml", editor);
+        await ValueChanged.InvokeAsync(Value);
+    }
+    public async Task Clear()
+    {
+        await JS.InvokeVoidAsync("rte.setHtml", editor, "");
+        Value = null;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+}

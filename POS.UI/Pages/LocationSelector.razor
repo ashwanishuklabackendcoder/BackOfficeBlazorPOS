@@ -1,0 +1,177 @@
+﻿@page "/location"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject ILocationService LocationService
+@inject IJSRuntime JS
+
+<div class="position-relative" @ref="root">
+    <div class="form-control d-flex justify-content-between"
+         style="cursor:pointer"
+         @onclick="Toggle">
+        <span>@(string.IsNullOrEmpty(Display) ? "NA" : Display)</span>
+        <i class="bi bi-chevron-down"></i>
+    </div>
+
+    @if (open)
+    {
+        <div class="border bg-white shadow w-100 p-2"
+             style="position:absolute; top:100%; z-index:1055">
+
+            <div class="p-2 border-bottom">
+                <input class="form-control"
+                       placeholder="Search..."
+                       @bind="search"
+                       @bind:event="oninput" />
+            </div>
+
+            <div style="max-height:220px; overflow:auto">
+                @foreach (var l in Filtered)
+                {
+                    <button class="list-group-item list-group-item-action"
+                            @onclick="() => Select(l)">
+                        @l.Code - @(string.IsNullOrEmpty(l.Name) ? "NA" : l.Name)
+                    </button>
+                }
+            </div>
+
+            <div class="border-top p-2 bg-light">
+                <button class="btn text-primary p-0"
+                        @onclick="OpenManage">
+                    ⚙ Manage Locations
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (showManage)
+{
+    <div class="modal fade show d-block"
+         style="background:rgba(0,0,0,.5)">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5>Manage Locations</h5>
+                    <button class="btn-close" @onclick="CloseManage"></button>
+                </div>
+
+                <div class="modal-body">
+                    <LocationEditor OnSaved="OnLocationSaved"
+                                    OnCancel="CloseManage" />
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    List<LocationDto> locations = new();
+    bool open, showManage;
+    string search = "";
+    string Display = "";
+
+    ElementReference root;
+    IJSObjectReference? module;
+    IJSObjectReference? outsideHandler;
+    DotNetObjectReference<LocationSelector>? dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        locations = await LocationService.GetAllAsync();
+        SyncDisplay();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SyncDisplay();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetRef = DotNetObjectReference.Create(this);
+
+            module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./clickOutside.js");
+
+            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
+                "registerClickOutside", root, dotNetRef);
+        }
+    }
+
+    [JSInvokable]
+    public void OnClickOutside()
+    {
+        if (open)
+        {
+            open = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    IEnumerable<LocationDto> Filtered =>
+        string.IsNullOrEmpty(search)
+            ? locations
+            : locations.Where(x =>
+                x.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                x.Code.Contains(search, StringComparison.OrdinalIgnoreCase));
+
+    void Toggle() => open = !open;
+
+    async Task Select(LocationDto l)
+    {
+        Value = l.Code;
+        Display = FormatDisplay(l);
+        await ValueChanged.InvokeAsync(Value);
+        open = false;
+    }
+
+    void OpenManage()
+    {
+        open = false;
+        showManage = true;
+    }
+
+    async Task OnLocationSaved(LocationDto l)
+    {
+        locations = await LocationService.GetAllAsync();
+        await Select(l);
+        showManage = false;
+    }
+
+    void CloseManage() => showManage = false;
+
+    void SyncDisplay()
+    {
+        if (string.IsNullOrWhiteSpace(Value))
+        {
+            Display = "";
+            return;
+        }
+
+        var match = locations.FirstOrDefault(x =>
+            string.Equals(x.Code, Value, StringComparison.OrdinalIgnoreCase));
+
+        Display = match == null ? Value ?? "" : FormatDisplay(match);
+    }
+
+    static string FormatDisplay(LocationDto location)
+    {
+        return string.IsNullOrWhiteSpace(location.Name) ? "NA" : location.Name;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (outsideHandler != null)
+            await outsideHandler.InvokeVoidAsync("dispose");
+
+        dotNetRef?.Dispose();
+    }
+}

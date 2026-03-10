@@ -1,0 +1,401 @@
+@page "/staff-users"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IStaffUserService StaffUserApi
+@inject IAuthService Auth
+@inject NavigationManager Nav
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+
+<PageTitle>Staff Users</PageTitle>
+
+@if (Auth.CurrentUser?.IsAdmin == true)
+{
+    <div class="row g-3">
+
+        <!-- CREATE USER -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-header fw-bold">Create Staff User</div>
+
+                <div class="card-body">
+
+                    <div class="mb-2">
+                        <input class="form-control"
+                               placeholder="Username"
+                               @bind="newUser.Username"
+                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.Username)))"
+                               autocomplete="off"
+                               name="user-name"
+                               @ref="usernameInput"
+                               @onkeydown="OnFieldKeyDown" />
+                    </div>
+
+                    <div class="mb-2">
+                        <input class="form-control"
+                               placeholder="Full Name"
+                               @bind="newUser.FullName"
+                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.FullName)))"
+                               autocomplete="off"
+                               name="full-name"
+                               @onkeydown="OnFieldKeyDown" />
+                    </div>
+
+                    <div class="mb-2">
+                        <input class="form-control"
+                               placeholder="Staff Code"
+                               @bind="newUser.StaffCode"
+                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.StaffCode)))"
+                               autocomplete="off"
+                               name="staff-code"
+                               @onkeydown="OnFieldKeyDown" />
+                    </div>
+
+                    <div class="mb-2">
+                        <input class="form-control"
+                               type="password"
+                               placeholder="Password"
+                               @bind="newUser.Password"
+                               autocomplete="new-password"
+                               name="new-password"
+                               @onkeydown="OnFieldKeyDown" />
+                    </div>
+
+                    <!-- Toggle -->
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               role="switch"
+                               @bind="newUser.IsAdmin"
+                               id="newIsAdmin"
+                               @onkeydown="OnFieldKeyDown" />
+                        <label class="form-check-label" for="newIsAdmin">
+                            Is Admin
+                        </label>
+                    </div>
+
+                    <button class="btn btn-primary" @onclick="CreateUser">
+                        Create
+                    </button>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- USERS LIST -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-header fw-bold">Users</div>
+
+                <div class="card-body">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Staff</th>
+                                <th>Admin</th>
+                                <th>Active</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var u in users)
+                            {
+                                var isEditing = selected?.Id == u.Id;
+
+                                <tr class="@(isEditing ? "table-primary" : "")">
+
+                                    <td>@u.Username - @u.FullName</td>
+
+                                    <td>@u.StaffCode</td>
+
+                                    <!-- ADMIN TOGGLE -->
+                                    <td>
+                                        <div class="form-check form-switch m-0 d-flex justify-content-center">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   role="switch"
+                                                   checked="@u.IsAdmin"
+                                                   disabled="@(!isEditing)"
+                                                   @onchange="(e) => OnGridAdminChanged(u, e)" />
+                                        </div>
+                                    </td>
+
+                                    <!-- ACTIVE TOGGLE -->
+                                    <td>
+                                        <div class="form-check form-switch m-0 d-flex justify-content-center">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   role="switch"
+                                                   checked="@u.IsActive"
+                                                   disabled="@(!isEditing)"
+                                                   @onchange="(e) => OnGridActiveChanged(u, e)" />
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                @onclick="() => Select(u)">
+                                            Edit
+                                        </button>
+                                    </td>
+
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT USER -->
+    @if (selected != null)
+    {
+        <div class="card shadow-sm mt-3">
+            <div class="card-header fw-bold">
+                Edit User: @selected.Username
+            </div>
+
+            <div class="card-body">
+
+                <div class="row g-2">
+
+                    <div class="col-md-4">
+                        <input class="form-control"
+                               placeholder="Full Name"
+                               @bind="editFullName"
+                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.FullName)))"
+                               autocomplete="off"
+                               @onkeydown="OnFieldKeyDown" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <input class="form-control"
+                               placeholder="Staff Code"
+                               @bind="editStaffCode"
+                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.StaffCode)))"
+                               autocomplete="off"
+                               @onkeydown="OnFieldKeyDown" />
+                    </div>
+
+                    <!-- Toggle Admin -->
+                    <div class="col-md-2 d-flex align-items-center">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   role="switch"
+                                   @bind="editIsAdmin"
+                                   id="editAdmin"
+                                   @onkeydown="OnFieldKeyDown" />
+                            <label class="form-check-label" for="editAdmin">
+                                Is Admin
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Toggle Active -->
+                    <div class="col-md-2 d-flex align-items-center">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   role="switch"
+                                   @bind="editIsActive"
+                                   id="editActive"
+                                   @onkeydown="OnFieldKeyDown" />
+                            <label class="form-check-label" for="editActive">
+                                Is Active
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ACTIONS -->
+                <div class="mt-3 d-flex flex-wrap gap-2">
+
+                    <button class="btn btn-success"
+                            @onclick="UpdateUser">
+                        Save User
+                    </button>
+
+                    <input class="form-control"
+                           style="max-width:240px"
+                           type="password"
+                           placeholder="New Password"
+                           @bind="resetPassword"
+                           autocomplete="new-password"
+                           name="reset-password"
+                           @onkeydown="OnFieldKeyDown" />
+
+                    <button class="btn btn-warning"
+                            @onclick="ResetPassword">
+                        Reset Password
+                    </button>
+
+                    <button class="btn btn-outline-secondary"
+                            @onclick="GoToPermissions">
+                        Open User Permissions
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+    }
+}
+
+@code {
+
+    private List<StaffUserDto> users = new();
+    private StaffUserDto? selected;
+    private string resetPassword = "";
+    private CreateStaffUserDto newUser = new();
+    ElementReference usernameInput;
+    private string editFullName = "";
+    private string editStaffCode = "";
+    private bool editIsAdmin;
+    private bool editIsActive;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(50); // ensure DOM ready
+            await usernameInput.FocusAsync();
+        }
+    }
+    void OnGridAdminChanged(StaffUserDto user, ChangeEventArgs e)
+    {
+        if (selected?.Id != user.Id)
+            return;
+
+        user.IsAdmin = (bool)e.Value!;
+        editIsAdmin = user.IsAdmin;
+    }
+
+    void OnGridActiveChanged(StaffUserDto user, ChangeEventArgs e)
+    {
+        if (selected?.Id != user.Id)
+            return;
+
+        user.IsActive = (bool)e.Value!;
+        editIsActive = user.IsActive;
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        if (Auth.CurrentUser?.IsAdmin != true)
+        {
+            AppSnackbar.Show("Admin access required.", SnackbarType.Warning);
+            Nav.NavigateTo("/", true);
+            return;
+        }
+
+        await LoadUsers();
+    }
+
+    async Task LoadUsers()
+    {
+        var res = await StaffUserApi.GetAllAsync();
+
+        if (!res.Success || res.Data == null)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        users = res.Data;
+    }
+
+    void Select(StaffUserDto user)
+    {
+        selected = user;
+        editFullName = user.FullName;
+        editStaffCode = user.StaffCode;
+        editIsAdmin = user.IsAdmin;
+        editIsActive = user.IsActive;
+        resetPassword = "";
+    }
+
+    async Task CreateUser()
+    {
+        var res = await StaffUserApi.CreateAsync(newUser);
+
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        AppSnackbar.Show("User created", SnackbarType.Success);
+        newUser = new CreateStaffUserDto();
+        await LoadUsers();
+    }
+
+    async Task UpdateUser()
+    {
+        if (selected == null)
+            return;
+
+        var res = await StaffUserApi.UpdateAsync(new UpdateStaffUserDto
+        {
+            Id = selected.Id,
+            FullName = editFullName,
+            StaffCode = editStaffCode,
+            IsAdmin = editIsAdmin,
+            IsActive = editIsActive
+        });
+
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        AppSnackbar.Show("User updated", SnackbarType.Success);
+        await LoadUsers();
+
+        var refreshed = users.FirstOrDefault(x => x.Id == selected.Id);
+        if (refreshed != null)
+            Select(refreshed);
+    }
+
+    async Task ResetPassword()
+    {
+        if (selected == null || string.IsNullOrWhiteSpace(resetPassword))
+            return;
+
+        var res = await StaffUserApi.ResetPasswordAsync(
+            new ResetStaffUserPasswordDto
+            {
+                UserId = selected.Id,
+                NewPassword = resetPassword
+            });
+
+        if (!res.Success)
+        {
+            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            return;
+        }
+
+        resetPassword = "";
+        AppSnackbar.Show("Password reset", SnackbarType.Success);
+    }
+
+    void GoToPermissions()
+    {
+        Nav.NavigateTo("/user-permissions");
+    }
+
+    async Task OnFieldKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await JS.InvokeVoidAsync("focusNextInput");
+    }
+}

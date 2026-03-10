@@ -55,6 +55,13 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                     return ApiResponse<ManufacturerDto>.Fail("Manufacturer Name is required");
                 }
 
+                var duplicateByName = await _repo.GetByNameAsync(dto.Name);
+                if (duplicateByName != null &&
+                    !string.Equals(duplicateByName.Code, dto.Code.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return ApiResponse<ManufacturerDto>.Fail("Manufacturer already exists");
+                }
+
                 var entity = await _repo.GetByCodeAsync(dto.Code);
 
                 if (entity == null)

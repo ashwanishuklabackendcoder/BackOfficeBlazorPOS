@@ -24,6 +24,13 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
         public Task<ProductItem?> GetByBarcodeNumberAsync(string Barcode)
      => _context.ProductItems.FirstOrDefaultAsync(p => p.Barcode == Barcode);
 
+        public Task<List<ProductItem>> GetByGroupCodeAsync(string groupCode)
+            => _context.ProductItems
+                .Where(p => p.GroupCode == groupCode && p.IsVariant)
+                .OrderBy(p => p.Color)
+                .ThenBy(p => p.Size)
+                .ToListAsync();
+
         public Task<string?> GetLastPartNumberAsync()
             => _context.ProductItems
                 .OrderByDescending(p => p.PartNumber)

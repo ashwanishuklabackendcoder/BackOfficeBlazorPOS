@@ -24,6 +24,17 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             await _db.ProductGroups.AddAsync(entity);
         }
 
+        public Task<ProductGroup?> GetByGroupCodeAsync(string groupCode)
+            => _db.ProductGroups
+                .OrderByDescending(x => x.CreatedOn)
+                .FirstOrDefaultAsync(x => x.GroupCode == groupCode);
+
+        public Task UpdateAsync(ProductGroup entity)
+        {
+            _db.ProductGroups.Update(entity);
+            return Task.CompletedTask;
+        }
+
         public async Task SaveChangesAsync()
         {
             await _db.SaveChangesAsync();

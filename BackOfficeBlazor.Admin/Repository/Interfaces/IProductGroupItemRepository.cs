@@ -10,6 +10,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
     public interface IProductGroupItemRepository
     {
         Task AddAsync(ProductGroupItem entity);
+        Task<bool> ExistsAsync(int groupId, string partNumber);
         Task SaveChangesAsync();
     }
 

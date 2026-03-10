@@ -1,6 +1,7 @@
 ﻿using BackOfficeBlazor.Admin.Context;
 using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,6 +24,9 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             await _db.ProductGroupItems.AddAsync(entity);
         }
 
+        public Task<bool> ExistsAsync(int groupId, string partNumber)
+            => _db.ProductGroupItems.AnyAsync(x => x.GroupId == groupId && x.PartNumber == partNumber);
+
         public async Task SaveChangesAsync()
         {
             await _db.SaveChangesAsync();
@@ -30,3 +34,4 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
     }
 
 }
+

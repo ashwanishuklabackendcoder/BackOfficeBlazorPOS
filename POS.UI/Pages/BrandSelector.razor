@@ -2,6 +2,7 @@
 @using POS.UI.Services
 @inject IManufacturerService BrandService
 @inject IJSRuntime JS
+@inject AppSnackbarService AppSnackbar
 
 
 <div class="position-relative" @ref="root">
@@ -81,10 +82,12 @@
                         <div class="border p-3 mb-3 rounded">
                             <label class="form-label text-danger">Brand Code *</label>
                             <input class="form-control"
+                                   id="brand-code-input"
                                    @bind="editId"
                                    maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Code)))" />
                             <label class="form-label text-danger">Brand Name *</label>
                             <input class="form-control"
+                                   id="brand-name-input"
                                    @bind="editBrandName"
                                    maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Name)))" />
 
@@ -217,8 +220,19 @@
     }
     async Task SaveBrand()
     {
-        if (string.IsNullOrWhiteSpace(editBrandName))
+        if (string.IsNullOrWhiteSpace(editId))
+        {
+            await AppSnackbar.Show("Brand Code is required", SnackbarType.Error);
+            await JS.InvokeVoidAsync("blazorForms.focusById", "brand-code-input");
             return;
+        }
+
+        if (string.IsNullOrWhiteSpace(editBrandName))
+        {
+            await AppSnackbar.Show("Brand Name is required", SnackbarType.Error);
+            await JS.InvokeVoidAsync("blazorForms.focusById", "brand-name-input");
+            return;
+        }
 
         var dto = new ManufacturerDto
         {
@@ -230,8 +244,12 @@
 
         if (response?.Success != true)
         {
-            // TODO: replace with toast / alert UI if you have
-            Console.WriteLine(response?.Message ?? "Save failed");
+            await AppSnackbar.Show(response?.Message ?? "Save failed", SnackbarType.Error);
+            await JS.InvokeVoidAsync(
+                "blazorForms.focusById",
+                string.Equals(response?.Message, "Manufacturer already exists", StringComparison.OrdinalIgnoreCase)
+                    ? "brand-name-input"
+                    : "brand-code-input");
             return;
         }
 

@@ -12,6 +12,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
         Task<List<Manufacturer>> GetAllManufacturer();
 
         Task<Manufacturer?> GetByCodeAsync(string code);
+        Task<Manufacturer?> GetByNameAsync(string name);
         Task AddAsync(Manufacturer entity);
         Task UpdateAsync(Manufacturer entity);
         Task DeleteAsync(Manufacturer entity);

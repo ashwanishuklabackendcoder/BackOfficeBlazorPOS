@@ -23,6 +23,10 @@ namespace POSAPI.Controllers
         public async Task<IActionResult> GetBarcode(string Barcode)
          => Ok(await _service.GetBarcode(Barcode));
 
+        [HttpGet("GetProductGroup")]
+        public async Task<IActionResult> GetProductGroup(string partNumber)
+            => Ok(await _service.GetGroupAsync(partNumber));
+
         //[HttpGet("GetProducts")]
         //public async Task<IActionResult> GetProducts([FromQuery] ProductFilterDto filter)
         // => Ok(await _service.GetAllAsync(filter));

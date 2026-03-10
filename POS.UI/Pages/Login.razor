@@ -12,15 +12,26 @@
     <div class="card shadow-sm">
         <div class="card-header fw-bold">Staff Login</div>
         <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label">Username</label>
-                <input class="form-control" @bind="Username" />
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input class="form-control" type="password" @bind="Password" />
-            </div>
-            <button class="btn btn-primary w-100" @onclick="DoLogin">Login</button>
+            <EditForm Model="this" OnValidSubmit="DoLogin">
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input class="form-control"
+                           @bind="Username"
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeyDown" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input class="form-control"
+                           type="password"
+                           @bind="Password"
+                           @bind:event="oninput"
+                           @onkeydown="HandleKeyDown" />
+                </div>
+                <button class="btn btn-primary w-100" type="submit" disabled="@IsLoggingIn">
+                    @(IsLoggingIn ? "Logging in..." : "Login")
+                </button>
+            </EditForm>
         </div>
     </div>
 </div>
@@ -28,6 +39,7 @@
 @code {
     string Username = "";
     string Password = "";
+    bool IsLoggingIn;
 
     protected override void OnInitialized()
     {
@@ -37,20 +49,55 @@
         }
     }
 
+    async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+            await DoLogin();
+    }
+
     async Task DoLogin()
     {
-        var result = await AuthService.LoginAsync(new LoginRequestDto
-        {
-            Username = Username,
-            Password = Password
-        });
+        if (IsLoggingIn)
+            return;
 
-        if (!result.Success)
+        if (string.IsNullOrWhiteSpace(Username))
         {
-            AppSnackbar.Show(result.Message ?? "Login failed", SnackbarType.Error);
+            await AppSnackbar.Show("Username is required", SnackbarType.Warning);
             return;
         }
 
-        Nav.NavigateTo("/", true);
+        if (string.IsNullOrWhiteSpace(Password))
+        {
+            await AppSnackbar.Show("Password is required", SnackbarType.Warning);
+            return;
+        }
+
+        IsLoggingIn = true;
+
+        try
+        {
+            var result = await AuthService.LoginAsync(new LoginRequestDto
+            {
+                Username = Username.Trim(),
+                Password = Password
+            });
+
+            if (!result.Success)
+            {
+                await AppSnackbar.Show(result.Message ?? "Invalid username or password", SnackbarType.Error);
+                return;
+            }
+
+            await AppSnackbar.Show("Login successful", SnackbarType.Success);
+            Nav.NavigateTo("/", true);
+        }
+        catch
+        {
+            await AppSnackbar.Show("Unable to complete login. Please try again.", SnackbarType.Error);
+        }
+        finally
+        {
+            IsLoggingIn = false;
+        }
     }
 }

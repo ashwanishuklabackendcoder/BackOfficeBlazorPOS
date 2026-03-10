@@ -54,6 +54,31 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
 
             return ApiResponse<ProductDto>.Ok(ToDto(entity));
         }
+
+        public async Task<ApiResponse<GroupProductDto>> GetGroupAsync(string partNumber)
+        {
+            if (string.IsNullOrWhiteSpace(partNumber))
+                return ApiResponse<GroupProductDto>.Fail("PartNumber is required");
+
+            var product = await _productRepo.GetByPartNumberAsync(partNumber.Trim());
+            if (product == null)
+                return ApiResponse<GroupProductDto>.Fail("Product not found");
+
+            var groupCode = product.IsVariant
+                ? (product.GroupCode ?? product.PartNumber)
+                : product.PartNumber;
+
+            var groupEntity = await _groupRepo.GetByGroupCodeAsync(groupCode);
+            var variants = await _productRepo.GetByGroupCodeAsync(groupCode);
+
+            return ApiResponse<GroupProductDto>.Ok(new GroupProductDto
+            {
+                GroupId = groupEntity?.GroupId,
+                GroupCode = groupCode,
+                GroupName = groupEntity?.GroupName ?? product.GroupName ?? string.Empty,
+                Variants = variants.Select(ToDto).ToList()
+            });
+        }
         public async Task<ApiResponse<List<ProductDto>>> GetAllAsync(ProductFilterDto filter)
         {
             var entities = await _productRepo.GetAllAsync(filter);
@@ -70,28 +95,30 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         {
             try
             {
+                NormalizeProduct(dto);
+
                 ProductItem? entity = null;
 
                 if (!string.IsNullOrWhiteSpace(dto.PartNumber))
                     entity = await _productRepo.GetByPartNumberAsync(dto.PartNumber);
+
                 if (!string.IsNullOrWhiteSpace(dto.MfrPartNumber))
                 {
-                    entity = await _productRepo.GetByMfrPartNumberAsync(dto.MfrPartNumber);
-                    if (entity != null && entity.PartNumber != dto.PartNumber)
+                    var existingByMfr = await _productRepo.GetByMfrPartNumberAsync(dto.MfrPartNumber);
+                    if (existingByMfr != null && existingByMfr.PartNumber != dto.PartNumber)
                     {
                         return ApiResponse<ProductDto>.Fail("MfrPartNumber already exists for another product");
                     }
                 }
+
                 if (!string.IsNullOrWhiteSpace(dto.Barcode))
                 {
-                    entity = await _productRepo.GetByBarcodeNumberAsync(dto.Barcode);
-                    if (entity != null && entity.PartNumber != dto.PartNumber)
+                    var existingByBarcode = await _productRepo.GetByBarcodeNumberAsync(dto.Barcode);
+                    if (existingByBarcode != null && existingByBarcode.PartNumber != dto.PartNumber)
                     {
                         return ApiResponse<ProductDto>.Fail("Barcode already exists for another product");
                     }
                 }
-                
-                    
 
                 if (entity == null)
                 {
@@ -118,7 +145,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                         await _levelRepo.SaveChangesAsync();
                     }
 
-                    return ApiResponse<ProductDto>.Ok(dto, $"Product added with PartNumber {nextPartNumber}");
+                    return ApiResponse<ProductDto>.Ok(dto, $"Product added successfully. Generated PartNumber: {nextPartNumber}");
                 }
                 else
                 {
@@ -143,6 +170,9 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         {
             try
             {
+                dto.GroupCode = dto.GroupCode?.Trim() ?? string.Empty;
+                dto.GroupName = dto.GroupName?.Trim() ?? string.Empty;
+
                 // 1. Validate
                 if (string.IsNullOrWhiteSpace(dto.GroupName))
                     return ApiResponse<bool>.Fail("Group name is required");
@@ -157,31 +187,65 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 if (dto.Variants == null || !dto.Variants.Any())
                     return ApiResponse<bool>.Fail("At least one variant is required");
 
-                // 2. Create group
-                var group = new ProductGroup
+                // 2. Create or update group
+                var group = await _groupRepo.GetByGroupCodeAsync(dto.GroupCode);
+                if (group == null)
                 {
-                    GroupName = dto.GroupName,
-                    GroupCode = dto.GroupCode,
-                    CreatedOn = DateTime.Now
-                };
+                    group = new ProductGroup
+                    {
+                        GroupName = dto.GroupName,
+                        GroupCode = dto.GroupCode,
+                        CreatedOn = DateTime.Now
+                    };
 
-                await _groupRepo.AddAsync(group);
+                    await _groupRepo.AddAsync(group);
+                }
+                else
+                {
+                    group.GroupName = dto.GroupName;
+                    await _groupRepo.UpdateAsync(group);
+                }
+
                 await _groupRepo.SaveChangesAsync();
 
                 // 3. Save each variant as a normal product
                 foreach (var variant in dto.Variants)
                 {
+                    NormalizeProduct(variant);
+                    variant.GroupCode = dto.GroupCode;
+                    variant.GroupName = dto.GroupName;
+                    variant.IsVariant = true;
+
+                    if (string.IsNullOrWhiteSpace(variant.PartNumber) &&
+                        !string.IsNullOrWhiteSpace(variant.MfrPartNumber))
+                    {
+                        var existingVariant = await _productRepo.GetByMfrPartNumberAsync(variant.MfrPartNumber);
+                        if (existingVariant != null &&
+                            existingVariant.IsVariant &&
+                            string.Equals(existingVariant.GroupCode, dto.GroupCode, StringComparison.OrdinalIgnoreCase))
+                        {
+                            variant.PartNumber = existingVariant.PartNumber;
+                        }
+                    }
+
                     // Reuse EXISTING SaveAsync logic
                     var saveResult = await SaveAsync(variant);
 
                     if (!saveResult.Success)
                         return ApiResponse<bool>.Fail(saveResult.Message);
 
+                    var savedPartNumber = saveResult.Data?.PartNumber ?? variant.PartNumber;
+                    if (string.IsNullOrWhiteSpace(savedPartNumber))
+                        return ApiResponse<bool>.Fail("Variant part number could not be resolved");
+
                     // 4. Link product to group
+                    if (await _groupItemRepo.ExistsAsync(group.GroupId, savedPartNumber))
+                        continue;
+
                     var link = new ProductGroupItem
                     {
                         GroupId = group.GroupId,
-                        PartNumber = variant.PartNumber
+                        PartNumber = savedPartNumber
                     };
 
                     await _groupItemRepo.AddAsync(link);
@@ -299,6 +363,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             Details = x.Details,
             Size = x.Size,
             Color = x.Color,
+            Barcode = x.Barcode,
             Weight = x.Weight,
             CostPrice = (decimal)x.CostPrice,
             Discount = x.Discount,
@@ -361,6 +426,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             entity.Details = dto.Details;
             entity.Size = dto.Size;
             entity.Color = dto.Color;
+            entity.Barcode = dto.Barcode;
             entity.ImageMain = dto.ImageMain;
             entity.Image2 = dto.Image2;
             entity.Image3 = dto.Image3;
@@ -404,6 +470,25 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             entity.Geometry = dto.Geometry;
 
             return entity;
+        }
+
+        private static void NormalizeProduct(ProductDto dto)
+        {
+            dto.PartNumber = dto.PartNumber?.Trim();
+            dto.GroupCode = dto.GroupCode?.Trim();
+            dto.GroupName = dto.GroupName?.Trim();
+            dto.MfrPartNumber = dto.MfrPartNumber?.Trim();
+            dto.Barcode = string.IsNullOrWhiteSpace(dto.Barcode) ? null : dto.Barcode.Trim();
+            dto.Make = dto.Make?.Trim();
+            dto.Search1 = dto.Search1?.Trim();
+            dto.Search2 = dto.Search2?.Trim();
+            dto.Details = dto.Details?.Trim();
+            dto.Color = dto.Color?.Trim();
+            dto.Size = dto.Size?.Trim();
+            dto.Supplier1Code = dto.Supplier1Code?.Trim();
+            dto.CatACode = dto.CatACode?.Trim();
+            dto.CatBCode = dto.CatBCode?.Trim();
+            dto.CatCCode = dto.CatCCode?.Trim();
         }
     }
 }

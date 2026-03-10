@@ -16,6 +16,13 @@ namespace POS.UI.Services
                 ?? ApiResponse<ProductDto>.Fail("Null response");
         }
 
+        public async Task<ApiResponse<GroupProductDto>> GetProductGroup(string partNumber)
+        {
+            return await _http.GetFromJsonAsync<ApiResponse<GroupProductDto>>
+                ($"api/product/GetProductGroup?partNumber={partNumber}")
+                ?? ApiResponse<GroupProductDto>.Fail("Null response");
+        }
+
         public async Task<ApiResponse<ProductDto>> SaveProduct(ProductDto dto)
         {
             var resp = await _http.PostAsJsonAsync("api/product/SaveProduct", dto);

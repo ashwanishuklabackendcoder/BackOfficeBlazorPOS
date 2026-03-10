@@ -60,6 +60,11 @@
 
     [Inject] HttpClient Http { get; set; } = default!;
 
+    protected override void OnParametersSet()
+    {
+        SyncPreviewsFromModel();
+    }
+
     async Task OnFilesSelected(InputFileChangeEventArgs e)
     {
         try
@@ -141,5 +146,25 @@
         Model.Image2 = _previews.ElementAtOrDefault(1);
         Model.Image3 = _previews.ElementAtOrDefault(2);
         Model.Image4 = _previews.ElementAtOrDefault(3);
+    }
+
+    void SyncPreviewsFromModel()
+    {
+        var images = new[]
+        {
+            Model.ImageMain,
+            Model.Image2,
+            Model.Image3,
+            Model.Image4
+        }
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Cast<string>()
+        .ToList();
+
+        if (_previews.SequenceEqual(images))
+            return;
+
+        _previews.Clear();
+        _previews.AddRange(images);
     }
 }

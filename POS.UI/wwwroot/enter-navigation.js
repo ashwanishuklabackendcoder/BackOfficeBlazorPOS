@@ -232,4 +232,28 @@
     window.enableCustomerShortcuts = window.enableProductShortcuts;
     window.enableEnterNavigation = () => { };
     window.focusNextInput = () => moveFocusToNext(null);
+    window.blazorForms = {
+        focusById: function (id) {
+            if (!id) {
+                return false;
+            }
+
+            const root = document.getElementById(id);
+            if (!root) {
+                return false;
+            }
+
+            const target = root.matches("input, select, textarea, button, [tabindex]")
+                ? root
+                : root.querySelector("input, select, textarea, button, [tabindex]");
+
+            if (!target) {
+                return false;
+            }
+
+            root.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.focus();
+            return true;
+        }
+    };
 })();

@@ -13,6 +13,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
         Task<ProductItem?> GetByPartNumberAsync(string partNumber);
         Task<ProductItem?> GetByMfrPartNumberAsync(string MfrpartNumber);
         Task<ProductItem?> GetByBarcodeNumberAsync(string Barcode);
+        Task<List<ProductItem>> GetByGroupCodeAsync(string groupCode);
         Task<List<ProductItem>> GetAllAsync(ProductFilterDto filter);
 
         Task<string?> GetLastPartNumberAsync();

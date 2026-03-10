@@ -1,4 +1,4 @@
-@using BackOfficeBlazor.Shared.DTOs
+ï»¿@using BackOfficeBlazor.Shared.DTOs
 
 @using POS.UI.Services
 @inject AppSnackbarService AppSnackbar
@@ -12,7 +12,10 @@
 
     <div class="mb-3">
         <label class="form-label fw-bold text-danger">Group Name *</label>
-        <input class="form-control" @bind="Group.GroupName" @oninput="Validate" />
+        <input id="variant-group-name"
+               class="form-control @(groupError != null ? "is-invalid" : "")"
+               @bind="Group.GroupName"
+               @oninput="Validate" />
         @if (!string.IsNullOrWhiteSpace(groupError))
         {
             <div class="text-danger small">@groupError</div>
@@ -25,18 +28,19 @@
                 <th class="text-danger">Color *</th>
                 <th class="text-danger">Size *</th>
                 <th class="text-danger">MFR *</th>
-                <th class="text-danger">Barcode *</th>
+                <th>Barcode</th>
                 <th style="width:60px"></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var v in Group.Variants)
+            @for (var i = 0; i < Group.Variants.Count; i++)
             {
+                var v = Group.Variants[i];
                 <tr>
-                    <td><input class="form-control form-control-sm" @bind="v.Color" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Color)))" @oninput="Validate" /></td>
-                    <td><input class="form-control form-control-sm" @bind="v.Size" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Size)))" @oninput="Validate" /></td>
-                    <td><input class="form-control form-control-sm" @bind="v.MfrPartNumber" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.MfrPartNumber)))" @oninput="Validate" /></td>
-                    <td><input class="form-control form-control-sm" @bind="v.Barcode" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Barcode)))" @oninput="Validate" /></td>
+                    <td><input id="@GetInputId(i, "Color")" class="form-control form-control-sm @(GetInputCss(v, "Color"))" @bind="v.Color" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Color)))" @oninput="Validate" /></td>
+                    <td><input id="@GetInputId(i, "Size")" class="form-control form-control-sm @(GetInputCss(v, "Size"))" @bind="v.Size" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Size)))" @oninput="Validate" /></td>
+                    <td><input id="@GetInputId(i, "MfrPartNumber")" class="form-control form-control-sm @(GetInputCss(v, "MfrPartNumber"))" @bind="v.MfrPartNumber" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.MfrPartNumber)))" @oninput="Validate" /></td>
+                    <td><input id="@GetInputId(i, "Barcode")" class="form-control form-control-sm @(GetInputCss(v, "Barcode"))" @bind="v.Barcode" maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Barcode)))" @oninput="Validate" /></td>
                     <td class="text-center">
                         <i class="fa fa-trash text-danger"
                            style="cursor:pointer"
@@ -72,6 +76,7 @@
     [Parameter] public ProductDto Header { get; set; } = new();
 
     Dictionary<ProductDto, string> errors = new();
+    Dictionary<ProductDto, string> errorFields = new();
     string? groupError;
 
     protected override void OnAfterRender(bool firstRender)
@@ -80,7 +85,7 @@
             return;
 
         disabledNoticeShown = true;
-        AppSnackbar.Show("Enable “Create Attributes & Options” to add variants.", SnackbarType.Info);
+        AppSnackbar.Show("Enable \"Create Attributes & Options\" to add variants.", SnackbarType.Info);
     }
 
     void Add()
@@ -92,7 +97,10 @@
             CatACode = Header.CatACode,
             CatBCode = Header.CatBCode,
             CatCCode = Header.CatCCode,
-            Website = Header.Website
+            Website = Header.Website,
+            GroupCode = Header.PartNumber,
+            GroupName = Group.GroupName,
+            IsVariant = true
         });
 
         Validate();
@@ -107,17 +115,16 @@
     void Validate()
     {
         errors.Clear();
+        errorFields.Clear();
         usedMfrs.Clear();
         usedBarcodes.Clear();
         usedColorSize.Clear();
-     
 
-        // Group name required
+
         groupError = string.IsNullOrWhiteSpace(Group.GroupName)
             ? "Group Name is required"
             : null;
 
-        // Main item participates in uniqueness
         if (!string.IsNullOrWhiteSpace(Header.MfrPartNumber))
             usedMfrs.Add(Header.MfrPartNumber.Trim());
 
@@ -137,37 +144,35 @@
             var color = v.Color?.Trim();
             var size = v.Size?.Trim();
 
-            // Required
             if (string.IsNullOrWhiteSpace(mfr))
             {
                 errors[v] = "MFR Part No is required";
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(bar))
-            {
-                errors[v] = "Barcode is required";
+                errorFields[v] = "MfrPartNumber";
                 continue;
             }
             if (string.IsNullOrWhiteSpace(color))
             {
                 errors[v] = "Color is required";
+                errorFields[v] = "Color";
                 continue;
             }
             if (string.IsNullOrWhiteSpace(size))
             {
                 errors[v] = "Size is required";
+                errorFields[v] = "Size";
                 continue;
             }
 
-            // Uniqueness
             if (!usedMfrs.Add(mfr))
             {
                 errors[v] = "MFR already exists in this group";
+                errorFields[v] = "MfrPartNumber";
                 continue;
             }
-            if (!usedBarcodes.Add(bar))
+            if (!string.IsNullOrWhiteSpace(bar) && !usedBarcodes.Add(bar))
             {
                 errors[v] = "Barcode already exists in this group";
+                errorFields[v] = "Barcode";
                 continue;
             }
             var combo = $"{color}|{size}";
@@ -175,6 +180,7 @@
             if (!usedColorSize.Add(combo))
             {
                 errors[v] = "This Color + Size combination already exists in this Item Group";
+                errorFields[v] = "Color";
                 continue;
             }
 
@@ -186,5 +192,45 @@
         Validate();
         return groupError == null && errors.Count == 0;
     }
-}
 
+    public string? GetFirstErrorMessage()
+    {
+        Validate();
+
+        if (!string.IsNullOrWhiteSpace(groupError))
+            return groupError;
+
+        return Group.Variants
+            .Select(v => errors.TryGetValue(v, out var error) ? error : null)
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+    }
+
+    public async Task FocusFirstInvalidAsync(IJSRuntime js)
+    {
+        Validate();
+
+        if (!string.IsNullOrWhiteSpace(groupError))
+        {
+            await js.InvokeVoidAsync("blazorForms.focusById", "variant-group-name");
+            return;
+        }
+
+        for (var i = 0; i < Group.Variants.Count; i++)
+        {
+            var variant = Group.Variants[i];
+            if (!errorFields.TryGetValue(variant, out var field))
+                continue;
+
+            await js.InvokeVoidAsync("blazorForms.focusById", GetInputId(i, field));
+            return;
+        }
+    }
+
+    string GetInputCss(ProductDto variant, string field)
+        => errorFields.TryGetValue(variant, out var invalidField) && invalidField == field
+            ? "is-invalid"
+            : string.Empty;
+
+    static string GetInputId(int index, string field)
+        => $"variant-{index}-{field}".ToLowerInvariant();
+}

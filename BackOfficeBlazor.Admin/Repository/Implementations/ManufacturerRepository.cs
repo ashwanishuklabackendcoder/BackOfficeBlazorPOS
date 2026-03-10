@@ -32,6 +32,14 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 .FirstOrDefaultAsync(x => x.Code == code);
         }
 
+        public async Task<Manufacturer?> GetByNameAsync(string name)
+        {
+            var normalized = name.Trim();
+
+            return await _context.Set<Manufacturer>()
+                .FirstOrDefaultAsync(x => x.Name != null && x.Name.ToLower() == normalized.ToLower());
+        }
+
         public async Task AddAsync(Manufacturer entity)
         {
             await _context.Set<Manufacturer>().AddAsync(entity);

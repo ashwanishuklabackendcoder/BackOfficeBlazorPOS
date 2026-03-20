@@ -43,9 +43,21 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 itemCode = itemCode.Trim();
 
                 AddWrapped(bytes, itemCode);
+                if (!string.IsNullOrWhiteSpace(line.Description))
+                    AddWrapped(bytes, line.Description);
                 var qtyPrice = $"{line.Quantity}x{line.Sell:0.00}";
                 var total = $"{line.Net:0.00}";
                 AddText(bytes, FormatColumns(qtyPrice, total));
+
+                if (line.IsCombo && line.ComboItems.Any())
+                {
+                    foreach (var child in line.ComboItems)
+                    {
+                        AddWrapped(bytes, $"  {child.ProductName} x {child.Qty}");
+                        if (child.IsMajor && child.StockNumbers.Any())
+                            AddWrapped(bytes, $"    Stock: {string.Join(", ", child.StockNumbers)}");
+                    }
+                }
             }
 
             AddText(bytes, new string('-', ReceiptWidth));

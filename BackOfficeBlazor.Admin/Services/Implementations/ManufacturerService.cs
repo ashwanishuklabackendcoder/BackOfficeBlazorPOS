@@ -1,6 +1,7 @@
 ﻿using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Implementations;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using BackOfficeBlazor.Admin.Services;
 using BackOfficeBlazor.Admin.Services.Interfaces;
 using BackOfficeBlazor.Shared.DTOs;
 using System;
@@ -45,19 +46,23 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(dto.Code))
-                {
-                    return ApiResponse<ManufacturerDto>.Fail("Manufacturer Code is required");
-                }
-
                 if (string.IsNullOrWhiteSpace(dto.Name))
                 {
                     return ApiResponse<ManufacturerDto>.Fail("Manufacturer Name is required");
                 }
 
+                if (string.IsNullOrWhiteSpace(dto.Code))
+                {
+                    var length = SequenceHelper.GetMaxLength<Manufacturer>("Code", 4);
+                    var last = await _repo.GetLastCodeAsync();
+                    dto.Code = SequenceHelper.GenerateNext(last, length);
+                }
+
+                dto.Code = dto.Code?.Trim().ToUpperInvariant();
+
                 var duplicateByName = await _repo.GetByNameAsync(dto.Name);
                 if (duplicateByName != null &&
-                    !string.Equals(duplicateByName.Code, dto.Code.Trim(), StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(duplicateByName.Code, dto.Code, StringComparison.OrdinalIgnoreCase))
                 {
                     return ApiResponse<ManufacturerDto>.Fail("Manufacturer already exists");
                 }

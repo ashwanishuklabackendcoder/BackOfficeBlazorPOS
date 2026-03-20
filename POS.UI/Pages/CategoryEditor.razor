@@ -74,7 +74,7 @@
     {
         if (string.IsNullOrWhiteSpace(model.Code))
         {
-            AppSnackbar.Show("Enter Category Code", SnackbarType.Warning);
+            await AppSnackbar.Show("Enter Category Code", SnackbarType.Warning);
             return;
         }
 
@@ -90,7 +90,7 @@
             recordExists = false;
             var code = model.Code;
             model = new CategoryDto { Code = code };
-            AppSnackbar.Show("New category will be created.", SnackbarType.Info);
+            await AppSnackbar.Show("New category will be created.", SnackbarType.Info);
         }
     }
 
@@ -99,15 +99,15 @@
         if (string.IsNullOrWhiteSpace(model.Code) ||
             string.IsNullOrWhiteSpace(model.Name))
         {
-            AppSnackbar.Show("Code and Description required", SnackbarType.Error);
+            await AppSnackbar.Show("Code and Description required", SnackbarType.Error);
             return;
         }
 
         var res = await CategoryService.SaveCategory(model);
         if (res?.Success == true)
-            AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
         else
-            AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
 
         if (res?.Success == true)
             await OnSaved.InvokeAsync(model);

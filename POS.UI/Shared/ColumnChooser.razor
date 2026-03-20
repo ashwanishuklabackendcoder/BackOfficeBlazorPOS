@@ -1,0 +1,64 @@
+@using POS.UI.Models
+
+<div class="position-relative">
+    <button class="btn btn-sm btn-outline-secondary"
+            type="button"
+            @onclick="Toggle">
+        Columns
+    </button>
+
+    @if (isOpen)
+    {
+        <div class="card shadow-sm position-absolute"
+             style="min-width:220px; right:0; z-index:300;">
+            <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong class="small mb-0">Columns</strong>
+                    <button class="btn btn-link btn-sm p-0"
+                            type="button"
+                            @onclick="RestoreDefaults">
+                        Reset
+                    </button>
+                </div>
+
+            <div class="btn-group-vertical w-100">
+                    @foreach (var option in Options)
+                    {
+                        var hidden = HiddenColumns.Contains(option.ColumnKey);
+                        <label class="form-check form-switch mb-1">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   checked="@(!hidden)"
+                                   disabled="@option.Disabled"
+                                   @onclick="() => ToggleColumn(option.ColumnKey)" />
+                            <span class="form-check-label small">
+                                @option.Title
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ColumnChooserOption> Options { get; set; } = Array.Empty<ColumnChooserOption>();
+    [Parameter] public IReadOnlyCollection<string> HiddenColumns { get; set; } = Array.Empty<string>();
+    [Parameter] public EventCallback<string> OnToggleColumn { get; set; }
+    [Parameter] public EventCallback OnRestoreDefaults { get; set; }
+
+    private bool isOpen;
+
+    void Toggle() => isOpen = !isOpen;
+
+    Task ToggleColumn(string columnKey)
+    {
+        return OnToggleColumn.InvokeAsync(columnKey);
+    }
+
+    Task RestoreDefaults()
+    {
+        return OnRestoreDefaults.InvokeAsync();
+    }
+}

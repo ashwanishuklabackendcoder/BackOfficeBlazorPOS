@@ -40,7 +40,9 @@ namespace POSAPI.Controllers
         [HttpPost, Route("SaveCategory")]
         public async Task<IActionResult> SaveCategory(CategoryDto dto)
         {
-            var existing = await _service.GetAsync(dto.Code);
+            var existing = !string.IsNullOrWhiteSpace(dto.Code)
+                ? await _service.GetAsync(dto.Code.Trim().ToUpperInvariant())
+                : null;
 
             if (existing == null)
             {

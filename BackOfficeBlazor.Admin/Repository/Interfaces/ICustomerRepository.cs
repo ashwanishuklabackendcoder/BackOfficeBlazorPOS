@@ -14,5 +14,6 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
         Task AddAsync(Customer entity);
         Task UpdateAsync(Customer entity);
         Task SaveChangesAsync();
+        Task<string?> GetLastAccountNumberAsync();
     }
 }

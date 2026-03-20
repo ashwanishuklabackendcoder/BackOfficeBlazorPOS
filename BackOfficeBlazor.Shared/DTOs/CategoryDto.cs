@@ -10,7 +10,6 @@ namespace BackOfficeBlazor.Shared.DTOs
     public class CategoryDto
     {
         [Key]
-        [Required]
         [StringLength(10)]
         public string? Code { get; set; }
 

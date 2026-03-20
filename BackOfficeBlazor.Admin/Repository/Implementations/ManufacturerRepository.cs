@@ -1,6 +1,7 @@
 ﻿using BackOfficeBlazor.Admin.Context;
 using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using BackOfficeBlazor.Admin.Services;
 using BackOfficeBlazor.Shared.DTOs;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -58,6 +59,15 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
         public async Task SaveChangesAsync()
         {
             await _context.SaveChangesAsync();
+        }
+        public async Task<string?> GetLastCodeAsync()
+        {
+            var values = await _context._Makes
+                .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+                .Select(x => x.Code)
+                .ToListAsync();
+
+            return SequenceHelper.GetHighestNumericCode(values);
         }
         public async Task<List<string>> SuggestMakesAsync(string term)
         {

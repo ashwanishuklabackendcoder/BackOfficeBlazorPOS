@@ -1,91 +1,306 @@
-﻿@using BackOfficeBlazor.Shared.DTOs
+@using BackOfficeBlazor.Shared.DTOs
+@using System.Linq
+@using POS.UI.Models
+@using POS.UI.Services
+@using POS.UI.Shared
+@using System.Threading
 @typeparam TItem
 
-<div class="card card-outline card-warning">
-    <div class="card-header d-flex justify-content-between">
-        <strong>@Title</strong>
+<style>
+    /* Keep column headers + filter row visible while scrolling */
+    .sortable-table thead tr:nth-child(1) th {
+        position: sticky;
+        top: 0;
+        z-index: 6;
+        background: var(--bs-table-bg, #f8f9fa);
+    }
 
-        <input class="form-control form-control-sm w-25"
-               placeholder="Search..."
-               @bind="searchText"
-               @bind:event="oninput" />
+    .sortable-table thead tr:nth-child(2) th {
+        position: sticky;
+        top: 2.25rem; /* approx height of the first header row in table-sm */
+        z-index: 5;
+        background: #fff;
+    }
+</style>
+
+<div class="card card-outline card-warning">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>@Title</strong>
+        <div class="d-flex gap-2 align-items-center">
+            <input class="form-control form-control-sm"
+                   placeholder="Search..."
+                   style="min-width:200px"
+                   @bind="SearchText"
+                   @bind:event="oninput" />
+
+            <ColumnChooser Options="ChooserOptions"
+                           HiddenColumns="state.HiddenColumns"
+                           OnToggleColumn="ToggleColumnVisibility"
+                           OnRestoreDefaults="RestoreDefaultColumns" />
+        </div>
     </div>
 
     <div class="card-body p-0">
+        <div class="table-responsive"
+             style="max-height:360px; min-height:200px; overflow:auto;">
+            <table class="table table-sm table-striped mb-0 sortable-table">
+                <thead class="table-secondary"
+                       style="position:sticky; top:0; ">
+                    <tr>
+                        @foreach (var col in VisibleColumns)
+                        {
+                            <th class="position-relative"
+                                @onclick="() => Sort(col)"
+                                style="cursor:@(col.Sortable ? "pointer" : "default");">
+                                <span>@col.Title</span>
+                                @if (sortColumn == col)
+                                {
+                                    <span>@(state.SortAscending ? "▲" : "▼")</span>
+                                }
+                            </th>
+                        }
+                    </tr>
+                    <tr class="table-sm">
+                        @foreach (var col in VisibleColumns)
+                        {
+                            <th class="p-1">
+                                @if (!col.Filterable)
+                                {
+                                    <text>&nbsp;</text>
+                                }
+                                else
+                                {
+                                    <StandardGridFilterCell TItem="TItem"
+                                                            Column="col"
+                                                            State="state"
+                                                            OnFiltersChanged="OnFiltersChanged" />
+                                }
+                            </th>
+                        }
+                    </tr>
+                </thead>
 
-        <table class="table table-sm table-hover table-bordered mb-0">
-            <thead class="table-light">
-                <tr>
-                    @foreach (var col in Columns)
-                    {
-                        <th @onclick="() => Sort(col)">
-                            @col.Title
-                            @if (sortColumn == col)
-                            {
-                                <span>@(sortAsc ? "▲" : "▼")</span>
-                            }
-                        </th>
-                    }
-                </tr>
-            </thead>
-
-            <tbody>
-                @if (items == null)
-                {
-                    <tr><td colspan="@Columns.Count">Loading...</td></tr>
-                }
-                else if (!items.Any())
-                {
-                    <tr><td colspan="@Columns.Count">No records found</td></tr>
-                }
-                else
-                {
-                    @foreach (var item in items)
+                <tbody>
+                    @if (isLoading)
                     {
                         <tr>
-                            @foreach (var col in Columns)
-                            {
-                                <td>@col.Value(item)</td>
-                            }
+                            <td colspan="@VisibleColumns.Count()" class="text-center text-muted p-3">
+                                Loading...
+                            </td>
                         </tr>
                     }
-                }
-            </tbody>
-        </table>
-
+                    else if (displayItems == null || !displayItems.Any())
+                    {
+                        <tr>
+                            <td colspan="@VisibleColumns.Count()" class="text-center text-muted p-3">
+                                No records found
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var item in displayItems)
+                        {
+                            <tr class="@RowCssClass?.Invoke(item)"
+                                @onclick="@(() => OnRowClick.InvokeAsync(item))"
+                                style="cursor:pointer">
+                                @foreach (var col in VisibleColumns)
+                                {
+                                    <td>@col.Value(item)</td>
+                                }
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 @code {
+    [Inject] private GridStateStorageService GridStateStorage { get; set; } = default!;
 
     [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string GridKey { get; set; } = "";
     [Parameter] public Func<Task<List<TItem>>> LoadData { get; set; } = default!;
     [Parameter] public List<GridColumn<TItem>> Columns { get; set; } = new();
+    [Parameter] public Func<TItem, string>? RowCssClass { get; set; }
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
 
-    List<TItem>? items;
-    string searchText = "";
-    GridColumn<TItem>? sortColumn;
-    bool sortAsc = true;
+    private GridState state = new();
+    private List<TItem>? rawItems;
+    private List<TItem>? displayItems;
+    private GridColumn<TItem>? sortColumn;
+    private bool isLoading = true;
+    private string searchText = "";
+    private string SearchText
+    {
+        get => searchText;
+        set
+        {
+            if (searchText == value)
+                return;
+            searchText = value;
+            RefreshView();
+        }
+    }
+
+    private IEnumerable<GridColumn<TItem>> VisibleColumns =>
+        Columns.Where(c => !state.HiddenColumns.Contains(c.ColumnKey));
+
+    private IReadOnlyList<ColumnChooserOption> ChooserOptions =>
+        Columns.Select(c => new ColumnChooserOption
+        {
+            ColumnKey = c.ColumnKey,
+            Title = c.Title,
+            Disabled = !c.IsHideable
+        }).ToList();
 
     protected override async Task OnInitializedAsync()
     {
-        items = await LoadData();
+        await LoadStateAsync();
+        await ReloadAsync();
     }
 
-    void Sort(GridColumn<TItem> column)
+    public async Task ReloadAsync()
     {
-        if (items == null) return;
+        isLoading = true;
+        rawItems = await LoadData();
+        isLoading = false;
+        RefreshView();
+    }
 
+    private async Task LoadStateAsync()
+    {
+        var persisted = await GridStateStorage.LoadStateAsync(GridKey);
+        if (persisted != null)
+            state = persisted;
+
+        // Be defensive: older/bad persisted state can deserialize with null collections.
+        state.Filters ??= new(StringComparer.OrdinalIgnoreCase);
+        state.HiddenColumns ??= new(StringComparer.OrdinalIgnoreCase);
+
+        InitializeColumnVisibility();
+        RestoreSortingFromState();
+    }
+
+    private void InitializeColumnVisibility()
+    {
+        if (state.HiddenColumns.Any())
+            return;
+
+        foreach (var column in Columns.Where(c => !c.IsVisible))
+        {
+            state.HiddenColumns.Add(column.ColumnKey);
+        }
+    }
+
+    private void RestoreSortingFromState()
+    {
+        if (string.IsNullOrWhiteSpace(state.SortColumnKey))
+            return;
+
+        sortColumn = Columns.FirstOrDefault(c =>
+            string.Equals(c.ColumnKey, state.SortColumnKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void RefreshView()
+    {
+        if (rawItems == null)
+        {
+            displayItems = null;
+            return;
+        }
+
+        var pipeline = ApplyFilters(rawItems);
+        pipeline = ApplySearch(pipeline);
+        pipeline = ApplySorting(pipeline);
+        displayItems = pipeline.ToList();
+        _ = SaveStateAsync();
+    }
+
+    private IEnumerable<TItem> ApplyFilters(IEnumerable<TItem> data)
+        => StandardGridFilterEngine.ApplyFilters(data, Columns, state.Filters);
+
+    private IEnumerable<TItem> ApplySearch(IEnumerable<TItem> source)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return source;
+
+        var query = searchText.Trim();
+        return source.Where(item => Columns.Any(col =>
+        {
+            var value = col.Value(item)?.ToString();
+            return !string.IsNullOrWhiteSpace(value) &&
+                   value.Contains(query, StringComparison.OrdinalIgnoreCase);
+        }));
+    }
+
+    private IEnumerable<TItem> ApplySorting(IEnumerable<TItem> source)
+    {
+        if (sortColumn == null || !sortColumn.Sortable)
+            return source;
+
+        return state.SortAscending
+            ? source.OrderBy(sortColumn.Value)
+            : source.OrderByDescending(sortColumn.Value);
+    }
+
+    private Task OnFiltersChanged()
+    {
+        RefreshView();
+        return Task.CompletedTask;
+    }
+
+    private void Sort(GridColumn<TItem> column)
+    {
+        if (!column.Sortable)
+            return;
+
+        state.SortColumnKey = column.ColumnKey;
         if (sortColumn == column)
-            sortAsc = !sortAsc;
+        {
+            state.SortAscending = !state.SortAscending;
+        }
         else
         {
             sortColumn = column;
-            sortAsc = true;
+            state.SortColumnKey = column.ColumnKey;
+            state.SortAscending = true;
         }
 
-        items = sortAsc
-            ? items.OrderBy(column.Value).ToList()
-            : items.OrderByDescending(column.Value).ToList();
+        RefreshView();
+    }
+
+    private async Task SaveStateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(GridKey))
+            return;
+
+        state.SortColumnKey = sortColumn?.ColumnKey;
+        await GridStateStorage.SaveStateAsync(GridKey, state);
+    }
+
+    private async Task ToggleColumnVisibility(string columnKey)
+    {
+        if (state.HiddenColumns.Contains(columnKey))
+            state.HiddenColumns.Remove(columnKey);
+        else
+            state.HiddenColumns.Add(columnKey);
+
+        await SaveStateAsync();
+        RefreshView();
+    }
+
+    private async Task RestoreDefaultColumns()
+    {
+        state.HiddenColumns.Clear();
+        foreach (var column in Columns.Where(c => !c.IsVisible))
+        {
+            state.HiddenColumns.Add(column.ColumnKey);
+        }
+
+        await SaveStateAsync();
+        RefreshView();
     }
 }

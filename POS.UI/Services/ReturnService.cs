@@ -1,6 +1,5 @@
-﻿using BackOfficeBlazor.Shared.DTOs;
+using BackOfficeBlazor.Shared.DTOs;
 using System.Net.Http.Json;
-using System.Text.Json;
 
 namespace POS.UI.Services
 {
@@ -26,50 +25,64 @@ namespace POS.UI.Services
             var suffix = query.Count > 0 ? "?" + string.Join("&", query) : string.Empty;
             var url = $"api/returns/invoices{suffix}";
 
-            var res = await _http.GetFromJsonAsync<ApiResponse<List<ReturnInvoiceLookupDto>>>(url);
-            return res ?? new ApiResponse<List<ReturnInvoiceLookupDto>>
-            {
-                Success = false,
-                Message = "No response from server",
-                Data = new()
-            };
+            var response = await _http.GetAsync(url);
+            var payload = await ApiResponseReader.ReadAsync<List<ReturnInvoiceLookupDto>>(
+                response,
+                "Unable to load invoices.");
+
+            return response.IsSuccessStatusCode
+                ? payload
+                : ApiResponse<List<ReturnInvoiceLookupDto>>.Fail(payload.Message);
         }
 
         public async Task<ApiResponse<List<PosSaleLineDto>>> GetSaleLinesAsync(string invoiceNo)
         {
-            var res = await _http.GetFromJsonAsync<ApiResponse<List<PosSaleLineDto>>>($"api/returns/invoice/{invoiceNo}");
+            var response = await _http.GetAsync($"api/returns/invoice/{invoiceNo}");
+            var payload = await ApiResponseReader.ReadAsync<List<PosSaleLineDto>>(
+                response,
+                "Unable to load invoice lines.");
 
-            return res ?? new ApiResponse<List<PosSaleLineDto>>
-            {
-                Success = false,
-                Message = "No response from server",
-                Data = new()
-            };
+            return response.IsSuccessStatusCode
+                ? payload
+                : ApiResponse<List<PosSaleLineDto>>.Fail(payload.Message);
         }
 
+        public async Task<ApiResponse<PosReceiptDto>> GetReceiptAsync(string invoiceNo)
+        {
+            var response = await _http.GetAsync($"api/returns/receipt/{invoiceNo}");
+            var payload = await ApiResponseReader.ReadAsync<PosReceiptDto>(
+                response,
+                "Unable to load receipt.");
 
+            return response.IsSuccessStatusCode
+                ? payload
+                : ApiResponse<PosReceiptDto>.Fail(payload.Message);
+        }
+
+        public async Task<ApiResponse<List<ReturnHistoryDto>>> GetReturnHistoryAsync(string invoiceNo)
+        {
+            var response = await _http.GetAsync($"api/returns/history/{invoiceNo}");
+            var payload = await ApiResponseReader.ReadAsync<List<ReturnHistoryDto>>(
+                response,
+                "Unable to load return history.");
+
+            return response.IsSuccessStatusCode
+                ? payload
+                : ApiResponse<List<ReturnHistoryDto>>.Fail(payload.Message);
+        }
 
         public async Task<ApiResponse<bool>> ProcessReturnAsync(ReturnProcessDto dto)
         {
             try
             {
-                var res = await _http.PostAsJsonAsync("api/returns/process", dto);
-                var raw = await res.Content.ReadAsStringAsync();
+                var response = await _http.PostAsJsonAsync("api/returns/process", dto);
+                var payload = await ApiResponseReader.ReadAsync<bool>(
+                    response,
+                    "Unable to process return.");
 
-                if (!res.IsSuccessStatusCode)
-                {
-                    var message = string.IsNullOrWhiteSpace(raw)
-                        ? $"Return request failed ({(int)res.StatusCode})."
-                        : raw;
-                    return ApiResponse<bool>.Fail(message);
-                }
-
-                var parsed = JsonSerializer.Deserialize<ApiResponse<bool>>(raw, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                return parsed ?? ApiResponse<bool>.Fail("Invalid server response.");
+                return response.IsSuccessStatusCode
+                    ? payload
+                    : ApiResponse<bool>.Fail(payload.Message);
             }
             catch
             {
@@ -77,5 +90,4 @@ namespace POS.UI.Services
             }
         }
     }
-
 }

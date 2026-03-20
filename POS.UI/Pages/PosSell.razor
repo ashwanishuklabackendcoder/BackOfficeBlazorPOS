@@ -6,6 +6,7 @@
 @using POS.UI.State
 @inject IJSRuntime JS
 @inject IProductApiService ProductApi
+@inject IComboApiService ComboApi
 @inject IStockService StockService
 @inject ILayawayService LayawayService
 @inject AppSnackbarService AppSnackbar
@@ -136,6 +137,51 @@
 
                     <hr />
                 }
+                @if (!string.IsNullOrWhiteSpace(PendingComboDescription))
+                {
+                    <div class="border rounded p-3 mb-2">
+                        <div class="fw-semibold mb-2">Select combo stock numbers</div>
+                        <div class="small text-muted mb-3">@PendingComboDescription</div>
+
+                        @foreach (var selection in PendingComboSelections)
+                        {
+                            <div class="mb-3">
+                                <div class="fw-semibold small">@selection.ProductName (@selection.PartNumber)</div>
+
+                                @for (var serialIndex = 0; serialIndex < selection.SelectedStockNumbers.Count; serialIndex++)
+                                {
+                                    var currentIndex = serialIndex;
+                                    <div class="mt-2">
+                                        <label class="form-label small">Stock Number @(currentIndex + 1)</label>
+                                        <select class="form-select"
+                                                value="@GetPendingComboSelectedStockNumber(selection.PartNumber, currentIndex)"
+                                                @onchange="e => OnPendingComboStockNumberChanged(selection.PartNumber, currentIndex, e.Value?.ToString())">
+                                            <option value="">-- Select Stock Number --</option>
+
+                                            @foreach (var sn in selection.AvailableStockNumbers)
+                                            {
+                                                <option value="@sn.StockNumber">@sn.StockNumber</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary"
+                                    @onclick="ConfirmPendingComboSelection"
+                                    disabled="@(!CanConfirmPendingCombo)">
+                                Add Combo
+                            </button>
+                            <button class="btn btn-outline-secondary" @onclick="CancelPendingComboSelection">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr />
+                }
 
                @*  <div class="small text-muted">
                     Current Location: <b>@CurrentLocation</b>
@@ -191,6 +237,7 @@
                         <tr>
                             <th>Product</th>
                             <th>Stock Number</th>
+                            <th style="width:90px">View</th>
                             <th style="width:90px">Qty</th>
                             <th style="width:120px">Each</th>
                             <th style="width:120px">Disc</th>
@@ -202,7 +249,7 @@
                         @if (!Cart.Any())
                         {
                             <tr>
-                                <td colspan="6" class="text-center text-muted p-3">
+                                <td colspan="7" class="text-center text-muted p-3">
                                     No items
                                 </td>
                             </tr>
@@ -216,6 +263,16 @@
 
                                     <td>
                                         <b>@line.PartNumber</b>
+
+                                        @if (line.IsCombo)
+                                        {
+                                            <button class="btn btn-link btn-sm p-0 ms-2"
+                                                    title="View combo items"
+                                                    @onclick:stopPropagation="true"
+                                                    @onclick="() => OpenComboPreview(line)">
+                                                <span class="bi bi-eye"></span>
+                                            </button>
+                                        }
 
                                         @if (line.IsPromo)
                                         {
@@ -235,6 +292,17 @@
                                     </td>
 
                                 <td>@line.StockNumber</td>
+
+                                <td class="text-center">
+                                    @if (line.IsCombo)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                @onclick:stopPropagation="true"
+                                                @onclick="() => OpenComboPreview(line)">
+                                            View
+                                        </button>
+                                    }
+                                </td>
 
                                 <td class="text-center fw-bold">
                                     @line.Qty
@@ -466,6 +534,47 @@
     <PosCustomerPicker OnSelected="OnCustomerSelected"
                        OnCancel="CloseCustomerPicker" />
 }
+@if (ViewingComboLine != null)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.45)">
+        <div class="modal-dialog modal-md">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Combo Items - @ViewingComboLine.PartNumber</h5>
+                    <button type="button" class="btn-close" @onclick="CloseComboPreview"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="fw-semibold mb-2">@ViewingComboLine.Description</div>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>PartNumber</th>
+                                <th>Product</th>
+                                <th>Qty</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in ViewingComboLine.ComboItems)
+                            {
+                                <tr>
+                                    <td>@item.PartNumber</td>
+                                    <td>
+                                        @item.ProductName
+                                        @if (item.IsMajor && item.StockNumbers.Any())
+                                        {
+                                            <div class="small text-muted">Stock: @string.Join(", ", item.StockNumbers)</div>
+                                        }
+                                    </td>
+                                    <td>@(item.Qty * ViewingComboLine.Qty)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 @if (showPinModal)
 {
     <div class="pin-overlay">
@@ -502,6 +611,9 @@
     List<PosCartLine> Cart = new();
     PosCartLine? SelectedLine;
     PosCartLine? PendingMajorLine;
+    string? PendingComboDescription;
+    string? PendingComboGroupId;
+    PosCartLine? ViewingComboLine;
     DotNetObjectReference<PosSell>? dotNetRef;
     decimal EditPrice;
     decimal EditDiscountPercent;
@@ -520,9 +632,14 @@
     decimal SubTotal => Cart.Sum(x => x.LineTotal);
     bool IsMajorProduct;
     List<StockNumberDto> AvailableStockNumbers = new();
+    List<PendingComboSelectionVm> PendingComboSelections = new();
     string? SelectedStockNumber;
     private const string TillPinVerifiedUntilKey = "pos_till_pin_verified_until";
-    private static readonly TimeSpan TillPinLifetime = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan TillPinLifetime = TimeSpan.FromMinutes(5);
+    List<PosCartLine> PendingComboLines = new();
+    bool CanConfirmPendingCombo =>
+        PendingComboLines.Count > 0 &&
+        PendingComboSelections.All(x => x.SelectedStockNumbers.All(y => !string.IsNullOrWhiteSpace(y)));
 
     protected override async Task OnInitializedAsync()
     {
@@ -551,11 +668,7 @@
             return;
 
         // Prevent duplicate serial in cart
-        var exists = Cart.Any(x =>
-            x.IsMajor &&
-            x.StockNumber == SelectedStockNumber);
-
-        if (exists)
+        if (IsStockNumberAlreadyInCart(SelectedStockNumber))
         {
             AppSnackbar.Show("This Stock Number is already in cart", SnackbarType.Warning);
             SelectedStockNumber = null;
@@ -601,102 +714,211 @@
         if (EnsureUnlocked() == false)
             return;
 
+        if (PendingMajorLine != null || PendingComboLines.Any())
+        {
+            await AppSnackbar.Show("Complete pending stock-number selection first", SnackbarType.Warning);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(ProductCode))
             return;
 
         var res = await ProductApi.GetProduct(ProductCode);
 
-        if (res?.Success != true || res.Data == null)
+        if (res?.Success == true && res.Data != null)
+        {
+            var product = res.Data;
+            var productPartNumber = product.PartNumber ?? "";
+            var productDescription = product.Details ?? "";
+            IsMajorProduct = product.Major;
+
+            var effectivePrice = product.IsUsingPromoPrice() ? product.PromoPrice : product.CostPrice;
+
+            if (IsMajorProduct)
+            {
+                AvailableStockNumbers =
+                    await StockService.GetAvailableStockNumbersAsync(
+                        productPartNumber, CurrentLocation);
+
+                if (!AvailableStockNumbers.Any())
+                {
+                    await AppSnackbar.Show("No serialized stock available", SnackbarType.Warning);
+                    return;
+                }
+
+                PendingMajorLine = new PosCartLine
+                {
+                    PartNumber = productPartNumber,
+                    Description = productDescription,
+                    Qty = 1,
+                    UnitPrice = effectivePrice,
+                    OriginalPrice = effectivePrice,
+                    IsMajor = true,
+                    IsPromo = product.IsUsingPromoPrice(),
+                    PromoName = product.PromoName
+                };
+
+                ApplyProductDiscount(product, PendingMajorLine);
+                return;
+            }
+
+            var available =
+                await GetAvailableStockForCurrentLocationAsync(productPartNumber);
+
+            if (available <= 0)
+            {
+                await AppSnackbar.Show("Out of stock", SnackbarType.Warning);
+                return;
+            }
+
+            var existing = Cart.FirstOrDefault(x => !x.IsCombo && x.PartNumber == productPartNumber);
+
+            if (existing != null)
+            {
+                var maxAvailableQty = available < 0 ? 0 : available;
+                if (existing.Qty >= maxAvailableQty)
+                {
+                    existing.Qty = maxAvailableQty;
+                    await AppSnackbar.Show($"Only {maxAvailableQty} item(s) available in stock", SnackbarType.Warning);
+                    SaveUiState();
+                    return;
+                }
+
+                existing.Qty++;
+            }
+            else
+            {
+                var line = new PosCartLine
+                {
+                    PartNumber = productPartNumber,
+                    Description = productDescription,
+                    Qty = 1,
+                    UnitPrice = effectivePrice,
+                    OriginalPrice = effectivePrice,
+                    IsMajor = false,
+                    IsPromo = product.IsUsingPromoPrice(),
+                    PromoName = product.PromoName
+                };
+
+                ApplyProductDiscount(product, line);
+                Cart.Add(line);
+            }
+
+            ProductCode = null;
+            SaveUiState();
+            return;
+        }
+
+        var comboResult = await ComboApi.GetByPartNumberAsync(ProductCode);
+        if (comboResult?.Success != true || comboResult.Data == null)
         {
             await AppSnackbar.Show("Product not found", SnackbarType.Error);
             return;
         }
 
-        var product = res.Data;
-        IsMajorProduct = product.Major;
+        var combo = comboResult.Data;
+        var pendingComboLines = new List<PosCartLine>();
+        var pendingSelections = new List<PendingComboSelectionVm>();
+        var comboBaseTotal = 0m;
 
-        // 🔹 Determine correct price (Promo or Cost)
-        var effectivePrice = product.IsUsingPromoPrice()  ? product.PromoPrice : product.CostPrice ;
-
-        // ================= MAJOR PRODUCT =================
-        if (IsMajorProduct)
+        foreach (var detail in combo.Details)
         {
-            AvailableStockNumbers =
-                await StockService.GetAvailableStockNumbersAsync(
-                    product.PartNumber, CurrentLocation);
-
-            if (!AvailableStockNumbers.Any())
+            var childProductResult = await ProductApi.GetProduct(detail.PartNumber);
+            if (childProductResult?.Success != true || childProductResult.Data == null)
             {
-                await AppSnackbar.Show("No serialized stock available", SnackbarType.Warning);
+                await AppSnackbar.Show($"Combo child {detail.PartNumber} was not found", SnackbarType.Warning);
                 return;
             }
 
-            PendingMajorLine = new PosCartLine
+            var childProduct = childProductResult.Data;
+            var partNumber = childProduct.PartNumber ?? detail.PartNumber;
+            var description = childProduct.Details ?? detail.ProductName ?? detail.PartNumber;
+            var qty = detail.Qty <= 0 ? 1 : detail.Qty;
+            var baseUnitPrice = detail.PromoPrice.GetValueOrDefault() > 0
+                ? detail.PromoPrice.GetValueOrDefault()
+                : detail.UnitPrice;
+
+            if (baseUnitPrice <= 0)
+                baseUnitPrice = childProduct.IsUsingPromoPrice() ? childProduct.PromoPrice : childProduct.CostPrice;
+
+            comboBaseTotal += baseUnitPrice * qty;
+
+            if (childProduct.Major)
             {
-                PartNumber = product.PartNumber,
-                Description = product.Details,
-                Qty = 1,
-                UnitPrice = effectivePrice,
-                OriginalPrice = effectivePrice,
-                IsMajor = true,
+                var stockNumbers = await StockService.GetAvailableStockNumbersAsync(partNumber, CurrentLocation);
+                if (stockNumbers.Count < qty)
+                {
+                    await AppSnackbar.Show("Major product stock is not available", SnackbarType.Warning);
+                    return;
+                }
 
-                IsPromo = product.IsUsingPromoPrice(),
-                PromoName = product.PromoName
-            };
-
-            ApplyProductDiscount(product, PendingMajorLine);
-            return;
-        }
-
-        // ================= MINOR PRODUCT =================
-        var available =
-            await GetAvailableStockForCurrentLocationAsync(product.PartNumber);
-
-        if (available <= 0)
-        {
-            await AppSnackbar.Show("Out of stock", SnackbarType.Warning);
-            return;
-        }
-
-        var existing = Cart.FirstOrDefault(x => x.PartNumber == product.PartNumber);
-
-        if (existing != null)
-        {
-            var maxAvailableQty = available < 0 ? 0 : available;
-            if (existing.Qty >= maxAvailableQty)
-            {
-                existing.Qty = maxAvailableQty;
-                await AppSnackbar.Show($"Only {maxAvailableQty} item(s) available in stock", SnackbarType.Warning);
-                SaveUiState();
-                return;
+                pendingSelections.Add(new PendingComboSelectionVm
+                {
+                    PartNumber = partNumber,
+                    ProductName = description,
+                    Qty = qty,
+                    Description = description,
+                    UnitPrice = baseUnitPrice,
+                    OriginalPrice = baseUnitPrice,
+                    ComboId = combo.ComboId,
+                    AvailableStockNumbers = stockNumbers,
+                    SelectedStockNumbers = Enumerable.Repeat<string?>(null, qty).ToList()
+                });
             }
-
-            existing.Qty++;
-        }
-        else
-        {
-            var line = new PosCartLine
+            else
             {
-                PartNumber = product.PartNumber,
-                Description = product.Details,
-                Qty = 1,
-                UnitPrice = effectivePrice,
-                OriginalPrice = effectivePrice,
-                IsMajor = false,
+                var availableQty = await GetAvailableStockForCurrentLocationAsync(partNumber);
+                if (availableQty < qty)
+                {
+                    await AppSnackbar.Show("Combo child stock is not available", SnackbarType.Warning);
+                    return;
+                }
 
-                IsPromo = product.IsUsingPromoPrice(),
-                PromoName = product.PromoName
-            };
-
-
-
-
-
-
-
-            ApplyProductDiscount(product, line);
-            Cart.Add(line);
+                pendingComboLines.Add(new PosCartLine
+                {
+                    PartNumber = partNumber,
+                    Description = description,
+                    Qty = qty,
+                    UnitPrice = baseUnitPrice,
+                    OriginalPrice = baseUnitPrice,
+                    IsMajor = false,
+                    IsCombo = true,
+                    ComboId = combo.ComboId
+                });
+            }
         }
+
+        if (comboBaseTotal <= 0)
+        {
+            await AppSnackbar.Show("Combo price is invalid", SnackbarType.Warning);
+            return;
+        }
+
+        ApplyComboDiscountAllocation(pendingComboLines, pendingSelections, combo.ComboPrice, comboBaseTotal);
+
+        if (pendingSelections.Any())
+        {
+            PendingComboDescription = combo.ComboName;
+            PendingComboGroupId = Guid.NewGuid().ToString("N");
+            PendingComboLines = pendingComboLines;
+            PendingComboSelections = pendingSelections;
+            foreach (var line in PendingComboLines)
+            {
+                line.ComboGroupId = PendingComboGroupId;
+                line.IsComboReturnPolicyApplied = true;
+            }
+            ProductCode = null;
+            return;
+        }
+
+        var comboGroupId = Guid.NewGuid().ToString("N");
+        foreach (var line in pendingComboLines)
+        {
+            line.ComboGroupId = comboGroupId;
+            line.IsComboReturnPolicyApplied = true;
+        }
+
+        AddPendingComboLinesToCart();
 
         ProductCode = null;
         SaveUiState();
@@ -758,6 +980,19 @@
         SaveUiState();
     }
 
+    void OpenComboPreview(PosCartLine line)
+    {
+        if (!line.IsCombo)
+            return;
+
+        ViewingComboLine = line;
+    }
+
+    void CloseComboPreview()
+    {
+        ViewingComboLine = null;
+    }
+
     async Task IncreaseQty()
     {
         if (SelectedLine == null || SelectedLine.IsMajor) return;
@@ -790,6 +1025,8 @@
     void RemoveSelected()
     {
         if (SelectedLine == null) return;
+        if (ViewingComboLine == SelectedLine)
+            ViewingComboLine = null;
         Cart.Remove(SelectedLine);
         SelectedLine = null;
         SaveUiState();
@@ -802,6 +1039,14 @@
 
         Cart.Clear();
         SelectedLine = null;
+        ViewingComboLine = null;
+        PendingMajorLine = null;
+        PendingComboDescription = null;
+        PendingComboGroupId = null;
+        PendingComboLines.Clear();
+        PendingComboSelections.Clear();
+        AvailableStockNumbers.Clear();
+        SelectedStockNumber = null;
         AppSnackbar.Show("Cart cleared", SnackbarType.Info);
         SaveUiState();
     }
@@ -839,6 +1084,7 @@
             Lines = Cart.Select(x => new PosSaleLineDto
             {
                 PartNumber = x.PartNumber,
+                Description = x.Description,
                 StockNo = x.StockNumber ?? "",
                 Quantity = x.Qty,
                 Cost = x.OriginalPrice,
@@ -847,11 +1093,17 @@
                 DiscountAmount = x.DiscountAmount,
                 Vat = 0,
                 Net = x.LineTotal,
-                IsMajor = x.IsMajor
+                IsMajor = x.IsMajor,
+                IsCombo = x.IsCombo,
+                ComboId = x.ComboId,
+                ComboGroupId = x.ComboGroupId,
+                IsComboReturnPolicyApplied = x.IsComboReturnPolicyApplied,
+                ComboItems = new List<ComboInvoiceItemDto>()
             }).ToList()
         };
 
         POS.UI.State.PosPaymentState.CurrentSale = sale;
+        POS.UI.State.PosPaymentState.CurrentReturn = null;
         POS.UI.State.PosPaymentState.CurrentLayawayNo = null;
 
         Nav.NavigateTo("/pos-payment");
@@ -884,6 +1136,7 @@
     {
         // store in temp static state or scoped service if needed
         PosPaymentState.CurrentSale = sale;
+        PosPaymentState.CurrentReturn = null;
         Nav.NavigateTo("/pos-payment");
     }
 
@@ -1012,11 +1265,15 @@
         public bool AllowDiscount { get; set; } = true;
         public DiscountMode DiscountMode { get; set; } = DiscountMode.Percent;
 
-        // NEW
         public bool IsMajor { get; set; }
+        public bool IsCombo { get; set; }
+        public int? ComboId { get; set; }
+        public string? ComboGroupId { get; set; }
+        public bool IsComboReturnPolicyApplied { get; set; }
         public string? StockNumber { get; set; }
         public bool IsPromo { get; set; }          // ⭐ NEW
         public string? PromoName { get; set; }     // ⭐ OPTIONAL
+        public List<ComboInvoiceItemDto> ComboItems { get; set; } = new();
 
         public decimal GrossLineTotal => Qty * UnitPrice;
 
@@ -1032,6 +1289,211 @@
             }
         }
     }
+
+    string? GetPendingComboSelectedStockNumber(string partNumber, int index)
+    {
+        var selection = PendingComboSelections.FirstOrDefault(x =>
+            string.Equals(x.PartNumber, partNumber, StringComparison.OrdinalIgnoreCase));
+
+        if (selection == null || index < 0 || index >= selection.SelectedStockNumbers.Count)
+            return null;
+
+        return selection.SelectedStockNumbers[index];
+    }
+
+    void OnPendingComboStockNumberChanged(string partNumber, int index, string? value)
+    {
+        var selection = PendingComboSelections.FirstOrDefault(x =>
+            string.Equals(x.PartNumber, partNumber, StringComparison.OrdinalIgnoreCase));
+
+        if (selection == null || index < 0 || index >= selection.SelectedStockNumbers.Count)
+            return;
+
+        selection.SelectedStockNumbers[index] = value;
+    }
+
+    async Task ConfirmPendingComboSelection()
+    {
+        if (!PendingComboLines.Any() && !PendingComboSelections.Any())
+            return;
+
+        foreach (var selection in PendingComboSelections)
+        {
+            var chosenStockNumbers = selection.SelectedStockNumbers
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!.Trim())
+                .ToList();
+
+            if (chosenStockNumbers.Count != selection.Qty)
+            {
+                await AppSnackbar.Show("Select all stock numbers for combo major products", SnackbarType.Warning);
+                return;
+            }
+
+            if (chosenStockNumbers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != chosenStockNumbers.Count)
+            {
+                await AppSnackbar.Show("Duplicate stock numbers are not allowed in the same combo", SnackbarType.Warning);
+                return;
+            }
+
+            if (chosenStockNumbers.Any(IsStockNumberAlreadyInCart))
+            {
+                await AppSnackbar.Show("One or more stock numbers are already in cart", SnackbarType.Warning);
+                return;
+            }
+
+            for (var index = 0; index < chosenStockNumbers.Count; index++)
+            {
+                PendingComboLines.Add(new PosCartLine
+                {
+                    PartNumber = selection.PartNumber,
+                    Description = selection.Description,
+                    Qty = 1,
+                    UnitPrice = selection.UnitPrice,
+                    OriginalPrice = selection.OriginalPrice,
+                    DiscountMode = DiscountMode.Amount,
+                    DiscountAmount = selection.DiscountAmountPerUnit,
+                    DiscountPercent = selection.UnitPrice == 0 ? 0 : (selection.DiscountAmountPerUnit / selection.UnitPrice) * 100m,
+                    IsMajor = true,
+                    IsCombo = true,
+                    ComboId = selection.ComboId,
+                    ComboGroupId = PendingComboGroupId,
+                    IsComboReturnPolicyApplied = true,
+                    StockNumber = chosenStockNumbers[index]
+                });
+            }
+        }
+
+        AddPendingComboLinesToCart();
+        await AppSnackbar.Show("Combo items added", SnackbarType.Success);
+        SaveUiState();
+    }
+
+    void CancelPendingComboSelection()
+    {
+        PendingComboDescription = null;
+        PendingComboGroupId = null;
+        PendingComboLines.Clear();
+        PendingComboSelections.Clear();
+        ProductCode = null;
+    }
+
+    bool IsStockNumberAlreadyInCart(string stockNumber)
+    {
+        if (string.IsNullOrWhiteSpace(stockNumber))
+            return false;
+
+        return Cart.Any(x =>
+            x.IsMajor &&
+            string.Equals(x.StockNumber, stockNumber, StringComparison.OrdinalIgnoreCase));
+    }
+
+    void AddPendingComboLinesToCart()
+    {
+        foreach (var line in PendingComboLines)
+            AddOrMergeCartLine(line);
+
+        CancelPendingComboSelection();
+    }
+
+    void AddOrMergeCartLine(PosCartLine line)
+    {
+        if (line.IsMajor)
+        {
+            Cart.Add(line);
+            return;
+        }
+
+        var existing = Cart.FirstOrDefault(x =>
+            !x.IsMajor &&
+            string.Equals(x.PartNumber, line.PartNumber, StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(x.StockNumber) &&
+            x.UnitPrice == line.UnitPrice &&
+            x.DiscountAmount == line.DiscountAmount &&
+            x.DiscountMode == line.DiscountMode);
+
+        if (existing == null)
+        {
+            Cart.Add(line);
+            return;
+        }
+
+        existing.Qty += line.Qty;
+    }
+
+    void ApplyComboDiscountAllocation(
+        List<PosCartLine> minorLines,
+        List<PendingComboSelectionVm> majorSelections,
+        decimal comboPrice,
+        decimal comboBaseTotal)
+    {
+        var totalDiscount = comboBaseTotal - comboPrice;
+        if (totalDiscount <= 0)
+            return;
+
+        var allTargets = new List<ComboDiscountTarget>();
+        allTargets.AddRange(minorLines.Select(x => new ComboDiscountTarget
+        {
+            UnitPrice = x.UnitPrice,
+            Qty = x.Qty,
+            Apply = value =>
+            {
+                x.DiscountMode = DiscountMode.Amount;
+                x.DiscountAmount = value;
+                x.DiscountPercent = x.UnitPrice == 0 ? 0 : (value / x.UnitPrice) * 100m;
+            }
+        }));
+        allTargets.AddRange(majorSelections.Select(x => new ComboDiscountTarget
+        {
+            UnitPrice = x.UnitPrice,
+            Qty = x.Qty,
+            Apply = value => x.DiscountAmountPerUnit = value
+        }));
+
+        decimal allocated = 0m;
+        for (var index = 0; index < allTargets.Count; index++)
+        {
+            var target = allTargets[index];
+            decimal perUnitDiscount;
+
+            if (index == allTargets.Count - 1)
+            {
+                perUnitDiscount = target.Qty <= 0 ? 0 : (totalDiscount - allocated) / target.Qty;
+            }
+            else
+            {
+                var proportion = comboBaseTotal == 0 ? 0 : (target.UnitPrice * target.Qty) / comboBaseTotal;
+                var lineDiscount = Math.Round(totalDiscount * proportion, 2, MidpointRounding.AwayFromZero);
+                perUnitDiscount = target.Qty <= 0 ? 0 : lineDiscount / target.Qty;
+                allocated += perUnitDiscount * target.Qty;
+            }
+
+            perUnitDiscount = Clamp(perUnitDiscount, 0, target.UnitPrice);
+            target.Apply(perUnitDiscount);
+        }
+    }
+
+    class ComboDiscountTarget
+    {
+        public decimal UnitPrice { get; set; }
+        public int Qty { get; set; }
+        public Action<decimal> Apply { get; set; } = _ => { };
+    }
+
+    class PendingComboSelectionVm
+    {
+        public string PartNumber { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public string Description { get; set; } = "";
+        public int Qty { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal OriginalPrice { get; set; }
+        public decimal DiscountAmountPerUnit { get; set; }
+        public int? ComboId { get; set; }
+        public List<StockNumberDto> AvailableStockNumbers { get; set; } = new();
+        public List<string?> SelectedStockNumbers { get; set; } = new();
+    }
+
     void SetWalkInCustomer()
     {
         SelectedCustomerAccount = "WALKIN";
@@ -1090,7 +1552,20 @@
                 AllowDiscount = x.AllowDiscount,
                 DiscountMode = x.DiscountMode,
                 IsMajor = x.IsMajor,
-                StockNumber = x.StockNumber
+                IsCombo = x.IsCombo,
+                ComboId = x.ComboId,
+                ComboGroupId = x.ComboGroupId,
+                IsComboReturnPolicyApplied = x.IsComboReturnPolicyApplied,
+                StockNumber = x.StockNumber,
+                ComboItems = x.ComboItems.Select(y => new ComboInvoiceItemDto
+                {
+                    PartNumber = y.PartNumber,
+                    ProductName = y.ProductName,
+                    Qty = y.Qty,
+                    IsMajor = y.IsMajor,
+                    StockNumber = y.StockNumber,
+                    StockNumbers = y.StockNumbers.ToList()
+                }).ToList()
             })
             .ToList();
 
@@ -1116,7 +1591,20 @@
                 AllowDiscount = x.AllowDiscount,
                 DiscountMode = x.DiscountMode,
                 IsMajor = x.IsMajor,
-                StockNumber = x.StockNumber
+                IsCombo = x.IsCombo,
+                ComboId = x.ComboId,
+                ComboGroupId = x.ComboGroupId,
+                IsComboReturnPolicyApplied = x.IsComboReturnPolicyApplied,
+                StockNumber = x.StockNumber,
+                ComboItems = x.ComboItems.Select(y => new ComboInvoiceItemDto
+                {
+                    PartNumber = y.PartNumber,
+                    ProductName = y.ProductName,
+                    Qty = y.Qty,
+                    IsMajor = y.IsMajor,
+                    StockNumber = y.StockNumber,
+                    StockNumbers = y.StockNumbers.ToList()
+                }).ToList()
             })
             .ToList();
     }
@@ -1211,6 +1699,12 @@
 
     private async Task LoadSysOptionsAsync()
     {
+        if (AuthService.CurrentUser?.IsAdmin != true)
+        {
+            _sysOptions = null;
+            return;
+        }
+
         var res = await SysOptionsService.GetAsync();
         if (res.Success && res.Data != null)
         {

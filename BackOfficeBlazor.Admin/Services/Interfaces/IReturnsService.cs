@@ -13,6 +13,7 @@ namespace BackOfficeBlazor.Admin.Services.Interfaces
         Task<List<ReturnInvoiceLookupDto>> GetInvoicesAsync(DateTime? fromDate, DateTime? toDate, string? customerAccNo);
         Task<List<PosSaleLineDto>> GetInvoiceLinesAsync(string invoiceNo);
         Task<PosReceiptDto?> GetReceiptAsync(string invoiceNo);
+        Task<List<ReturnHistoryDto>> GetReturnHistoryAsync(string invoiceNo);
 
     }
 

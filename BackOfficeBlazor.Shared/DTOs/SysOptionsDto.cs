@@ -153,5 +153,12 @@ namespace BackOfficeBlazor.Shared.DTOs
 
         [StringLength(500)]
         public string BaseCurrency { get; set; } = string.Empty;
+        public bool AllowSeparateComboItemReturn { get; set; } = true;
+        [StringLength(30)]
+        public string ComboPartialReturnRefundMode { get; set; } = "ALLOCATED";
+        [StringLength(10)]
+        public string DiscountPartNumber { get; set; } = string.Empty;
+        [StringLength(40)]
+        public string ReturnStockMode { get; set; } = ReturnStockModes.AskUserEveryReturn;
     }
 }

@@ -11,7 +11,7 @@ namespace BackOfficeBlazor.Shared.DTOs
     {
         [Key]
         [StringLength(4)]
-        public string Code { get; set; }
+        public string? Code { get; set; }
 
         [Required]
         [StringLength(30)]

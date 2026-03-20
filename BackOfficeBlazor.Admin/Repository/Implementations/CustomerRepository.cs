@@ -1,6 +1,7 @@
 ﻿using BackOfficeBlazor.Admin.Context;
 using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using BackOfficeBlazor.Admin.Services;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -41,6 +42,16 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
         public async Task SaveChangesAsync()
         {
             await _context.SaveChangesAsync();
+        }
+
+        public async Task<string?> GetLastAccountNumberAsync()
+        {
+            var values = await _context.Customers
+                .Where(x => !string.IsNullOrWhiteSpace(x.AccNo))
+                .Select(x => x.AccNo)
+                .ToListAsync();
+
+            return SequenceHelper.GetHighestNumericCode(values);
         }
     }
 }

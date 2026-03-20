@@ -1,0 +1,75 @@
+@using System.Collections.Generic
+@namespace POS.UI.Shared
+
+<div class="card shadow-sm border-0 product-list-card" @attributes="CombinedAttributes">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h5 class="fw-bold mb-0">@Title</h5>
+        @if (HeaderActions != null)
+        {
+            <div class="ms-auto d-flex align-items-center gap-2">
+                @HeaderActions
+            </div>
+        }
+    </div>
+
+    <div class="@BodyClass">
+        @ChildContent
+    </div>
+
+    @if (FooterContent != null)
+    {
+        <div class="@FooterClass">
+            @FooterContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Id { get; set; }
+
+    [Parameter]
+    public string? ScopeId { get; set; }
+
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; } = default!;
+
+    [Parameter]
+    public RenderFragment? FooterContent { get; set; }
+
+    [Parameter]
+    public string BodyClass { get; set; } = "card-body p-4";
+
+    [Parameter]
+    public string FooterClass { get; set; } = "card-footer d-flex justify-content-between align-items-center flex-wrap gap-2 py-3 px-4";
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private IReadOnlyDictionary<string, object>? CombinedAttributes
+    {
+        get
+        {
+            if (AdditionalAttributes == null && string.IsNullOrWhiteSpace(Id) && string.IsNullOrWhiteSpace(ScopeId))
+                return null;
+
+            var attributes = AdditionalAttributes != null
+                ? new Dictionary<string, object>(AdditionalAttributes, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(Id))
+                attributes["id"] = Id!;
+
+            if (!string.IsNullOrWhiteSpace(ScopeId))
+                attributes["data-shortcuts-scope"] = ScopeId!;
+
+            return attributes.Count == 0 ? null : attributes;
+        }
+    }
+}

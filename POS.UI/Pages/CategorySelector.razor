@@ -4,26 +4,38 @@
 @inject IJSRuntime JS
 
 <div class="position-relative" @ref="root">
-    <div class="form-control d-flex justify-content-between"
-         style="cursor:pointer"
+    <div class="form-control d-flex justify-content-between align-items-center"
+         style="cursor:pointer; min-height: calc(1.5em + 0.75rem + 2px);"
          @onclick="Toggle">
-        <span>@Display</span>
-        <i class="bi bi-chevron-down"></i>
+        <span class="text-truncate">@Display</span>
+        <span class="d-inline-flex align-items-center gap-2 ms-2">
+            @if (!string.IsNullOrWhiteSpace(Code) || !string.IsNullOrWhiteSpace(Name))
+            {
+                <button type="button"
+                        title="Clear"
+                        aria-label="Clear selection"
+                        style="width:18px; height:18px; border:none; border-radius:50%; background:gray; color:white; display:inline-flex; align-items:center; justify-content:center; font-size:0.85rem; line-height:1; padding:0;"
+                        @onclick="ClearSelection"
+                        @onclick:stopPropagation="true">
+                    ×
+                </button>
+            }
+            <i class="bi bi-chevron-down"></i>
+        </span>
     </div>
 
     @if (open)
     {
-        <div class="border bg-white shadow w-100 p-2"
-             style="position:absolute; top:100%; z-index:1055">
+        <div class="border bg-white shadow p-2"
+             style="position:absolute; top:100%; left:0; z-index:1055; width:clamp(300px, 150%, 560px); max-width:calc(100vw - 1rem); height:260px; min-height:230px; max-height:80vh; display:flex; flex-direction:column; resize:both; overflow:hidden;">
             <div class="p-2 border-bottom">
                 <input class="form-control border"
-                       placeholder="Search..."
                        @oninput="OnInput" />
 
             </div>
            
 
-            <div style="max-height:220px; overflow:auto">
+            <div style="flex:1 1 auto; min-height:80px; overflow:auto">
                 @foreach (var c in filtered)
                 {
                     <button class="list-group-item list-group-item-action"
@@ -34,9 +46,11 @@
             </div>
 
             <div class="border-top p-2 bg-light">
-                <button class="btn text-primary p-0"
-                        @onclick="OpenManage">
-                    ⚙ Manage Categories
+                <button type="button"
+                        class="btn text-primary p-0"
+                        @onclick="OpenManage"
+                        @onclick:stopPropagation="true">
+                    <i class="bi bi-gear me-1"></i>Manage
                 </button>
             </div>
         </div>
@@ -46,7 +60,7 @@
 @if (showManage)
 {
     <div class="modal fade show d-block"
-         style="background:rgba(0,0,0,.5)">
+         style="background:rgba(0,0,0,.5); position:fixed; inset:0; z-index:3000; overflow:auto;">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
 
@@ -56,8 +70,9 @@
                 </div>
 
                 <div class="modal-body">
-                    <CategoryEditor OnSaved="OnCategorySaved"
-                                    OnCancel="CloseManage" />
+                 @*    <CategoryEditor OnSaved="OnCategorySaved"
+                                    OnCancel="CloseManage" /> *@
+                    <Categories  />
                 </div>
 
             </div>
@@ -86,7 +101,7 @@
          ? Name
          : !string.IsNullOrEmpty(Code)
              ? Code
-             : "Select Category";
+             : " ";
 
 
     IEnumerable<CategoryDto> filtered => list;
@@ -154,6 +169,16 @@
         await CodeChanged.InvokeAsync(Code);
         await NameChanged.InvokeAsync(Name);
 
+        open = false;
+    }
+
+    async Task ClearSelection()
+    {
+        Code = "";
+        Name = "";
+        search = "";
+        await CodeChanged.InvokeAsync(Code);
+        await NameChanged.InvokeAsync(Name);
         open = false;
     }
 

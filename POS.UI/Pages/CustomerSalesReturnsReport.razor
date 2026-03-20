@@ -37,9 +37,41 @@
             </div>
 
             <div class="col-md-2">
-                <button class="btn btn-primary w-100" @onclick="LoadReport">
+                <button class="btn btn-primary w-100"
+                        disabled="@(!HasTransactionSelection)"
+                        @onclick="() => LoadReport()">
                     LOAD
                 </button>
+            </div>
+        </div>
+        <div class="row g-3 align-items-center mb-3">
+            <div class="col-md-4">
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           id="toggleSales"
+                           checked="@ShowSales"
+                           @onchange="OnSalesToggle" />
+                    <label class="form-check-label" for="toggleSales">
+                        Include Sales
+                    </label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           id="toggleReturns"
+                           checked="@ShowReturns"
+                           @onchange="OnReturnsToggle" />
+                    <label class="form-check-label" for="toggleReturns">
+                        Include Returns
+                    </label>
+                </div>
+                @if (!HasTransactionSelection)
+                {
+                    <small class="text-danger">
+                        Select at least one transaction type.
+                    </small>
+                }
             </div>
         </div>
         <div class="mb-3">
@@ -97,10 +129,14 @@
         <table class="table table-sm table-bordered">
             <thead class="table-light">
                 <tr>
-                    <th>Date/Time</th>
+                    <th>Date</th>
+                    
+                    <th>Part</th>
+                    <th>Description</th>
+                    <th>Manufacturer</th>
+                    <th>Brand</th>
                     <th>Type</th>
                     <th>Invoice</th>
-                    <th>Part</th>
                     <th>StockNo</th>
                     <th>Qty</th>
                     <th>Sell</th>
@@ -112,21 +148,25 @@
             <tbody>
                 @if (Lines == null)
                 {
-                    <tr><td colspan="10">Load a report</td></tr>
+                    <tr><td colspan="13">Load a report</td></tr>
                 }
                 else if (!Lines.Any())
                 {
-                    <tr><td colspan="10">No records</td></tr>
+                    <tr><td colspan="13">No records</td></tr>
                 }
                 else
                 {
                     @foreach (var line in Lines)
                     {
                         <tr class="@(line.InOut == "R" ? "table-warning" : "")">
-                            <td>@line.DateAndTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)</td>
+                            <td>@line.DateAndTime.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)</td>
+                          
+                            <td>@line.PartNumber</td>
+                            <td>@line.Description</td>
+                            <td>@line.Manufacturer</td>
+                            <td>@line.Brand</td>
                             <td>@(line.InOut == "R" ? "Return" : "Sale")</td>
                             <td>@line.InvoiceNumber</td>
-                            <td>@line.PartNumber</td>
                             <td>@line.StockNo</td>
                             <td>@line.Quantity</td>
                             <td>@line.Sell</td>
@@ -164,6 +204,10 @@
     bool ShowLocationDropdown;
 
     List<CustomerSalesReturnLineDto>? Lines;
+    bool ShowSales = true;
+    bool ShowReturns = true;
+
+    bool HasTransactionSelection => ShowSales || ShowReturns;
 
     decimal TotalSales =>
         Lines?.Where(x => x.InOut == "O").Sum(x => x.Net) ?? 0m;
@@ -171,21 +215,32 @@
     decimal TotalReturns =>
         Lines?.Where(x => x.InOut == "R").Sum(x => Math.Abs(x.Net)) ?? 0m;
 
-    async Task LoadReport()
+    async Task LoadReport(bool showWarning = true)
     {
+        if (!HasTransactionSelection)
+        {
+            if (showWarning)
+            {
+                await AppSnackbar.Show("Select at least one transaction type before loading the report.",
+                    SnackbarType.Warning);
+            }
+            return;
+        }
+
         var request = new CustomerSalesReturnReportRequestDto
         {
             CustomerAccNo = string.IsNullOrWhiteSpace(CustomerAccNo) ? null : CustomerAccNo.Trim(),
             From = FromDate.Date,
             To = ToDate.Date.AddDays(1).AddTicks(-1),
-            Locations = SelectedLocationCodes.ToList()
+            Locations = SelectedLocationCodes.ToList(),
+            TransactionTypes = GetSelectedTransactionTypes()
         };
 
         var res = await ReportService.GetCustomerSalesReturnsAsync(request);
 
         if (!res.Success)
         {
-            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            await AppSnackbar.Show(res.Message, SnackbarType.Error);
             return;
         }
 
@@ -221,6 +276,33 @@
             SelectedLocationCodes.Remove(code);
     }
 
+    List<string> GetSelectedTransactionTypes()
+    {
+        var types = new List<string>();
+        if (ShowSales)
+            types.Add("O");
+        if (ShowReturns)
+            types.Add("R");
+        return types;
+    }
+
+    async Task OnTransactionSelectionChanged()
+    {
+        await LoadReport(false);
+    }
+
+    async Task OnSalesToggle(ChangeEventArgs e)
+    {
+        ShowSales = e.Value is bool b && b;
+        await OnTransactionSelectionChanged();
+    }
+
+    async Task OnReturnsToggle(ChangeEventArgs e)
+    {
+        ShowReturns = e.Value is bool b && b;
+        await OnTransactionSelectionChanged();
+    }
+
     async Task ExportCsv()
     {
         if (Lines == null || !Lines.Any())
@@ -247,7 +329,7 @@
     static string BuildCsv(List<CustomerSalesReturnLineDto> lines)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("DateAndTime,Type,InvoiceNumber,PartNumber,StockNo,Qty,Sell,Net,Vat,Location,Terminal,Customer");
+        sb.AppendLine("DateAndTime,Type,InvoiceNumber,PartNumber,Description,Manufacturer,Brand,StockNo,Qty,Sell,Net,Vat,Location,Terminal,Customer");
 
         foreach (var x in lines)
         {
@@ -256,6 +338,9 @@
                 Csv(x.InOut == "R" ? "Return" : "Sale"),
                 Csv(x.InvoiceNumber),
                 Csv(x.PartNumber),
+                Csv(x.Description),
+                Csv(x.Manufacturer),
+                Csv(x.Brand),
                 Csv(x.StockNo),
                 Csv(x.Quantity.ToString(CultureInfo.InvariantCulture)),
                 Csv(x.Sell.ToString(CultureInfo.InvariantCulture)),
@@ -300,7 +385,7 @@
         sb.Append("</div><br/>");
 
         sb.Append("<table><thead><tr>");
-        sb.Append("<th>Date/Time</th><th>Type</th><th>Invoice</th><th>Part</th><th>StockNo</th>");
+        sb.Append("<th>Date/Time</th><th>Type</th><th>Invoice</th><th>Part</th><th>Description</th><th>Manufacturer</th><th>Brand</th><th>StockNo</th>");
         sb.Append("<th>Qty</th><th>Sell</th><th>Net</th><th>Location</th><th>Terminal</th>");
         sb.Append("</tr></thead><tbody>");
 
@@ -311,6 +396,9 @@
             sb.Append($"<td>{(x.InOut == "R" ? "Return" : "Sale")}</td>");
             sb.Append($"<td>{WebUtility.HtmlEncode(x.InvoiceNumber)}</td>");
             sb.Append($"<td>{WebUtility.HtmlEncode(x.PartNumber)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(x.Description)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(x.Manufacturer)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(x.Brand)}</td>");
             sb.Append($"<td>{WebUtility.HtmlEncode(x.StockNo)}</td>");
             sb.Append($"<td>{x.Quantity}</td>");
             sb.Append($"<td>{x.Sell:0.00}</td>");

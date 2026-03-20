@@ -1,6 +1,10 @@
 ﻿@page "/customer"
 @using BackOfficeBlazor.Shared.DTOs
+@using System.Linq
+@using System.Text.Json
 @using POS.UI.Services
+@using POS.UI.Shared
+
 @inject ICustomerService CustomerService
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
@@ -10,59 +14,56 @@
 
 <PageTitle>Customer Maintenance</PageTitle>
 
-<h5 class="fw-bold mt-3">Customer Maintenance</h5>
-
-<div id="customer-form" class="card card-warning card-outline" data-shortcuts-scope>
-    <div class="card-body">
-
-        <!-- Account No + Search -->
-        <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Account No</label>
-            <div class="col-sm-1">
-@* 
-                <input id="partNumber"
-                       class="form-control"
-                       @bind="model.PartNumber"
-                       maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.PartNumber)))"
-                       @onblur="OnPartNumberBlur"
-                       @onkeydown="OnFieldKeyDown"
-                       disabled="@isPartNumberDisabled" /> *@
-                <input id="AccNo"    
-                       class="form-control"
-                       @bind="model.AccNo"
-                       maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.AccNo)))"
-                       @onkeydown="OnAccKeyDown"
-                       data-enter-skip="true"
-                       disabled="@isAccLocked"
-                       @ref="accInput" />
-            </div>
-            <div class="col-sm-1">
-                <button type="button"
-                        class="btn btn-primary w-100"
-                        @onclick="Search">
-                    Search
-                </button>
+<FormGlassLayout Title="Customer Maintenance"
+                 Id="customer-form"
+                 ScopeId="customer-form">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3">
+            <div class="row mb-3 align-items-center">
+                <label class="col-sm-2 col-lg-1 form-label-custom">Account No</label>
+                <div class="col-sm-3 col-lg-2">
+                    <input id="AccNo"
+                           class="form-control"
+                           @bind="model.AccNo"
+                           maxlength="5"
+                           @onkeydown="OnAccKeyDown"
+                           data-enter-skip="true"
+                           disabled="@isAccLocked"
+                           @ref="accInput" />
+                    <div class="form-text text-muted small mt-1">
+                        Leave blank to auto-generate after saving.
+                    </div>
+                </div>
+                <div class="col-sm-2 col-lg-1">
+                    <button type="button"
+                            class="btn btn-primary w-100 search-btn"
+                            @onclick="Search">
+                        Search
+                    </button>
+                </div>
             </div>
         </div>
 
-        <hr />
+        <div class="section-divider"></div>
 
-        <!-- Customer Details -->
-        <h5 class="fw-bold text-primary">Billing Details</h5>
+        <div class="glass-panel border rounded-3 px-3 py-3">
+            <div class="info-header">
+                <h6 class="fw-bold mb-0 text-primary">Billing Details</h6>
+            </div>
 
         <div class="row">
             <div class="col-md-6">
 
                 <div class="row mb-2">
                     <div class="col-sm-3">
-                        <label>Title</label>
+                        <label class="form-label-custom">Title</label>
                         <input class="form-control"
                                @bind="model.Title"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Title)))"
                                @ref="titleInput" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Initials</label>
+                        <label class="form-label-custom">Initials</label>
                         <input class="form-control"
                                @bind="model.Initials"
                                 
@@ -74,14 +75,14 @@
                         <input class="form-control" @bind="model.HouseName" />
                     </div> *@
                     <div class="col-sm-3">
-                        <label>Firstname</label>
+                        <label class="form-label-custom">Firstname</label>
                         <input class="form-control"
                                @bind="model.Firstname"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Firstname)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Surname</label>
+                        <label class="form-label-custom">Surname</label>
                         <input class="form-control"
                                @bind="model.Surname"
                                 
@@ -94,28 +95,28 @@
                 <div class="row mb-2">
 
                     <div class="col-sm-3">
-                        <label>Address 1</label>
+                        <label class="form-label-custom">Address 1</label>
                         <input class="form-control"
                                @bind="model.Address1"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address1)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 2</label>
+                        <label class="form-label-custom">Address 2</label>
                         <input class="form-control mb-1"
                                @bind="model.Address2"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address2)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 3</label>
+                        <label class="form-label-custom">Address 3</label>
                         <input class="form-control mb-1"
                                @bind="model.Address3"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Address3)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 4</label>
+                        <label class="form-label-custom">Address 4</label>
                         <input class="form-control mb-2"
                                @bind="model.Address4"
                                 
@@ -124,14 +125,14 @@
                 </div>
                 <div class="row mb-2">
                     <div class="col-sm-3">
-                        <label>Country</label>
+                        <label class="form-label-custom">Country</label>
                         <input class="form-control"
                                @bind="model.Country"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Country)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Postcode</label>
+                        <label class="form-label-custom">Postcode</label>
                         <input class="form-control"
                                @bind="model.Postcode"
                                 
@@ -141,28 +142,28 @@
                 </div>
                 <div class="row mb-2">
                     <div class="col-sm-3">
-                        <label>Email</label>
+                        <label class="form-label-custom">Email</label>
                         <input class="form-control"
                                @bind="model.Email"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Email)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Telephone</label>
+                        <label class="form-label-custom">Telephone</label>
                         <input class="form-control"
                                @bind="model.Telephone"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Telephone)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Mobile</label>
+                        <label class="form-label-custom">Mobile</label>
                         <input class="form-control"
                                @bind="model.Mobile"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Mobile)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Work Phone</label>
+                        <label class="form-label-custom">Work Phone</label>
                         <input class="form-control"
                                @bind="model.WorkPhone"
                                 
@@ -179,28 +180,28 @@
             <div class="col-md-6">
                 <div class="row mb-2">
                     <div class="col-sm-2">
-                        <label>Category</label>
+                        <label class="form-label-custom">Category</label>
                         <input class="form-control"
                                @bind="model.Category"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.Category)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Loyalty No</label>
+                        <label class="form-label-custom">Loyalty No</label>
                         <input class="form-control"
                                @bind="model.LoyaltyNo"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.LoyaltyNo)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Date of Birth</label>
+                        <label class="form-label-custom">Date of Birth</label>
                         <input type="date"
                                class="form-control"
                                 
                                @bind="model.DOB" />
                     </div>
                 </div>
-                <label>Credit & Discounts</label>
+                <label class="form-label-custom">Credit & Discounts</label>
                 <div class="row mb-2">
                     <div class="col-sm-6">
                         <input type="number"
@@ -260,7 +261,7 @@
                     <label class="form-check-label" for="custVatExempt">VAT Exempt</label>
                 </div>
 
-                <div class="form-check form-switch mb-3">
+                <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" role="switch"   @bind="model.Autopay" id="custAutopay" />
                     <label class="form-check-label" for="custAutopay">Autopay</label>
                 </div>
@@ -268,38 +269,42 @@
             </div>
         </div>
 
-        <hr />
+        </div>
 
-        <!-- Delivery Details -->
-        <h5 class="fw-bold text-primary">Delivery Details</h5>
+        <div class="section-divider"></div>
+
+        <div class="glass-panel border rounded-3 px-3 py-3">
+        <div class="info-header">
+            <h6 class="fw-bold mb-0 text-primary">Delivery Details</h6>
+        </div>
 
         <div class="row">
             <div class="col-md-6">
 
                 <div class="row mb-2">
                     <div class="col-sm-3">
-                        <label>Title</label>
+                        <label class="form-label-custom">Title</label>
                         <input class="form-control"
                                @bind="model.DeliveryTitle"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryTitle)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Initials</label>
+                        <label class="form-label-custom">Initials</label>
                         <input class="form-control"
                                @bind="model.DeliveryInitials"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryInitials)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Firstname</label>
+                        <label class="form-label-custom">Firstname</label>
                         <input class="form-control"
                                @bind="model.DeliveryFirstname"
                                 
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryFirstname)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Surname</label>
+                        <label class="form-label-custom">Surname</label>
                         <input class="form-control"
                                @bind="model.DeliverySurname"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliverySurname)))" />
@@ -307,43 +312,43 @@
                 </div>
                 <div class="row mb-2">
                     <div class="col-sm-3">
-                        <label>House Name</label>
+                        <label class="form-label-custom">House Name</label>
                         <input class="form-control"
                                @bind="model.DeliveryHousename"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryHousename)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 1</label>
+                        <label class="form-label-custom">Address 1</label>
                         <input class="form-control mb-1"
                                @bind="model.DeliveryAddress1"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress1)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 2</label>
+                        <label class="form-label-custom">Address 2</label>
                         <input class="form-control mb-1"
                                @bind="model.DeliveryAddress2"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress2)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 3</label>
+                        <label class="form-label-custom">Address 3</label>
                         <input class="form-control mb-1"
                                @bind="model.DeliveryAddress3"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress3)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Address 4</label>
+                        <label class="form-label-custom">Address 4</label>
                         <input class="form-control mb-2"
                                @bind="model.DeliveryAddress4"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryAddress4)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Postcode</label>
+                        <label class="form-label-custom">Postcode</label>
                         <input class="form-control"
                                @bind="model.DeliveryPostcode"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryPostcode)))" />
                     </div>
                     <div class="col-sm-3">
-                        <label>Country</label>
+                        <label class="form-label-custom">Country</label>
                         <input class="form-control"
                                @bind="model.DeliveryCountry"
                                maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.DeliveryCountry)))" />
@@ -352,25 +357,83 @@
 
             </div>
         </div>
+        </div>
+        </ChildContent>
+        <FooterContent>
+            <div>
+                @if (recordExists)
+                {
+                    <button type="button" class="btn btn-danger" @onclick="Delete">Delete</button>
+                }
+            </div>
+            <div class="d-flex justify-content-end gap-2 ms-auto">
+                <button type="button" class="btn btn-primary px-4" @onclick="Save">OK</button>
+                <button type="button" class="btn btn-outline-secondary px-4" @onclick="Reset">Cancel</button>
+            </div>
+        </FooterContent>
+</FormGlassLayout>
 
+<div class="card mt-4 shadow-sm border-0">
+    
+    <div class="card-body p-0">
+        <GenericGrid @ref="savedCustomersGrid"
+                     Title="Saved Customers"
+                     GridKey="saved-customers"
+                     Columns="SavedCustomerColumns"
+                     LoadData="LoadSavedCustomersForGrid"
+                     OnRowClick="@( (CustomerDto item) => FillFormFromRow(item) )"
+                     RowCssClass="GetCustomerRowClass" />
     </div>
-
-    <div class="card-footer text-end">
-        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
-        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
-
-        @if (recordExists)
-        {
-            <button type="button" class="btn btn-danger float-start" @onclick="Delete">Delete</button>
-        }
-    </div>
-
 </div>
 
 @code {
     CustomerDto model = new();
     bool recordExists = false;
     bool isAccLocked = false;
+    private string? selectedCustomerAccNo;
+    private bool isRowSelecting;
+    private GenericGrid<CustomerDto>? savedCustomersGrid;
+    private readonly List<GridColumn<CustomerDto>> SavedCustomerColumns = new()
+    {
+        new GridColumn<CustomerDto>
+        {
+            Title = "Account",
+            Key = nameof(CustomerDto.AccNo),
+            Value = c => c.AccNo,
+            ColumnFilterType = GridFilterType.Text,
+            IsHideable = false,
+            IsVisible = true
+        },
+        new GridColumn<CustomerDto>
+        {
+            Title = "Name",
+            Key = "CustomerName",
+            Value = c => RenderCustomerNameForGrid(c),
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<CustomerDto>
+        {
+            Title = "Email",
+            Key = nameof(CustomerDto.Email),
+            Value = c => c.Email,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<CustomerDto>
+        {
+            Title = "Telephone",
+            Key = nameof(CustomerDto.Telephone),
+            Value = c => c.Telephone,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
 
     ElementReference accInput;
     ElementReference titleInput;
@@ -462,28 +525,45 @@
             model = new CustomerDto { AccNo = acc };
             recordExists = false;
 
-            await AppSnackbar.Show(
-                "Customer not found. New record will be created.",
+            await AppSnackbar.Show("Customer not found. New record will be created.",
                 SnackbarType.Warning);
+        
+            model.AccNo = "";
+            isAccLocked = true;
         }
     }
     async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(model.AccNo))
-        {
-            await AppSnackbar.Show("Account No is required", SnackbarType.Error);
-           
-            return;
-        }
-
+        var isNewInsert = string.IsNullOrWhiteSpace(model.AccNo);
         var res = await CustomerService.SaveAsync(model);
 
         if (res?.Success == true)
-            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+        {
+            if (isNewInsert)
+            {
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                await Reset();
+            }
+            else
+            {
+                if (res.Data != null)
+                {
+                    model = res.Data;
+                }
+
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                recordExists = true;
+                selectedCustomerAccNo = model.AccNo;
+                isAccLocked = true;
+
+                if (savedCustomersGrid != null)
+                    await savedCustomersGrid.ReloadAsync();
+            }
+        }
         else
+        {
             await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
-        if (res?.Success == true)
-            recordExists = true;
+        }
     }
 
     async Task Delete()
@@ -493,10 +573,14 @@
         var res = await CustomerService.DeleteAsync(model.AccNo);
 
         if (res?.Success == true)
+        {
             await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
+            await Reset();
+        }
         else
+        {
             await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
-        await Reset();
+        }
     }
 
     async Task Reset()
@@ -504,10 +588,79 @@
         model = new CustomerDto();
         recordExists = false;
         isAccLocked = false;   // 🔴 IMPORTANT
+        selectedCustomerAccNo = null;
 
         await InvokeAsync(StateHasChanged);
+        if (savedCustomersGrid != null)
+            await savedCustomersGrid.ReloadAsync();
         await accInput.FocusAsync();
     }
+
+    private async Task<List<CustomerDto>> LoadSavedCustomersForGrid()
+    {
+        var res = await CustomerService.GetAllAsync();
+
+        if (res?.Success == true && res.Data != null)
+        {
+            return res.Data
+                .Where(x => !string.IsNullOrWhiteSpace(x.AccNo))
+                .OrderBy(x => x.AccNo)
+                .ToList();
+        }
+
+        return new();
+    }
+
+    private async Task FillFormFromRow(CustomerDto customer)
+    {
+        if (customer == null || string.IsNullOrWhiteSpace(customer.AccNo))
+            return;
+
+        // Avoid wiping unsaved changes on repeated clicks of the already-selected row.
+        if (string.Equals(customer.AccNo, selectedCustomerAccNo, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (isRowSelecting)
+            return;
+
+        isRowSelecting = true;
+        try
+        {
+        var clone = JsonSerializer.Deserialize<CustomerDto>(
+            JsonSerializer.Serialize(customer)) ?? new CustomerDto();
+
+        model = clone;
+        recordExists = true;
+        isAccLocked = true;
+        selectedCustomerAccNo = customer.AccNo;
+
+        await InvokeAsync(StateHasChanged);
+        await titleInput.FocusAsync();
+        }
+        finally
+        {
+            isRowSelecting = false;
+        }
+    }
+
+    private string RenderCustomerName(CustomerDto customer)
+    {
+        var names = new[] { customer.Firstname, customer.Surname }
+           .Where(s => !string.IsNullOrWhiteSpace(s));
+        return string.Join(" ", names);
+    }
+
+    private static string RenderCustomerNameForGrid(CustomerDto customer)
+    {
+        var names = new[] { customer.Firstname, customer.Surname }
+           .Where(s => !string.IsNullOrWhiteSpace(s));
+        return string.Join(" ", names);
+    }
+
+    private string GetCustomerRowClass(CustomerDto item) =>
+        string.Equals(item.AccNo, selectedCustomerAccNo, StringComparison.OrdinalIgnoreCase)
+            ? "table-primary"
+            : string.Empty;
     public async ValueTask DisposeAsync()
     {
         dotNetRef?.Dispose();

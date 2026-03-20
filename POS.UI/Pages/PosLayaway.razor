@@ -13,9 +13,10 @@
 
 <PageTitle>Layaway</PageTitle>
 
-<div class="card shadow-sm mb-3">
-    <div class="card-header fw-bold">New Layaway Cart</div>
-    <div class="card-body">
+<div class="card shadow-sm border-0 product-list-card mb-3">
+    <div class="card-header bg-white fw-bold">New Layaway Cart</div>
+    <div class="card-body p-4">
+        <div class="glass-panel border rounded-3 px-3 py-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 Customer:
@@ -34,7 +35,7 @@
 
         <div class="row g-2 align-items-end mb-2">
             <div class="col-md-2">
-                <label class="form-label">Part Number</label>
+                <label class="form-label-custom required-label">Part Number</label>
                 <input class="form-control"
                        @bind="DraftPartNumber"
                        maxlength="@(MaxLengthHelper.For<LayawayLineDto>(nameof(LayawayLineDto.PartNumber)))" />
@@ -54,7 +55,7 @@
         {
             <div class="row g-2 align-items-end mb-2">
                 <div class="col-md-4">
-                    <label class="form-label">Stock Number</label>
+                    <label class="form-label-custom">Stock Number</label>
                     <select class="form-select" @bind="DraftSelectedStockNumber">
                         <option value="">-- Select Stock Number --</option>
                         @foreach (var sn in DraftAvailableStockNumbers)
@@ -126,15 +127,17 @@
             <button class="btn btn-danger" @onclick="ClearDraftCart">Clear</button>
             <button class="btn btn-success" @onclick="CreateLayawayFromDraft">Create Layaway</button>
         </div>
+        </div>
     </div>
 </div>
 
-<div class="card shadow-sm mb-3">
-    <div class="card-header fw-bold">LAYAWAY LIST</div>
-    <div class="card-body">
+<div class="card shadow-sm border-0 product-list-card mb-3">
+    <div class="card-header bg-white fw-bold">LAYAWAY LIST</div>
+    <div class="card-body p-4">
+        <div class="glass-panel border rounded-3 px-3 py-3">
         <div class="row g-2 align-items-end mb-3">
             <div class="col-md-3">
-                <label class="form-label">Customer Account (optional)</label>
+                <label class="form-label-custom">Customer Account (optional)</label>
                 <input class="form-control"
                        @bind="FilterCustomer"
                        maxlength="@(MaxLengthHelper.For<LayawayDetailDto>(nameof(LayawayDetailDto.CustomerAccNo)))" />
@@ -197,16 +200,18 @@
                 }
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 
 @if (SelectedDetail != null)
 {
-    <div class="card shadow-sm">
-        <div class="card-header fw-bold">
+    <div class="card shadow-sm border-0 product-list-card">
+        <div class="card-header bg-white fw-bold">
             EDIT LAYAWAY — @SelectedDetail.LayawayNo
         </div>
-        <div class="card-body">
+        <div class="card-body p-4">
+            <div class="glass-panel border rounded-3 px-3 py-3">
             <div class="mb-2">
                 Customer: <b>@SelectedDetail.CustomerAccNo</b> |
                 Location: <b>@SelectedDetail.Location</b>
@@ -259,13 +264,13 @@
                 <div class="fw-bold mb-2">Add Item</div>
                 <div class="row g-2 align-items-end">
                     <div class="col-md-4">
-                        <label class="form-label">Part Number</label>
+                        <label class="form-label-custom required-label">Part Number</label>
                         <input class="form-control"
                                @bind="NewPartNumber"
                                maxlength="@(MaxLengthHelper.For<LayawayLineDto>(nameof(LayawayLineDto.PartNumber)))" />
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Qty</label>
+                        <label class="form-label-custom required-label">Qty</label>
                         <input type="number" class="form-control" @bind="NewQty" min="1" />
                     </div>
                     <div class="col-md-3">
@@ -279,7 +284,7 @@
                 {
                     <div class="row g-2 mt-2 align-items-end">
                         <div class="col-md-4">
-                            <label class="form-label">Stock Number</label>
+                            <label class="form-label-custom">Stock Number</label>
                             <select class="form-select" @bind="SelectedStockNumber">
                                 <option value="">-- Select Stock Number --</option>
                                 @foreach (var sn in AvailableStockNumbers)
@@ -305,6 +310,7 @@
                         </div>
                     </div>
                 }
+            </div>
             </div>
         </div>
     </div>

@@ -15,6 +15,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
         Task AddAsync(Supplier supplier);
         Task UpdateAsync(Supplier supplier);
         Task SaveChangesAsync();
+        Task<string?> GetLastAccountNumberAsync();
         Task<List<SupplierDto>> SuggestSuppliersAsync(string query);
     }
 }

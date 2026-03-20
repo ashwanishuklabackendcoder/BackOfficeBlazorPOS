@@ -2,37 +2,57 @@
 @using POS.UI.Services
 @inject IManufacturerService BrandService
 @inject IJSRuntime JS
-@inject AppSnackbarService AppSnackbar
 
 
 <div class="position-relative" @ref="root">
     <!-- Selector -->
     <div class="form-control d-flex justify-content-between align-items-center"
-         style="cursor:pointer"
+         style="cursor:pointer; min-height: calc(1.5em + 0.75rem + 2px);"
          @onclick="ToggleDropdown">
-        <span>@(string.IsNullOrWhiteSpace(Value) ? "Select Brand" : Value)</span>
-        <i class="bi bi-chevron-down"></i>
+        <span class="text-truncate">@(string.IsNullOrWhiteSpace(Value) ? " " : Value)</span>
+        <span class="d-inline-flex align-items-center gap-2 ms-2">
+            @if (!string.IsNullOrWhiteSpace(Value))
+            {
+                <button type="button"
+                        title="Clear"
+                        aria-label="Clear selection"
+                        style="width:18px; height:18px; border:none; border-radius:50%; background:gray; color:white; display:inline-flex; align-items:center; justify-content:center; font-size:0.85rem; line-height:1; padding:0;"
+                        @onclick="ClearSelection"
+                        @onclick:stopPropagation="true">
+                    ×
+                </button>
+            }
+            <i class="bi bi-chevron-down"></i>
+        </span>
     </div>
 
     @if (isOpen)
     {
-        <div class="border rounded shadow bg-white w-100 p-2"
+        <div class="border rounded shadow bg-white p-2"
              style="position:absolute;
                     top:100%;
                     left:0;
-                    z-index:1055;">
+                    z-index:1055;
+                    width:clamp(300px, 150%, 560px);
+                    max-width:calc(100vw - 1rem);
+                    height:260px;
+                    min-height:230px;
+                    max-height:80vh;
+                    display:flex;
+                    flex-direction:column;
+                    resize:both;
+                    overflow:hidden;">
 
             <!-- Search (fixed) -->
             <div class="p-2 border-bottom">
                 <input class="form-control border"
-                       placeholder="Search..."
                        @bind="search"
                        @bind:event="oninput" />
          
             </div>
          
             <!-- Scrollable list -->
-            <div style="max-height:220px; overflow:auto">
+            <div style="flex:1 1 auto; min-height:80px; overflow:auto">
                 @foreach (var b in FilteredBrands)
                 {
                     <button type="button"
@@ -45,9 +65,11 @@
 
             <!-- Manage (fixed bottom) -->
             <div class="border-top p-2 bg-light">
-                <button class="btn text-primary p-0"
-                        @onclick="OpenManageModal">
-                    ? Manage Brands
+                <button type="button"
+                        class="btn text-primary p-0"
+                        @onclick="OpenManageModal"
+                        @onclick:stopPropagation="true">
+                    <i class="bi bi-gear me-1"></i>Manage
                 </button>
             </div>
         </div>
@@ -58,7 +80,7 @@
 @if (showManage)
 {
     <div class="modal fade show d-block"
-         style="background:rgba(0,0,0,.5);">
+         style="background:rgba(0,0,0,.5); position:fixed; inset:0; z-index:3000; overflow:auto;">
 
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content" style="max-height:90vh;">
@@ -82,12 +104,10 @@
                         <div class="border p-3 mb-3 rounded">
                             <label class="form-label text-danger">Brand Code *</label>
                             <input class="form-control"
-                                   id="brand-code-input"
                                    @bind="editId"
                                    maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Code)))" />
                             <label class="form-label text-danger">Brand Name *</label>
                             <input class="form-control"
-                                   id="brand-name-input"
                                    @bind="editBrandName"
                                    maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Name)))" />
 
@@ -193,6 +213,14 @@
         isOpen = false;
     }
 
+    async Task ClearSelection()
+    {
+        Value = "";
+        search = "";
+        await ValueChanged.InvokeAsync(Value);
+        isOpen = false;
+    }
+
     void OpenManageModal()
     {
         isOpen = false;
@@ -220,19 +248,8 @@
     }
     async Task SaveBrand()
     {
-        if (string.IsNullOrWhiteSpace(editId))
-        {
-            await AppSnackbar.Show("Brand Code is required", SnackbarType.Error);
-            await JS.InvokeVoidAsync("blazorForms.focusById", "brand-code-input");
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(editBrandName))
-        {
-            await AppSnackbar.Show("Brand Name is required", SnackbarType.Error);
-            await JS.InvokeVoidAsync("blazorForms.focusById", "brand-name-input");
             return;
-        }
 
         var dto = new ManufacturerDto
         {
@@ -244,12 +261,8 @@
 
         if (response?.Success != true)
         {
-            await AppSnackbar.Show(response?.Message ?? "Save failed", SnackbarType.Error);
-            await JS.InvokeVoidAsync(
-                "blazorForms.focusById",
-                string.Equals(response?.Message, "Manufacturer already exists", StringComparison.OrdinalIgnoreCase)
-                    ? "brand-name-input"
-                    : "brand-code-input");
+            // TODO: replace with toast / alert UI if you have
+            Console.WriteLine(response?.Message ?? "Save failed");
             return;
         }
 

@@ -14,6 +14,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using POSAPI.Config;
 using POSAPI.Hubs;
+using POSAPI.Security;
 using POSAPI.Services;
 using System.Text;
 
@@ -41,6 +42,7 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddDataProtection();
 builder.Services.AddSignalR();
+builder.Services.AddMemoryCache();
 
 //builder.Services.AddScoped<IImageService, CloudinaryImageService>();
 
@@ -65,12 +67,15 @@ builder.Services.AddScoped<ISysOptionRepository, SysOptionRepository>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<IComboRepository, ComboRepository>();
 builder.Services.AddScoped<IProductStockRepository, ProductStockRepository>();
 builder.Services.AddScoped<IStockLevelRepository, StockLevelRepository>();
 
 builder.Services.AddScoped<IStockInputService, StockInputService>();
 builder.Services.AddScoped<ISalesRepository, SalesRepositroy>();
 builder.Services.AddScoped<ISalesService, SalesService>();
+builder.Services.AddScoped<IComboService, ComboService>();
+builder.Services.AddScoped<IStockMovementEngine, StockMovementEngine>();
 builder.Services.AddScoped<IStaffUserRepository, StaffUserRepository>();
 builder.Services.AddScoped<IStaffUserPermissionRepository, StaffUserPermissionRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -106,6 +111,8 @@ builder.Services.AddSingleton<IPrintAgentPresenceService>(sp => sp.GetRequiredSe
 builder.Services.AddScoped<IPrintJobDispatcher, SignalRPrintJobDispatcher>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IQuickShortcutService, QuickShortcutService>();
+builder.Services.AddScoped<IProductEnquiryService, ProductEnquiryService>();
+builder.Services.AddScoped<ApiAccessService>();
 
 
 
@@ -173,6 +180,8 @@ using (var scope = app.Services.CreateScope())
     await EnsureStaffAuthSchemaAsync(db);
     await EnsurePrinterSchemaAsync(db);
     await EnsureQuickShortcutSchemaAsync(db);
+    await EnsureComboSchemaAsync(db);
+    await EnsureReturnsTrackingSchemaAsync(db);
     var bootstrapUsername = builder.Configuration["AuthBootstrap:Username"] ?? "admin";
     var bootstrapPassword = builder.Configuration["AuthBootstrap:Password"] ?? "Admin@123";
     var bootstrapName = builder.Configuration["AuthBootstrap:FullName"] ?? "System Administrator";
@@ -390,6 +399,205 @@ static async Task EnsureQuickShortcutSchemaAsync(BackOfficeAdminContext db)
             ALTER TABLE [dbo].[QuickShortcutItems]
                 ADD [ForeColorHex] NVARCHAR(16) NOT NULL
                     CONSTRAINT [DF_QuickShortcutItems_ForeColorHex] DEFAULT('#212529');
+        END
+        """);
+}
+
+static async Task EnsureComboSchemaAsync(BackOfficeAdminContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF OBJECT_ID(N'dbo.ComboMaster', N'U') IS NULL
+        BEGIN
+            CREATE TABLE [dbo].[ComboMaster](
+                [ComboId] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [ComboPartNumber] VARCHAR(10) NOT NULL,
+                [ComboName] VARCHAR(200) NOT NULL,
+                [NumberOfProductsIncluded] INT NOT NULL,
+                [TotalQty] INT NOT NULL,
+                [TotalPrice] NUMERIC(18,2) NOT NULL,
+                [OfferPrice] NUMERIC(18,2) NOT NULL,
+                [ComboPrice] NUMERIC(18,2) NOT NULL,
+                [DiscountPrice] NUMERIC(18,2) NOT NULL,
+                [IsActive] BIT NOT NULL CONSTRAINT [DF_ComboMaster_IsActive] DEFAULT(1),
+                [CreatedOn] DATETIME NOT NULL CONSTRAINT [DF_ComboMaster_CreatedOn] DEFAULT(GETDATE()),
+                [UpdatedOn] DATETIME NULL
+            );
+
+            CREATE UNIQUE INDEX [IX_ComboMaster_ComboPartNumber]
+                ON [dbo].[ComboMaster]([ComboPartNumber]);
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF OBJECT_ID(N'dbo.ComboDetail', N'U') IS NULL
+        BEGIN
+            CREATE TABLE [dbo].[ComboDetail](
+                [ComboDetailId] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [ComboId] INT NOT NULL,
+                [PartNumber] VARCHAR(10) NOT NULL,
+                [ProductName] VARCHAR(500) NULL,
+                [ImageMain] VARCHAR(MAX) NULL,
+                [Qty] INT NOT NULL,
+                [UnitPrice] NUMERIC(18,2) NOT NULL,
+                [PromoPrice] NUMERIC(18,2) NULL,
+                [LineTotal] NUMERIC(18,2) NOT NULL,
+                [PromoLineTotal] NUMERIC(18,2) NOT NULL,
+                CONSTRAINT [FK_ComboDetail_ComboMaster_ComboId]
+                    FOREIGN KEY([ComboId]) REFERENCES [dbo].[ComboMaster]([ComboId])
+                    ON DELETE CASCADE
+            );
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.FTT05', 'Description') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[FTT05] ADD [Description] VARCHAR(500) NOT NULL CONSTRAINT [DF_FTT05_Description] DEFAULT('');
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.FTT05', 'ComboId') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[FTT05] ADD [ComboId] INT NULL;
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.FTT05', 'IsCombo') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[FTT05] ADD [IsCombo] BIT NULL;
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.FTT05', 'ComboGroupId') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[FTT05] ADD [ComboGroupId] NVARCHAR(40) NOT NULL CONSTRAINT [DF_FTT05_ComboGroupId] DEFAULT('');
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.FTT05', 'IsComboReturnPolicyApplied') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[FTT05] ADD [IsComboReturnPolicyApplied] BIT NULL;
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.FTT05', 'OriginalSaleLineId') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[FTT05] ADD [OriginalSaleLineId] INT NULL;
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.SysOptions', 'AllowSeparateComboItemReturn') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[SysOptions] ADD [AllowSeparateComboItemReturn] BIT NOT NULL CONSTRAINT [DF_SysOptions_AllowSeparateComboItemReturn] DEFAULT(1);
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.SysOptions', 'ComboPartialReturnRefundMode') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[SysOptions] ADD [ComboPartialReturnRefundMode] NVARCHAR(30) NOT NULL CONSTRAINT [DF_SysOptions_ComboPartialReturnRefundMode] DEFAULT('ALLOCATED');
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.SysOptions', 'DiscountPartNumber') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[SysOptions] ADD [DiscountPartNumber] VARCHAR(10) NULL;
+        END
+        """);
+}
+
+static async Task EnsureReturnsTrackingSchemaAsync(BackOfficeAdminContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.SysOptions', 'ReturnStockMode') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[SysOptions]
+                ADD [ReturnStockMode] NVARCHAR(40) NOT NULL
+                    CONSTRAINT [DF_SysOptions_ReturnStockMode] DEFAULT('ASK_USER_EVERY_RETURN');
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF OBJECT_ID(N'dbo.ReturnItemTracking', N'U') IS NULL
+        BEGIN
+            CREATE TABLE [dbo].[ReturnItemTracking](
+                [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [InvoiceNo] NVARCHAR(30) NOT NULL,
+                [OriginalSaleLineId] INT NULL,
+                [ProductId] NVARCHAR(20) NOT NULL,
+                [ProductName] NVARCHAR(500) NOT NULL CONSTRAINT [DF_ReturnItemTracking_ProductName] DEFAULT(''),
+                [Qty] INT NOT NULL,
+                [Reason] NVARCHAR(250) NOT NULL CONSTRAINT [DF_ReturnItemTracking_Reason] DEFAULT(''),
+                [Condition] NVARCHAR(50) NOT NULL CONSTRAINT [DF_ReturnItemTracking_Condition] DEFAULT('OK / Sellable'),
+                [ReturnDate] DATETIME2 NOT NULL CONSTRAINT [DF_ReturnItemTracking_ReturnDate] DEFAULT(SYSUTCDATETIME()),
+                [StockMovementStatus] NVARCHAR(60) NOT NULL CONSTRAINT [DF_ReturnItemTracking_StockMovementStatus] DEFAULT('Return recorded - not added to stock'),
+                [StoreId] NVARCHAR(2) NOT NULL CONSTRAINT [DF_ReturnItemTracking_StoreId] DEFAULT('01'),
+                [CreatedBy] NVARCHAR(50) NOT NULL CONSTRAINT [DF_ReturnItemTracking_CreatedBy] DEFAULT(''),
+                [ReferenceReturnId] INT NULL
+            );
+
+            CREATE INDEX [IX_ReturnItemTracking_InvoiceNo_OriginalSaleLineId_ReferenceReturnId]
+                ON [dbo].[ReturnItemTracking]([InvoiceNo], [OriginalSaleLineId], [ReferenceReturnId]);
+        END
+
+        IF OBJECT_ID(N'dbo.ReturnItemTracking', N'U') IS NOT NULL
+           AND COL_LENGTH('dbo.ReturnItemTracking', 'InvoiceNo') < 60
+        BEGIN
+            ALTER TABLE [dbo].[ReturnItemTracking] ALTER COLUMN [InvoiceNo] NVARCHAR(30) NOT NULL;
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF OBJECT_ID(N'dbo.ReturnFaultyItems', N'U') IS NULL
+        BEGIN
+            CREATE TABLE [dbo].[ReturnFaultyItems](
+                [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [InvoiceNo] NVARCHAR(30) NOT NULL,
+                [ProductId] NVARCHAR(20) NOT NULL,
+                [Qty] INT NOT NULL,
+                [Reason] NVARCHAR(250) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_Reason] DEFAULT(''),
+                [Condition] NVARCHAR(50) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_Condition] DEFAULT('Faulty'),
+                [ReturnDate] DATETIME2 NOT NULL CONSTRAINT [DF_ReturnFaultyItems_ReturnDate] DEFAULT(SYSUTCDATETIME()),
+                [SaleDate] DATETIME2 NULL,
+                [SaleAmount] DECIMAL(18,2) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_SaleAmount] DEFAULT(0),
+                [ReturnAmount] DECIMAL(18,2) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_ReturnAmount] DEFAULT(0),
+                [DiscountAmount] DECIMAL(18,2) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_DiscountAmount] DEFAULT(0),
+                [CustomerAccount] NVARCHAR(20) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_CustomerAccount] DEFAULT(''),
+                [SalesCode] NVARCHAR(20) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_SalesCode] DEFAULT(''),
+                [StoreId] NVARCHAR(2) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_StoreId] DEFAULT('01'),
+                [CreatedBy] NVARCHAR(50) NOT NULL CONSTRAINT [DF_ReturnFaultyItems_CreatedBy] DEFAULT(''),
+                [ReferenceReturnId] INT NULL
+            );
+
+            CREATE INDEX [IX_ReturnFaultyItems_InvoiceNo_ProductId_ReferenceReturnId]
+                ON [dbo].[ReturnFaultyItems]([InvoiceNo], [ProductId], [ReferenceReturnId]);
+        END
+
+        IF OBJECT_ID(N'dbo.ReturnFaultyItems', N'U') IS NOT NULL
+           AND COL_LENGTH('dbo.ReturnFaultyItems', 'InvoiceNo') < 60
+        BEGIN
+            ALTER TABLE [dbo].[ReturnFaultyItems] ALTER COLUMN [InvoiceNo] NVARCHAR(30) NOT NULL;
         END
         """);
 }

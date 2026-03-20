@@ -1,0 +1,546 @@
+@page "/combo"
+@page "/combo/{ComboId:int}"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IComboApiService ComboApi
+@inject AppSnackbarService AppSnackbar
+@inject NavigationManager Nav
+
+<PageTitle>Combo Builder</PageTitle>
+
+<style>
+    .combo-card {
+        border: 1px solid #dfe6ee;
+        border-radius: 0.75rem;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(26, 45, 66, 0.06);
+    }
+
+    .combo-thumb {
+        width: 56px;
+        height: 56px;
+        object-fit: cover;
+        border: 1px solid #d7dfe8;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        background: #f8fafc;
+    }
+
+    .combo-main-image {
+        width: 100%;
+        max-width: 220px;
+        height: 220px;
+        object-fit: contain;
+        border: 1px solid #d7dfe8;
+        border-radius: 0.75rem;
+        background: #f8fafc;
+    }
+
+    .combo-search-results {
+        position: absolute;
+        z-index: 20;
+        width: 100%;
+        max-height: 320px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #dfe6ee;
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 24px rgba(20, 31, 48, 0.14);
+    }
+
+    .combo-search-item {
+        padding: 0.75rem;
+        cursor: pointer;
+        border-bottom: 1px solid #eef2f6;
+    }
+
+    .combo-search-item:hover {
+        background: #f5f9ff;
+    }
+
+    .combo-search-wrap {
+        position: relative;
+    }
+</style>
+
+<div class="card shadow-sm border-0 product-list-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h5 class="fw-bold mb-0">Combo Builder</h5>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@isSaving">Save Combo</button>
+            <button class="btn btn-outline-secondary" @onclick="ResetAsync">New</button>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        @if (!string.IsNullOrWhiteSpace(pageError))
+        {
+            <div class="alert alert-danger">@pageError</div>
+        }
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-5">
+                <label class="form-label-custom required-label">Combo Name</label>
+                <input class="form-control" @bind="model.ComboName" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label-custom">Combo PartNumber</label>
+                <input class="form-control" value="@DisplayComboPartNumber" readonly />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label-custom">Search Product</label>
+                <div class="combo-search-wrap">
+                    <input class="form-control"
+                           value="@searchTerm"
+                           @oninput="OnSearchInput"
+                           placeholder="Search by PartNumber, name, search1 or barcode" />
+                    @if (showSearchResults)
+                    {
+                        <div class="combo-search-results">
+                            @if (isSearching)
+                            {
+                                <div class="combo-search-item text-muted">Searching...</div>
+                            }
+                            else if (!searchResults.Any())
+                            {
+                                <div class="combo-search-item text-muted">No products found</div>
+                            }
+                            else
+                            {
+                                @foreach (var item in searchResults)
+                                {
+                                    <div class="combo-search-item" @onclick="() => AddProduct(item)">
+                                        <div class="fw-semibold">@item.PartNumber</div>
+                                        <div class="small text-muted">@item.ShortDescription</div>
+                                        <div class="small">Store: @item.StorePrice.ToString("0.00") | Promo: @((item.PromoPrice ?? item.StorePrice).ToString("0.00"))</div>
+                                    </div>
+                                }
+                                <div class="d-flex justify-content-between p-2">
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="PrevSearchPage" disabled="@(searchPage <= 1)">Prev</button>
+                                    <span class="small text-muted align-self-center">Page @searchPage</span>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="NextSearchPage" disabled="@(!CanGoNextSearchPage)">Next</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-8">
+                @if (!items.Any())
+                {
+                    <div class="combo-card glass-panel p-4 text-muted text-center">Add at least one product to build a combo.</div>
+                }
+                else
+                {
+                    @foreach (var item in items)
+                    {
+                        <div class="combo-card glass-panel p-3 mb-3">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <img class="combo-main-image" src="@GetSelectedImage(item)" @onerror="OnImageError" />
+                                    <div class="d-flex gap-2 mt-2 flex-wrap">
+                                        @foreach (var image in item.Images.Where(x => !string.IsNullOrWhiteSpace(x)))
+                                        {
+                                            <img class="combo-thumb" src="@image" @onclick="() => item.SelectedImage = image" @onerror="OnImageError" />
+                                        }
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="d-flex justify-content-between">
+                                        <div>
+                                            <div class="fw-bold">@item.PartNumber</div>
+                                            <div class="text-muted">@item.ProductName</div>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveItem(item.PartNumber)">Remove</button>
+                                    </div>
+                                    <div class="row g-3 mt-2">
+                                        <div class="col-md-4">
+                                            <label class="form-label-custom">Store Price</label>
+                                            <input class="form-control" value="@item.UnitPrice.ToString("0.00")" readonly />
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label-custom">Promo Price</label>
+                                            <input class="form-control" value="@((item.PromoPrice ?? item.UnitPrice).ToString("0.00"))" readonly />
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label-custom">Qty</label>
+                                            <input class="form-control" type="number" min="1" value="@item.Qty" @onchange="e => ChangeQty(item, e)" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="col-lg-4">
+                <div class="combo-card glass-panel p-3">
+                    <div class="fw-bold mb-3">Live Calculation</div>
+                    <div class="d-flex justify-content-between mb-2"><span>TotalPrice</span><span>@totalPrice.ToString("0.00")</span></div>
+                    <div class="d-flex justify-content-between mb-2"><span>OfferPrice</span><span>@offerPrice.ToString("0.00")</span></div>
+                    <div class="mb-2">
+                        <label class="form-label-custom">ComboPrice</label>
+                        <input class="form-control" type="number" step="0.01" @bind="comboPrice" @bind:event="oninput" />
+                    </div>
+                    <div class="d-flex justify-content-between mb-2"><span>DiscountPrice</span><span>@discountPrice.ToString("0.00")</span></div>
+                    <div class="d-flex justify-content-between mb-2"><span>TotalQty</span><span>@totalQty</span></div>
+                    <div class="d-flex justify-content-between"><span>ItemCount</span><span>@itemCount</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 product-list-card mt-4">
+    <div class="card-header bg-white fw-bold">Combo List</div>
+    <div class="card-body p-0">
+        <table class="table table-sm table-bordered mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>ComboPartNumber</th>
+                    <th>ComboName</th>
+                    <th>ProductsCount</th>
+                    <th>TotalQty</th>
+                    <th>TotalPrice</th>
+                    <th>OfferPrice</th>
+                    <th>ComboPrice</th>
+                    <th>DiscountPrice</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!gridItems.Any())
+                {
+                    <tr><td colspan="9" class="text-center text-muted p-3">No combos found</td></tr>
+                }
+                else
+                {
+                    @foreach (var row in gridItems)
+                    {
+                        <tr>
+                            <td>@row.ComboPartNumber</td>
+                            <td>@row.ComboName</td>
+                            <td>@row.ProductsCount</td>
+                            <td>@row.TotalQty</td>
+                            <td>@row.TotalPrice.ToString("0.00")</td>
+                            <td>@row.OfferPrice.ToString("0.00")</td>
+                            <td>@row.ComboPrice.ToString("0.00")</td>
+                            <td>@row.DiscountPrice.ToString("0.00")</td>
+                            <td>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-primary" @onclick="() => EditAsync(row.ComboId)">Edit</button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(row.ComboId)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int ComboId { get; set; }
+
+    private ComboSaveRequestDto model = new();
+    private List<ComboGridDto> gridItems = new();
+    private List<ComboItemVm> items = new();
+    private List<ProductSearchDto> searchResults = new();
+    private string? generatedPartNumber;
+    private string searchTerm = "";
+    private bool isSaving;
+    private bool isSearching;
+    private bool showSearchResults;
+    private string? pageError;
+    private int searchPage = 1;
+    private const int SearchPageSize = 8;
+    private int searchTotalCount;
+    private CancellationTokenSource? searchCts;
+
+    private string DisplayComboPartNumber => string.IsNullOrWhiteSpace(model.ComboPartNumber) ? (generatedPartNumber ?? "Auto on save") : model.ComboPartNumber;
+    private decimal totalPrice => items.Sum(x => x.UnitPrice * x.Qty);
+    private decimal offerPrice => items.Sum(x => (x.PromoPrice ?? x.UnitPrice) * x.Qty);
+    private decimal comboPrice
+    {
+        get => model.ComboPrice ?? (offerPrice == 0 ? 0 : offerPrice);
+        set => model.ComboPrice = value;
+    }
+    private decimal discountPrice => totalPrice - comboPrice;
+    private int totalQty => items.Sum(x => x.Qty);
+    private int itemCount => items.Count;
+    private bool CanGoNextSearchPage => searchPage * SearchPageSize < searchTotalCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGridAsync();
+        if (ComboId > 0)
+            await LoadComboAsync(ComboId);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ComboId > 0)
+            await LoadComboAsync(ComboId);
+    }
+
+    private async Task LoadGridAsync()
+    {
+        var result = await ComboApi.GetGridAsync();
+        gridItems = result.Success ? result.Data ?? new() : new();
+        pageError = result.Success ? null : result.Message;
+    }
+
+    private async Task LoadComboAsync(int comboId)
+    {
+        var result = await ComboApi.GetByIdAsync(comboId);
+        if (!result.Success || result.Data == null)
+        {
+            pageError = result.Message ?? "Combo not found";
+            await AppSnackbar.Show(result.Message ?? "Combo not found", SnackbarType.Error);
+            return;
+        }
+
+        model = new ComboSaveRequestDto
+        {
+            ComboId = result.Data.ComboId,
+            ComboPartNumber = result.Data.ComboPartNumber,
+            ComboName = result.Data.ComboName,
+            ComboPrice = result.Data.ComboPrice
+        };
+        generatedPartNumber = result.Data.ComboPartNumber;
+        items = result.Data.Details.Select(x => new ComboItemVm
+        {
+            ComboDetailId = x.ComboDetailId,
+            PartNumber = x.PartNumber,
+            ProductName = x.ProductName ?? x.PartNumber,
+            Qty = x.Qty,
+            UnitPrice = x.UnitPrice,
+            PromoPrice = x.PromoPrice,
+            SelectedImage = x.ImageMain,
+            Images = new List<string?> { x.ImageMain }
+        }).ToList();
+        pageError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (isSaving)
+            return;
+
+        if (!items.Any())
+        {
+            await AppSnackbar.Show("Combo must have at least 1 item", SnackbarType.Warning);
+            return;
+        }
+
+        if (items.Any(x => x.Qty <= 0))
+        {
+            await AppSnackbar.Show("Qty must be greater than zero", SnackbarType.Warning);
+            return;
+        }
+
+        if (comboPrice > totalPrice)
+        {
+            await AppSnackbar.Show("ComboPrice must be less than or equal to TotalPrice", SnackbarType.Warning);
+            return;
+        }
+
+        isSaving = true;
+        var request = new ComboSaveRequestDto
+        {
+            ComboId = model.ComboId,
+            ComboPartNumber = model.ComboPartNumber,
+            ComboName = model.ComboName,
+            ComboPrice = comboPrice,
+            Details = items.Select(x => new ComboDetailDto
+            {
+                ComboDetailId = x.ComboDetailId,
+                PartNumber = x.PartNumber,
+                ProductName = x.ProductName,
+                ImageMain = x.SelectedImage,
+                Qty = x.Qty
+            }).ToList()
+        };
+
+        ApiResponse<ComboMasterDto> result = request.ComboId.GetValueOrDefault() > 0
+            ? await ComboApi.UpdateAsync(request.ComboId!.Value, request)
+            : await ComboApi.CreateAsync(request);
+
+        isSaving = false;
+
+        if (!result.Success || result.Data == null)
+        {
+            await AppSnackbar.Show(result.Message ?? "Save failed", SnackbarType.Error);
+            return;
+        }
+
+        generatedPartNumber = result.Data.ComboPartNumber;
+        model.ComboId = result.Data.ComboId;
+        model.ComboPartNumber = result.Data.ComboPartNumber;
+        comboPrice = result.Data.ComboPrice;
+        await AppSnackbar.Show(result.Message ?? "Combo saved", SnackbarType.Success);
+        await LoadGridAsync();
+        Nav.NavigateTo($"/combo/{result.Data.ComboId}", false);
+    }
+
+    private async Task DeleteAsync(int comboId)
+    {
+        var result = await ComboApi.DeleteAsync(comboId);
+        if (!result.Success)
+        {
+            await AppSnackbar.Show(result.Message ?? "Delete failed", SnackbarType.Error);
+            return;
+        }
+
+        if (model.ComboId == comboId)
+            await ResetAsync();
+
+        await AppSnackbar.Show(result.Message ?? "Combo deleted", SnackbarType.Success);
+        await LoadGridAsync();
+    }
+
+    private async Task EditAsync(int comboId)
+    {
+        await LoadComboAsync(comboId);
+        Nav.NavigateTo($"/combo/{comboId}", false);
+    }
+
+    private async Task ResetAsync()
+    {
+        model = new ComboSaveRequestDto();
+        generatedPartNumber = null;
+        items.Clear();
+        searchTerm = "";
+        searchResults.Clear();
+        showSearchResults = false;
+        ComboId = 0;
+        await LoadGridAsync();
+        Nav.NavigateTo("/combo", false);
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs args)
+    {
+        searchTerm = args.Value?.ToString() ?? "";
+        searchPage = 1;
+        await SearchProductsAsync();
+    }
+
+    private async Task PrevSearchPage()
+    {
+        if (searchPage <= 1)
+            return;
+
+        searchPage--;
+        await SearchProductsAsync();
+    }
+
+    private async Task NextSearchPage()
+    {
+        if (!CanGoNextSearchPage)
+            return;
+
+        searchPage++;
+        await SearchProductsAsync();
+    }
+
+    private async Task SearchProductsAsync()
+    {
+        searchCts?.Cancel();
+        searchCts = new CancellationTokenSource();
+
+        if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Trim().Length < 2)
+        {
+            searchResults.Clear();
+            showSearchResults = false;
+            return;
+        }
+
+        isSearching = true;
+        showSearchResults = true;
+
+        try
+        {
+            await Task.Delay(250, searchCts.Token);
+            var result = await ComboApi.SearchProductsAsync(searchTerm, searchPage, SearchPageSize);
+            searchResults = result.Success ? result.Data?.Items ?? new() : new();
+            searchTotalCount = result.Data?.TotalCount ?? 0;
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private void AddProduct(ProductSearchDto product)
+    {
+        var existing = items.FirstOrDefault(x => x.PartNumber == product.PartNumber);
+        if (existing != null)
+        {
+            existing.Qty++;
+        }
+        else
+        {
+            items.Add(new ComboItemVm
+            {
+                PartNumber = product.PartNumber,
+                ProductName = product.ShortDescription,
+                Qty = 1,
+                UnitPrice = product.StorePrice,
+                PromoPrice = product.PromoPrice,
+                SelectedImage = product.ImageMain,
+                Images = new List<string?> { product.ImageMain, product.Image2, product.Image3, product.Image4 }
+            });
+        }
+
+        searchTerm = "";
+        searchResults.Clear();
+        showSearchResults = false;
+    }
+
+    private void RemoveItem(string partNumber)
+    {
+        var item = items.FirstOrDefault(x => x.PartNumber == partNumber);
+        if (item != null)
+            items.Remove(item);
+    }
+
+    private async Task ChangeQty(ComboItemVm item, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var qty) || qty <= 0)
+        {
+            item.Qty = 1;
+            await AppSnackbar.Show("Qty must be greater than zero", SnackbarType.Warning);
+            return;
+        }
+
+        item.Qty = qty;
+    }
+
+    private string GetSelectedImage(ComboItemVm item)
+        => string.IsNullOrWhiteSpace(item.SelectedImage) ? "images/no-image.png" : item.SelectedImage!;
+
+    private static void OnImageError(EventArgs _)
+    {
+    }
+
+    private sealed class ComboItemVm
+    {
+        public int ComboDetailId { get; set; }
+        public string PartNumber { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public int Qty { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal? PromoPrice { get; set; }
+        public string? SelectedImage { get; set; }
+        public List<string?> Images { get; set; } = new();
+    }
+}

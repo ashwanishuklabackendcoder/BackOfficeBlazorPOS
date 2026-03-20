@@ -4,6 +4,7 @@
 @using POS.UI.State
 @using Microsoft.JSInterop
 @inject IPaymentService PaymentService
+@inject IReturnService ReturnService
 @inject ILayawayService LayawayService
 @inject AppSnackbarService AppSnackbar
 @inject NavigationManager Nav
@@ -11,7 +12,7 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<h3>Payment</h3>
+<h3>@PageTitleText</h3>
 
 @if (_missingSaleState)
 {
@@ -29,21 +30,24 @@ else
         <div class="card shadow-sm">
             <div class="card-body">
 
-                <h4>Due: @Sale.NetTotal.ToString("0.00")</h4>
+                <h4>@PrimaryAmountLabel: @TransactionTotal.ToString("0.00")</h4>
 
                 <div class="mt-2">
-                    Tendered: <b>@TotalTendered.ToString("0.00")</b>
+                    @TenderedLabel: <b>@TotalTendered.ToString("0.00")</b>
                 </div>
 
                 <div class="mt-2"
                      style="font-size:20px;
                             color:@(Remaining > 0 ? "red" : "green")">
-                    Balance: <b>@Remaining.ToString("0.00")</b>
+                    @BalanceLabel: <b>@Remaining.ToString("0.00")</b>
                 </div>
 
-                <div class="mt-2 text-success fs-5">
-                    Change: <b>@ChangeDue.ToString("0.00")</b>
-                </div>
+                @if (!IsRefundMode)
+                {
+                    <div class="mt-2 text-success fs-5">
+                        Change: <b>@ChangeDue.ToString("0.00")</b>
+                    </div>
+                }
 
             </div>
         </div>
@@ -88,14 +92,17 @@ else
 
                 </div>
 
-                <div class="row g-2 mt-1">
-                    <div class="col-md-6">
-                        <button class="btn btn-lg btn-outline-dark w-100"
-                                @onclick="ShowStripeCardPayment">
-                            CARD (STRIPE)
-                        </button>
+                @if (!IsRefundMode)
+                {
+                    <div class="row g-2 mt-1">
+                        <div class="col-md-6">
+                            <button class="btn btn-lg btn-outline-dark w-100"
+                                    @onclick="ShowStripeCardPayment">
+                                CARD (STRIPE)
+                            </button>
+                        </div>
                     </div>
-                </div>
+                }
 
                 <hr />
 
@@ -141,7 +148,7 @@ else
                     Credit: @Payment.Credit
                 </div>
 
-                @if (ShowStripeCard)
+                @if (ShowStripeCard && !IsRefundMode)
                 {
                     <hr />
                     <div class="mb-2">
@@ -173,7 +180,7 @@ else
                     <button class="btn btn-success btn-lg"
                             disabled="@(!CanComplete)"
                             @onclick="CompletePayment">
-                        COMPLETE SALE
+                        @CompleteButtonText
                     </button>
                 </div>
 
@@ -186,7 +193,8 @@ else
 
 @code {
 
-    PosSaleRequestDto Sale = null!;
+    PosSaleRequestDto? Sale;
+    ReturnProcessDto? ReturnRequest;
     PosPaymentDto Payment = new();
     DotNetObjectReference<PosPayment>? _dotNetRef;
 
@@ -200,9 +208,24 @@ else
     const string StripeCurrency = "eur";
 
     string[] Keys = { "7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "CLR" };
+    bool IsRefundMode => ReturnRequest != null;
+    decimal TransactionTotal => IsRefundMode
+        ? ReturnRequest?.Lines.Sum(x => x.RefundAmount) ?? 0m
+        : Sale?.NetTotal ?? 0m;
+    string PageTitleText => IsRefundMode ? "Refund Payment" : "Payment";
+    string PrimaryAmountLabel => IsRefundMode ? "Refund Due" : "Due";
+    string TenderedLabel => IsRefundMode ? "Refunded" : "Tendered";
+    string BalanceLabel => IsRefundMode ? "Remaining Refund" : "Balance";
+    string CompleteButtonText => IsRefundMode ? "COMPLETE RETURN" : "COMPLETE SALE";
 
     protected override void OnInitialized()
     {
+        if (PosPaymentState.CurrentReturn != null)
+        {
+            ReturnRequest = PosPaymentState.CurrentReturn;
+            return;
+        }
+
         if (PosPaymentState.CurrentSale == null)
         {
             _missingSaleState = true;
@@ -253,17 +276,18 @@ else
         Payment.Cash + Payment.MasterCard + Payment.Visa + Payment.Credit;
 
     decimal Remaining =>
-        Sale.NetTotal - TotalTendered;
+        TransactionTotal - TotalTendered;
 
     decimal ChangeDue =>
-        Payment.Cash > Sale.NetTotal
-            ? Payment.Cash - Sale.NetTotal
+        !IsRefundMode && Payment.Cash > TransactionTotal
+            ? Payment.Cash - TransactionTotal
             : 0;
 
     bool CanComplete =>
         Remaining <= 0 &&
         (Payment.MasterCard + Payment.Visa + Payment.Credit)
-            <= Sale.NetTotal;
+            <= TransactionTotal &&
+        (!IsRefundMode || TotalTendered == TransactionTotal);
 
     void SelectMethod(PaymentMethod method)
     {
@@ -279,16 +303,18 @@ else
 
     void ApplyAmount()
     {
-        if (!decimal.TryParse(Input, out var amt))
+        if (!decimal.TryParse(Input, out var amt) || amt <= 0)
         {
             AppSnackbar.Show("Enter a valid amount", SnackbarType.Warning);
             return;
         }
 
-        if (CurrentMethod != PaymentMethod.Cash &&
+        if ((IsRefundMode || CurrentMethod != PaymentMethod.Cash) &&
             amt > Remaining)
         {
-            AppSnackbar.Show("Card payment cannot exceed balance",
+            AppSnackbar.Show(IsRefundMode
+                    ? "Refund amount cannot exceed remaining refund"
+                    : "Card payment cannot exceed balance",
                 SnackbarType.Error);
             return;
         }
@@ -365,7 +391,7 @@ else
         var amount = Remaining;
         if (amount <= 0)
         {
-            AppSnackbar.Show("Balance already cleared", SnackbarType.Info);
+            await AppSnackbar.Show(IsRefundMode ? "Refund already fully allocated" : "Balance already cleared", SnackbarType.Info);
             return;
         }
 
@@ -423,7 +449,7 @@ else
             }
 
             Payment.MasterCard += amount;
-            AppSnackbar.Show("Card payment verified", SnackbarType.Success);
+            await AppSnackbar.Show("Card payment verified", SnackbarType.Success);
         }
         catch (Exception ex)
         {
@@ -439,7 +465,29 @@ else
     {
         try
         {
-            Sale.Payment = Payment;
+            if (IsRefundMode)
+            {
+                ReturnRequest!.RefundCash = Payment.Cash;
+                ReturnRequest.RefundMasterCard = Payment.MasterCard;
+                ReturnRequest.RefundVisa = Payment.Visa;
+                ReturnRequest.RefundCredit = Payment.Credit;
+
+                var result = await ReturnService.ProcessReturnAsync(ReturnRequest);
+                if (!result.Success)
+                {
+                    await AppSnackbar.Show(result.Message, SnackbarType.Error);
+                    return;
+                }
+
+                PosPaymentState.CurrentReturn = null;
+                await AppSnackbar.Show($"Return completed. Invoice: {ReturnRequest.InvoiceNo}",
+                    SnackbarType.Success);
+
+                Nav.NavigateTo("/pos-sell", true);
+                return;
+            }
+
+            Sale!.Payment = Payment;
 
             string invoiceNo;
 
@@ -453,7 +501,7 @@ else
 
                 if (!res.Success || string.IsNullOrWhiteSpace(res.Data))
                 {
-                    AppSnackbar.Show(res.Message, SnackbarType.Error);
+                    await AppSnackbar.Show(res.Message, SnackbarType.Error);
                     return;
                 }
 
@@ -462,21 +510,44 @@ else
             }
             else
             {
-                invoiceNo = await PaymentService.ProcessSaleAsync(Sale);
+                var saleResponse = await PaymentService.ProcessSaleAsync(Sale!);
+                if (!saleResponse.Success || saleResponse.Data == null || string.IsNullOrWhiteSpace(saleResponse.Data.InvoiceNumber))
+                {
+                    await AppSnackbar.Show(saleResponse.Message, SnackbarType.Error);
+                    return;
+                }
+
+                invoiceNo = saleResponse.Data.InvoiceNumber;
+
+                if (!saleResponse.Data.ReceiptPrintQueued &&
+                    !string.IsNullOrWhiteSpace(saleResponse.Data.ReceiptPrintMessage))
+                {
+                    await AppSnackbar.Show(saleResponse.Data.ReceiptPrintMessage, SnackbarType.Warning);
+                }
             }
 
-            AppSnackbar.Show($"Sale completed. Invoice: {invoiceNo}",
+            await AppSnackbar.Show($"Sale completed. Invoice: {invoiceNo}",
                 SnackbarType.Success);
 
             Nav.NavigateTo($"/pos-receipt/{invoiceNo}", true);
         }
         catch (Exception ex)
         {
-            AppSnackbar.Show(ex.Message, SnackbarType.Error);
+            await AppSnackbar.Show(ex.Message, SnackbarType.Error);
         }
     }
 
-    void Cancel() => Nav.NavigateTo("/pos-sell");
+    void Cancel()
+    {
+        if (IsRefundMode)
+        {
+            PosPaymentState.CurrentReturn = null;
+            Nav.NavigateTo("/pos-returns");
+            return;
+        }
+
+        Nav.NavigateTo("/pos-sell");
+    }
 
     enum PaymentMethod
     {

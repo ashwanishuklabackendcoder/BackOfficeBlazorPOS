@@ -1,0 +1,145 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Models
+@using System.Threading
+@typeparam TItem
+@implements IDisposable
+
+@switch (Column.ColumnFilterType)
+{
+    case GridFilterType.NumericRange:
+        <div class="d-flex gap-1 align-items-center">
+            <input class="form-control form-control-sm"
+                   type="number"
+                   placeholder="Min"
+                   value="@GetFilterValue(f => f.Min)?.ToString()"
+                   @oninput="e => OnNumericFilterChanged(e.Value?.ToString(), true)" />
+            <input class="form-control form-control-sm"
+                   type="number"
+                   placeholder="Max"
+                   value="@GetFilterValue(f => f.Max)?.ToString()"
+                   @oninput="e => OnNumericFilterChanged(e.Value?.ToString(), false)" />
+        </div>
+        break;
+    case GridFilterType.DateRange:
+        <div class="d-flex gap-1 align-items-center">
+            <input class="form-control form-control-sm"
+                   type="date"
+                   value="@FormatDateFilter(GetFilterValue(f => f.From))"
+                   @oninput="e => OnDateFilterChanged(e.Value?.ToString(), true)" />
+            <input class="form-control form-control-sm"
+                   type="date"
+                   value="@FormatDateFilter(GetFilterValue(f => f.To))"
+                   @oninput="e => OnDateFilterChanged(e.Value?.ToString(), false)" />
+        </div>
+        break;
+    case GridFilterType.Dropdown:
+        <select class="form-select form-select-sm"
+                @onchange="e => OnDropdownFilterChanged(e.Value?.ToString())">
+            <option value="">All</option>
+            @foreach (var option in Column.LookupValues ?? Column.FilterOptions ?? Array.Empty<string>())
+            {
+                <option value="@option"
+                        selected="@(string.Equals(option, (GetFilterValue(f => f.SelectedOption)?.ToString()) ?? string.Empty, StringComparison.OrdinalIgnoreCase))">
+                    @option
+                </option>
+            }
+        </select>
+        break;
+    default:
+        <input class="form-control form-control-sm"
+               placeholder="Filter..."
+               value="@(GetFilterValue(f => f.Text)?.ToString())"
+               @oninput="e => OnTextFilterChanged(e.Value?.ToString())" />
+        break;
+}
+
+@code {
+    [Parameter] public GridColumn<TItem> Column { get; set; } = default!;
+    [Parameter] public GridState State { get; set; } = default!;
+    [Parameter] public EventCallback OnFiltersChanged { get; set; }
+
+    private CancellationTokenSource? cts;
+
+    private object GetFilterValue(Func<ColumnFilter, object?> extractor)
+    {
+        if (State.Filters.TryGetValue(Column.ColumnKey, out var filter))
+            return extractor(filter) ?? "";
+
+        return "";
+    }
+
+    private static string? FormatDateFilter(object? value)
+        => value is DateTime dt ? dt.ToString("yyyy-MM-dd") : null;
+
+    private Task OnTextFilterChanged(string? value)
+        => ScheduleFilter(filter => filter.Text = value);
+
+    private Task OnNumericFilterChanged(string? value, bool isMin)
+        => ScheduleFilter(filter =>
+        {
+            if (decimal.TryParse(value, out var parsed))
+            {
+                if (isMin)
+                    filter.Min = parsed;
+                else
+                    filter.Max = parsed;
+            }
+            else
+            {
+                if (isMin)
+                    filter.Min = null;
+                else
+                    filter.Max = null;
+            }
+        });
+
+    private Task OnDateFilterChanged(string? value, bool isFrom)
+        => ScheduleFilter(filter =>
+        {
+            if (DateTime.TryParse(value, out var dt))
+            {
+                if (isFrom)
+                    filter.From = dt.Date;
+                else
+                    filter.To = dt.Date;
+            }
+            else
+            {
+                if (isFrom)
+                    filter.From = null;
+                else
+                    filter.To = null;
+            }
+        });
+
+    private Task OnDropdownFilterChanged(string? value)
+        => ScheduleFilter(filter => filter.SelectedOption = string.IsNullOrWhiteSpace(value) ? null : value);
+
+    private async Task ScheduleFilter(Action<ColumnFilter> updater)
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        cts = new CancellationTokenSource();
+
+        var filter = State.Filters.GetValueOrDefault(Column.ColumnKey) ?? new ColumnFilter();
+        updater(filter);
+        State.Filters[Column.ColumnKey] = filter;
+
+        try
+        {
+            await Task.Delay(300, cts.Token);
+            await OnFiltersChanged.InvokeAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+        cts = null;
+    }
+}
+

@@ -13,33 +13,17 @@
 
 <PageTitle>Stock Input</PageTitle>
 
-<style>
-    .stock-label {
-        font-size: 13px;
-        color: #333;
-        padding-top: 6px;
-    }
-
-    .readonly-box {
-        background-color: #f8f9fa;
-    }
-
-    .section-divider {
-        border-top: 1px solid #e5e5e5;
-        margin: 18px 0;
-    }
-</style>
-
-<div class="card shadow-sm">
-    <div class="card-header bg-white fw-bold">
-        Stock Input
+<div class="card shadow-sm border-0 product-list-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h5 class="fw-bold mb-0">Stock Input</h5>
     </div>
 
-    <div class="card-body">
+    <div class="card-body p-4">
+        <div class="glass-panel border rounded-3 px-3 py-3">
 
         <!-- PART NUMBER -->
         <div class="row mb-3 align-items-center">
-            <label class="col-sm-1 stock-label">Part No</label>
+            <label class="col-sm-1 form-label-custom required-label">Part No</label>
             <div class="col-sm-2">
                 <input id="partNumber"
                        class="form-control"
@@ -50,7 +34,7 @@
 
             </div>
             <div class="col-sm-2">
-                <button class="btn btn-primary w-100" @onclick="() => showProductSearch = true">
+                <button class="btn btn-primary w-100 search-btn" @onclick="() => showProductSearch = true">
                     Search
                 </button>
 
@@ -68,21 +52,21 @@
 
         <!-- PRODUCT INFO -->
         <div class="row mb-2">
-            <label class="col-sm-1 stock-label">Size</label>
+            <label class="col-sm-1 form-label-custom">Size</label>
             <div class="col-sm-2">
                 <input class="form-control readonly-box" value="@Product?.Size" readonly />
             </div>
         </div>
 
         <div class="row mb-2">
-            <label class="col-sm-1 stock-label">Colour</label>
+            <label class="col-sm-1 form-label-custom">Colour</label>
             <div class="col-sm-2">
                 <input class="form-control readonly-box" value="@Product?.Color" readonly />
             </div>
         </div>
 
         <div class="row mb-3">
-            <label class="col-sm-1 stock-label">Details</label>
+            <label class="col-sm-1 form-label-custom">Details</label>
             <div class="col-sm-2">
                 <input class="form-control readonly-box" value="@Product?.Details" readonly />
             </div>
@@ -92,17 +76,17 @@
 
         <!-- QTY -->
         <div class="row mb-3">
-            <label class="col-sm-1 stock-label">Box Qty</label>
+            <label class="col-sm-1 form-label-custom">Box Qty</label>
             <div class="col-sm-2">
                 <input type="number" class="form-control readonly-box" @bind="BoxQty" disabled />
             </div>
 
-            <label class="col-sm-1 stock-label">Qty In *</label>
+            <label class="col-sm-1 form-label-custom required-label">Qty In</label>
             <div class="col-sm-2">
                 <input type="number" class="form-control" @bind="QtyIn" />
             </div>
 
-            <label class="col-sm-1 stock-label">Date In</label>
+            <label class="col-sm-1 form-label-custom">Date In</label>
             <div class="col-sm-2">
                 <input type="date" class="form-control" @bind="DateIn" />
             </div>
@@ -110,14 +94,14 @@
 
         <!-- DOCUMENTS -->
         <div class="row mb-3">
-            <label class="col-sm-1 stock-label">Invoice No</label>
+            <label class="col-sm-1 form-label-custom">Invoice No</label>
             <div class="col-sm-2">
                 <input class="form-control"
                        @bind="InvoiceNo"
                        maxlength="@(MaxLengthHelper.For<StockInputDto>(nameof(StockInputDto.InvoiceNumber)))" />
             </div>
 
-            <label class="col-sm-1 stock-label">P/O No</label>
+            <label class="col-sm-1 form-label-custom">P/O No</label>
             <div class="col-sm-2">
                 <input class="form-control"
                        @bind="PurchaseOrderNo"
@@ -127,18 +111,18 @@
 
         <!-- COST -->
         <div class="row mb-3">
-            <label class="col-sm-1 stock-label">Cost Each</label>
+            <label class="col-sm-1 form-label-custom">Cost Each</label>
             <div class="col-sm-2">
                 <div class="input-group">
-                    <span class="input-group-text">£</span>
+                    <span class="input-group-text currency-pill">£</span>
                     <input type="number" step="0.01" class="form-control" @bind="CostEach" />
                 </div>
             </div>
 
-            <label class="col-sm-1 stock-label">Total Cost</label>
+            <label class="col-sm-1 form-label-custom">Total Cost</label>
             <div class="col-sm-2">
                 <div class="input-group">
-                    <span class="input-group-text">£</span>
+                    <span class="input-group-text currency-pill">£</span>
                     <input class="form-control readonly-box" value="@TotalCost" readonly />
                 </div>
             </div>
@@ -146,12 +130,12 @@
 
         <!-- SUPPLIER / LOCATION -->
         <div class="row mb-3">
-            <label class="col-sm-1 stock-label">Supplier</label>
+            <label class="col-sm-1 form-label-custom">Supplier</label>
             <div class="col-sm-2">
                 <SupplierSelector @bind-Value="SupplierCode" />
             </div>
 
-            <label class="col-sm-1 stock-label">Location *</label>
+            <label class="col-sm-1 form-label-custom required-label">Location</label>
             <div class="col-sm-2">
                 <LocationSelector @bind-Value="LocationCode" />
             </div>
@@ -159,28 +143,27 @@
 
         <!-- STOCK -->
         <div class="row mb-3">
-            <label class="col-sm-1 stock-label">In Stock</label>
+            <label class="col-sm-1 form-label-custom">In Stock</label>
             <div class="col-sm-2">
                 <input class="form-control readonly-box" value="@CurrentStock" readonly />
             </div>
         </div>
 
-        <div class="section-divider"></div>
-
-        <!-- ACTIONS -->
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary" @onclick="Save">
-                Save
-            </button>
-            <button class="btn btn-secondary" @onclick="Reset">
-                Cancel
-            </button>
         </div>
-
-        <div class="section-divider"></div>
-
-        <!-- HISTORY GRID -->
-        <h6 class="fw-bold">Stock History</h6>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2 py-3 px-4">
+        <button class="btn btn-primary px-4" @onclick="Save">
+            Save
+        </button>
+        <button class="btn btn-outline-secondary px-4" @onclick="Reset">
+            Cancel
+        </button>
+    </div>
+    <div class="card-body pt-0 px-4 pb-4">
+        <div class="glass-panel border rounded-3 px-3 py-3">
+        <div class="info-header">
+            <h6 class="fw-bold mb-0">Stock History</h6>
+        </div>
         <table class="table table-sm table-bordered">
             <thead>
                 <tr>
@@ -215,7 +198,7 @@
                 }
             </tbody>
         </table>
-
+        </div>
     </div>
     @if (showProductSearch)
     {

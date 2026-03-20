@@ -2,34 +2,35 @@
 
 @using BackOfficeBlazor.Shared.DTOs
 @using POS.UI.Services
+@using POS.UI.State
 
 @inject IReturnService ReturnService
+@inject ISysOptionsService SysOptionsService
+@inject IAuthService Auth
 @inject AppSnackbarService AppSnackbar
 @inject NavigationManager Nav
-
 <PageTitle>POS Returns</PageTitle>
 
 <div class="card shadow-sm">
-
     <div class="card-header fw-bold">
         Customer Returns
     </div>
 
     <div class="card-body">
+        <div class="alert alert-secondary py-2">
+            <div class="fw-semibold small">Return Stock Mode: @GetReturnStockModeLabel(ReturnStockMode)</div>
+            <div class="small mb-0">@ReturnStockModeHelpText</div>
+        </div>
 
         <div class="row mb-3">
             <div class="col-md-4">
                 <label>From Date</label>
-                <InputDate TValue="DateTime?"
-                           class="form-control"
-                           @bind-Value="FromDateFilter" />
+                <InputDate TValue="DateTime?" class="form-control" @bind-Value="FromDateFilter" />
             </div>
 
             <div class="col-md-4">
                 <label>To Date</label>
-                <InputDate TValue="DateTime?"
-                           class="form-control"
-                           @bind-Value="ToDateFilter" />
+                <InputDate TValue="DateTime?" class="form-control" @bind-Value="ToDateFilter" />
             </div>
 
             <div class="col-md-4">
@@ -40,8 +41,7 @@
             </div>
 
             <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-primary w-100"
-                        @onclick="LoadInvoices">
+                <button class="btn btn-primary w-100" @onclick="LoadInvoices">
                     LOAD INVOICES
                 </button>
             </div>
@@ -50,8 +50,7 @@
         <div class="row mb-3">
             <div class="col-md-8">
                 <label>Invoice</label>
-                <select class="form-select"
-                        @bind="SelectedInvoiceNo">
+                <select class="form-select" @bind="SelectedInvoiceNo">
                     <option value="">-- Select Invoice --</option>
                     @foreach (var invoice in Invoices)
                     {
@@ -63,112 +62,256 @@
             </div>
 
             <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-outline-primary w-100"
-                        @onclick="LoadInvoiceLines">
-                    LOAD LINES
+                <button class="btn btn-outline-primary w-100" @onclick="LoadInvoiceLines">
+                    LOAD SALES
                 </button>
             </div>
         </div>
 
-        <table class="table table-sm table-bordered">
-            <thead class="table-light">
-                <tr>
-                    <th>Select</th>
-                    <th>Part</th>
-                    <th>Description</th>
-                    <th>StockNo</th>
-                    <th>Qty</th>
-                    <th>Sell</th>
-                    <th>Reason</th>
-                </tr>
-            </thead>
+        @if (SelectedInvoiceSummary != null)
+        {
+            <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="small text-muted">Gross Total</div>
+                            <div class="fw-semibold">@GrossInvoiceTotal.ToString("0.00")</div>
+                        </div>
+                    </div>
+                </div>
 
-            <tbody>
-                @foreach (var line in Lines)
-                {
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="small text-muted">Discount</div>
+                            <div class="fw-semibold">@InvoiceDiscountTotal.ToString("0.00")</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="small text-muted">Net Total</div>
+                            <div class="fw-semibold">@SelectedInvoiceSummary.NetTotal.ToString("0.00")</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="small text-muted">Amount Received</div>
+                            <div class="fw-semibold">@SelectedInvoiceSummary.Payment.TotalTendered.ToString("0.00")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
                     <tr>
-                        <td>
-                            <input type="checkbox"
-                                   @bind="line.IsSelected" />
-                        </td>
-
-                        <td>@line.PartNumber</td>
-                        <td>@line.Description</td>
-                        <td>@line.StockNo</td>
-                        <td>@line.Quantity</td>
-                        <td>@line.Sell</td>
-
-                        <td>
-                            <select class="form-select"
-                                    @bind="line.ReturnReason">
-                                <option value="">Select</option>
-                                <option>UNSUITABLE</option>
-                                <option>FAULTY</option>
-                                <option>SECOND HAND</option>
-                                <option>CUSTOM</option>
-                            </select>
-
-                            @if (line.ReturnReason == "CUSTOM")
-                            {
-                                <input class="form-control mt-1"
-                                       placeholder="Enter custom reason"
-                                       @bind="line.CustomReturnReason" />
-                            }
-                        </td>
+                        <th>Select</th>
+                        <th>Part</th>
+                        <th>Description</th>
+                        <th>StockNo</th>
+                        <th>Qty</th>
+                        <th>Sell</th>
+                        <th>Refund</th>
+                        <th>Combo</th>
+                        <th>Condition</th>
+                        <th>Reason</th>
                     </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
 
-        <div class="row mt-3">
+                <tbody>
+                    @foreach (var line in Lines)
+                    {
+                        <tr>
+                            <td>
+                                <input type="checkbox"
+                                       @bind="line.IsSelected"
+                                       disabled="@line.IsSelectionLocked" />
+                            </td>
+                            <td>@line.PartNumber</td>
+                            <td>@line.Description</td>
+                            <td>@line.StockNo</td>
+                            <td>@line.Quantity</td>
+                            <td>@line.Sell</td>
+                            <td>@line.RefundAmount.ToString("0.00")</td>
+                            <td>
+                                @if (line.IsComboReturnPolicyApplied)
+                                {
+                                    <span class="badge bg-info text-dark">Combo</span>
+                                }
+                            </td>
+                            <td style="min-width:170px;">
+                                <select class="form-select" @bind="line.ReturnCondition">
+                                    @foreach (var condition in ReturnConditions.All)
+                                    {
+                                        <option value="@condition">@condition</option>
+                                    }
+                                </select>
+                                @if (!line.IsSellableCondition)
+                                {
+                                    <div class="form-text text-danger">This item will not go back to sellable stock.</div>
+                                }
+                            </td>
+                            <td style="min-width:200px;">
+                                <select class="form-select" @bind="line.ReturnReason">
+                                    <option value="">Select</option>
+                                    <option>UNSUITABLE</option>
+                                    <option>FAULTY</option>
+                                    <option>DAMAGED</option>
+                                    <option>CUSTOMER DAMAGE</option>
+                                    <option>WARRANTY RETURN</option>
+                                    <option>OTHER</option>
+                                    <option>CUSTOM</option>
+                                </select>
+
+                                @if (line.ReturnReason == "CUSTOM")
+                                {
+                                    <input class="form-control mt-1"
+                                           placeholder="Enter custom reason"
+                                           @bind="line.CustomReturnReason" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row mt-3 g-3">
             <div class="col-md-3">
-                <label>Refund Cash</label>
+                <label>Calculated Refund</label>
                 <input type="number"
                        class="form-control"
-                       @bind="RefundCash" />
+                       value="@SelectedRefundAmount.ToString("0.00")"
+                       readonly />
             </div>
 
-            <div class="col-md-3">
-                <label>Refund Card</label>
-                <input type="number"
-                       class="form-control"
-                       @bind="RefundCard" />
-            </div>
         </div>
 
         <hr />
 
         <div class="d-flex justify-content-end gap-2">
-            <button class="btn btn-secondary"
-                    @onclick="Cancel">
+            <button class="btn btn-secondary" @onclick="Cancel">
                 Cancel
             </button>
 
-            <button class="btn btn-danger"
-                    @onclick="ProcessReturn">
+            <button class="btn btn-danger" @onclick="ProcessReturn">
                 PROCESS RETURN
             </button>
         </div>
-
     </div>
-
 </div>
 
+<div class="card shadow-sm mt-3">
+    <div class="card-header fw-semibold">Already Returned Items</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ProductId / PartNumber</th>
+                        <th>Product Name</th>
+                        <th>Returned Qty</th>
+                        <th>Return Date</th>
+                        <th>Return Condition</th>
+                        <th>Return Reason</th>
+                        <th>Stock Movement Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (ReturnHistory.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-3">
+                                No returned items recorded for this invoice.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in ReturnHistory)
+                        {
+                            <tr>
+                                <td>@item.ProductId</td>
+                                <td>@item.ProductName</td>
+                                <td>@item.ReturnedQty</td>
+                                <td>@item.ReturnDate.ToLocalTime().ToString("dd-MMM-yyyy HH:mm")</td>
+                                <td>@item.ReturnCondition</td>
+                                <td>@item.ReturnReason</td>
+                                <td>@item.StockMovementStatus</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if (ShowReturnStockConfirm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,.45);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-body text-center p-4">
+                    <div class="mb-3" style="font-size:2rem;">?</div>
+                    <h5 class="fw-bold mb-2">Add Returned Items To Stock?</h5>
+                    <p class="text-muted mb-4">
+                        Do you want to add returned item back to sellable stock?
+                    </p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-outline-secondary" @onclick="() => ResolveReturnStockPrompt(false)">
+                            No
+                        </button>
+                        <button class="btn btn-danger" @onclick="() => ResolveReturnStockPrompt(true)">
+                            Yes, Add To Stock
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
-    List<ReturnInvoiceLookupDto> Invoices = new();
-    string? SelectedInvoiceNo;
-    string? CustomerAccNoFilter;
-    DateTime? FromDateFilter = DateTime.Today;
-    DateTime? ToDateFilter = DateTime.Today;
+    private List<ReturnInvoiceLookupDto> Invoices = new();
+    private List<ReturnLineVm> Lines = new();
+    private List<ReturnHistoryDto> ReturnHistory = new();
+    private PosReceiptDto? SelectedInvoiceSummary;
 
-    List<ReturnLineVm> Lines = new();
+    private string? SelectedInvoiceNo;
+    private string? CustomerAccNoFilter;
+    private DateTime? FromDateFilter = DateTime.Today;
+    private DateTime? ToDateFilter = DateTime.Today;
 
-    decimal RefundCash;
-    decimal RefundCard;
-    string CurrentLocation = "01";
+    private bool AllowSeparateComboItemReturn = true;
+    private string ReturnStockMode = ReturnStockModes.AskUserEveryReturn;
+    private string CurrentLocation = "01";
+    private bool ShowReturnStockConfirm;
+    private TaskCompletionSource<bool>? ReturnStockPromptTcs;
+
+    private decimal GrossInvoiceTotal => SelectedInvoiceSummary?.SubTotal ?? 0m;
+    private decimal InvoiceDiscountTotal => GrossInvoiceTotal - (SelectedInvoiceSummary?.NetTotal ?? 0m);
+    private decimal SelectedRefundAmount => Lines.Where(x => x.IsSelected).Sum(x => x.RefundAmount);
+
+    private string ReturnStockModeHelpText => ReturnStockMode switch
+    {
+        ReturnStockModes.AlwaysAddToStock => "Sellable returns are added back to stock automatically.",
+        ReturnStockModes.NeverAddAutomatically => "Returns are recorded without adding stock back automatically.",
+        _ => "You will be asked whether sellable returned items should go back to stock."
+    };
 
     protected override async Task OnInitializedAsync()
     {
+        CurrentLocation = PosWorkflowState.PosLocation;
+        await LoadSettingsAsync();
         await LoadInvoices();
     }
 
@@ -181,12 +324,12 @@
             return;
         }
 
-        Invoices = res.Data
+        Invoices = (res.Data ?? new())
             .OrderByDescending(x => x.InvoiceDate)
             .ToList();
     }
 
-    async Task LoadInvoiceLines()
+    private async Task LoadInvoiceLines()
     {
         if (string.IsNullOrWhiteSpace(SelectedInvoiceNo))
         {
@@ -196,31 +339,60 @@
 
         try
         {
-            var res = await ReturnService.GetSaleLinesAsync(SelectedInvoiceNo);
-
-            if (!res.Success)
+            var receiptRes = await ReturnService.GetReceiptAsync(SelectedInvoiceNo);
+            if (!receiptRes.Success)
             {
-                await AppSnackbar.Show(res.Message, SnackbarType.Error);
+                await AppSnackbar.Show(receiptRes.Message, SnackbarType.Error);
                 return;
             }
 
-            Lines = res.Data.Select(x => new ReturnLineVm
+            var lineRes = await ReturnService.GetSaleLinesAsync(SelectedInvoiceNo);
+            if (!lineRes.Success)
             {
-                PartNumber = x.PartNumber,
-                StockNo = x.StockNo,
-                Quantity = x.Quantity,
-                Terminal = x.Terminal,
-                Location = x.Location,
-                Sell = x.Sell
-            }).ToList();
+                await AppSnackbar.Show(lineRes.Message, SnackbarType.Error);
+                return;
+            }
+
+            var historyRes = await ReturnService.GetReturnHistoryAsync(SelectedInvoiceNo);
+            if (!historyRes.Success)
+            {
+                await AppSnackbar.Show(historyRes.Message, SnackbarType.Error);
+                return;
+            }
+
+            SelectedInvoiceSummary = receiptRes.Data;
+            ReturnHistory = historyRes.Data ?? new();
+            Lines = (lineRes.Data ?? new())
+                .Select(x => new ReturnLineVm
+                {
+                    SaleLineId = x.SaleLineId,
+                    PartNumber = x.PartNumber,
+                    Description = x.Description,
+                    StockNo = x.StockNo,
+                    Quantity = x.Quantity,
+                    Terminal = x.Terminal,
+                    Location = x.Location,
+                    Sell = x.Sell,
+                    RefundAmount = x.RefundableAmount,
+                    IsCombo = x.IsCombo,
+                    ComboId = x.ComboId,
+                    ComboGroupId = x.ComboGroupId,
+                    IsComboReturnPolicyApplied = x.IsComboReturnPolicyApplied,
+                    ReturnCondition = ReturnConditions.OkSellable
+                })
+                .ToList();
+
+            ApplyComboReturnSelectionPolicy();
         }
         catch (Exception ex)
         {
+            SelectedInvoiceSummary = null;
+            ReturnHistory = new();
             await AppSnackbar.Show(ex.Message, SnackbarType.Error);
         }
     }
 
-    async Task ProcessReturn()
+    private async Task ProcessReturn()
     {
         var selected = Lines.Where(x => x.IsSelected).ToList();
         if (!selected.Any())
@@ -235,69 +407,161 @@
             return;
         }
 
+        if (selected.Any(x => string.IsNullOrWhiteSpace(x.ReturnCondition)))
+        {
+            await AppSnackbar.Show("Select return condition for each selected line", SnackbarType.Warning);
+            return;
+        }
+
         if (selected.Any(x => string.IsNullOrWhiteSpace(x.GetReason())))
         {
             await AppSnackbar.Show("Select reason for each selected line (or fill custom reason)", SnackbarType.Warning);
             return;
         }
 
+        var hasSellableSelections = selected.Any(x => x.IsSellableCondition);
+        var addSellableItemsToStock = false;
+
+        switch (ReturnStockMode)
+        {
+            case ReturnStockModes.AlwaysAddToStock:
+                addSellableItemsToStock = hasSellableSelections;
+                break;
+
+            case ReturnStockModes.AskUserEveryReturn:
+                if (hasSellableSelections)
+                {
+                    addSellableItemsToStock = await PromptForReturnStockAsync();
+                }
+                break;
+
+            case ReturnStockModes.NeverAddAutomatically:
+            default:
+                addSellableItemsToStock = false;
+                break;
+        }
+
         var dto = new ReturnProcessDto
         {
             InvoiceNo = SelectedInvoiceNo,
             Location = CurrentLocation,
-
+            Terminal = CurrentLocation,
+            Staff = BuildSalesPersonCode(),
+            AddSellableItemsToStock = addSellableItemsToStock,
             Lines = selected.Select(x => new ReturnLineDto
             {
+                SaleLineId = x.SaleLineId,
                 PartNumber = x.PartNumber,
+                Description = x.Description,
                 Qty = x.Quantity,
                 StockNo = x.StockNo,
                 Terminal = x.Terminal,
                 Location = x.Location,
-                Reason = x.GetReason()
-            }).ToList(),
-
-            RefundCash = RefundCash,
-            RefundCard = RefundCard
+                Reason = x.GetReason(),
+                Condition = x.ReturnCondition,
+                IsCombo = x.IsCombo,
+                ComboId = x.ComboId,
+                ComboGroupId = x.ComboGroupId,
+                IsComboReturnPolicyApplied = x.IsComboReturnPolicyApplied,
+                RefundAmount = x.RefundAmount
+            }).ToList()
         };
 
-        ApiResponse<bool> result;
-        try
-        {
-            result = await ReturnService.ProcessReturnAsync(dto);
-        }
-        catch (Exception ex)
-        {
-            await AppSnackbar.Show(ex.Message, SnackbarType.Error);
-            return;
-        }
-
-        if (!result.Success)
-        {
-            await AppSnackbar.Show(result.Message, SnackbarType.Error);
-            return;
-        }
-
-        await AppSnackbar.Show("Return processed", SnackbarType.Success);
-        Nav.NavigateTo("/pos-sell", true);
+        PosPaymentState.CurrentSale = null;
+        PosPaymentState.CurrentLayawayNo = null;
+        PosPaymentState.CurrentReturn = dto;
+        Nav.NavigateTo("/pos-payment");
     }
 
-    void Cancel()
+    private string BuildSalesPersonCode()
+    {
+        var candidate = Auth.CurrentUser?.StaffCode;
+        if (string.IsNullOrWhiteSpace(candidate))
+            candidate = Auth.CurrentUser?.Username;
+
+        candidate = (candidate ?? string.Empty).Trim().ToUpperInvariant();
+        if (candidate.Length <= 2)
+            return candidate;
+
+        return candidate[..2];
+    }
+
+    private async Task<bool> PromptForReturnStockAsync()
+    {
+        ReturnStockPromptTcs = new TaskCompletionSource<bool>();
+        ShowReturnStockConfirm = true;
+        await InvokeAsync(StateHasChanged);
+        return await ReturnStockPromptTcs.Task;
+    }
+
+    private Task ResolveReturnStockPrompt(bool result)
+    {
+        ShowReturnStockConfirm = false;
+        ReturnStockPromptTcs?.TrySetResult(result);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void Cancel()
         => Nav.NavigateTo("/pos-sell");
 
-    class ReturnLineVm
+    private async Task LoadSettingsAsync()
+    {
+        var res = await SysOptionsService.GetAsync();
+        if (res.Success && res.Data != null)
+        {
+            AllowSeparateComboItemReturn = res.Data.AllowSeparateComboItemReturn;
+            ReturnStockMode = string.IsNullOrWhiteSpace(res.Data.ReturnStockMode)
+                ? ReturnStockModes.AskUserEveryReturn
+                : res.Data.ReturnStockMode;
+        }
+    }
+
+    private void ApplyComboReturnSelectionPolicy()
+    {
+        if (AllowSeparateComboItemReturn)
+            return;
+
+        foreach (var line in Lines.Where(x => x.IsComboReturnPolicyApplied))
+        {
+            line.IsSelected = true;
+            line.IsSelectionLocked = true;
+        }
+    }
+
+    private static string GetReturnStockModeLabel(string mode) => mode switch
+    {
+        ReturnStockModes.AlwaysAddToStock => "Always add to stock",
+        ReturnStockModes.NeverAddAutomatically => "Never add automatically",
+        _ => "Ask user every return"
+    };
+
+    private static string FormatInvoiceDate(DateTime? dt)
+        => dt.HasValue ? dt.Value.ToString("dd-MMM-yyyy HH:mm") : "-";
+
+    private sealed class ReturnLineVm
     {
         public bool IsSelected { get; set; }
+        public bool IsSelectionLocked { get; set; }
 
-        public string PartNumber { get; set; } = "";
-        public string StockNo { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string Terminal { get; set; } = "";
-        public string Location { get; set; } = "";
+        public int SaleLineId { get; set; }
+        public string PartNumber { get; set; } = string.Empty;
+        public string StockNo { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Terminal { get; set; } = string.Empty;
+        public string Location { get; set; } = string.Empty;
         public int Quantity { get; set; }
         public decimal Sell { get; set; }
+        public bool IsCombo { get; set; }
+        public int? ComboId { get; set; }
+        public string? ComboGroupId { get; set; }
+        public bool IsComboReturnPolicyApplied { get; set; }
+        public decimal RefundAmount { get; set; }
 
+        public string ReturnCondition { get; set; } = ReturnConditions.OkSellable;
         public string? ReturnReason { get; set; }
         public string? CustomReturnReason { get; set; }
+
+        public bool IsSellableCondition => ReturnConditions.IsSellable(ReturnCondition);
 
         public string GetReason()
         {
@@ -307,7 +571,4 @@
             return ReturnReason?.Trim() ?? string.Empty;
         }
     }
-
-    private static string FormatInvoiceDate(DateTime? dt)
-        => dt.HasValue ? dt.Value.ToString("dd-MMM-yyyy HH:mm") : "-";
 }

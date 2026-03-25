@@ -101,6 +101,71 @@
     background: linear-gradient(135deg, #ca5560, #b53d4a) !important;
 }
 
+.po-raise-screen {
+    border-radius: 0.95rem;
+}
+
+.po-raise-screen .card-header {
+    background: linear-gradient(180deg, #0d84d9, #06659f) !important;
+    color: #ffffff !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.po-raise-screen .card-body {
+    background: linear-gradient(180deg, rgba(245, 248, 252, 0.98), rgba(235, 241, 247, 0.96));
+}
+
+.po-raise-screen .form-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #2e4a63;
+    margin-bottom: 0.25rem;
+}
+
+.po-raise-screen .po-top-controls,
+.po-raise-screen .po-summary-strip,
+.po-raise-screen .po-results-card,
+.po-raise-screen .po-allocation-card {
+    border: 1px solid rgba(120, 145, 172, 0.28);
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 10px 24px rgba(28, 53, 77, 0.08);
+    padding: 0.9rem 1rem;
+}
+
+.po-raise-screen .po-actions .btn {
+    min-width: 110px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.po-raise-screen .table thead th {
+    background: #ffffff;
+    color: #27425d;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.po-raise-screen .table tbody td,
+.po-raise-screen .table tfoot th {
+    background: rgba(255, 255, 255, 0.84);
+}
+
+.po-raise-screen .form-control,
+.po-raise-screen .form-select,
+.po-raise-screen .btn,
+.po-raise-screen .input-group-text {
+    box-shadow: 0 6px 14px rgba(28, 53, 77, 0.09);
+}
+
+.po-raise-screen .text-danger.fw-bold.small {
+    margin-top: 0.25rem;
+}
+
 .glass-panel .search-btn {
     background: linear-gradient(135deg, rgba(32, 102, 194, 0.95), rgba(49, 140, 233, 0.85));
     border-color: rgba(25, 97, 182, 0.8);

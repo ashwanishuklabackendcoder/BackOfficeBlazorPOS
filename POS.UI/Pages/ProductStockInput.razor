@@ -10,6 +10,7 @@
 @inject IProductApiService ProductApi
 @inject IStockService StockService
 @inject AppSnackbarService AppSnackbar
+@implements IAsyncDisposable
 
 <PageTitle>Stock Input</PageTitle>
 
@@ -26,6 +27,7 @@
             <label class="col-sm-1 form-label-custom required-label">Part No</label>
             <div class="col-sm-2">
                 <input id="partNumber"
+                       @ref="partNumberInput"
                        class="form-control"
                        @bind-value="PartNumber"
                        maxlength="@(MaxLengthHelper.For<StockInputDto>(nameof(StockInputDto.PartNumber)))"
@@ -88,7 +90,7 @@
 
             <label class="col-sm-1 form-label-custom">Date In</label>
             <div class="col-sm-2">
-                <input type="date" class="form-control" @bind="DateIn" />
+                <input type="date" disabled class="form-control" @bind="DateIn"  />
             </div>
         </div>
 
@@ -168,6 +170,8 @@
             <thead>
                 <tr>
                     <th>Part#</th>
+                    <th>Date</th>
+                    
                     <th>Loc</th>
                     <th>Qty</th>
                     <th>Cost</th>
@@ -181,6 +185,8 @@
                     {
                         <tr>
                             <td>@h.PartNumber</td>
+                            <td>@h.CreatedDate.ToString("dd-MM-yyyy")</td>
+                            
                             <td>@h.Location</td>
                             <td>@h.Quantity</td>
                             <td>@h.Cost</td>
@@ -249,6 +255,7 @@
 
     int CurrentStock;
     DotNetObjectReference<ProductStockInput>? dotNetRef;
+    ElementReference partNumberInput;
     List<StockHistoryRow> History = new();
 
     decimal TotalCost => QtyIn * CostEach;
@@ -294,7 +301,8 @@
             PartNumber = h.PartNumber,
             Location = h.LocationCode,
             Quantity = h.Quantity,
-            Cost = h.Cost
+            Cost = h.Cost,
+            CreatedDate=h.DateCreated
         }).ToList();
 
         await AppSnackbar.Show("Product & stock loaded", SnackbarType.Success);
@@ -436,10 +444,11 @@
         public string PartNumber { get; set; } = "";
         public string Location { get; set; } = "";
         public int Quantity { get; set; }
+        public DateTime CreatedDate { get; set; }
         public decimal Cost { get; set; }
         public decimal Total => Quantity * Cost;
     }
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         dotNetRef?.Dispose();
     }

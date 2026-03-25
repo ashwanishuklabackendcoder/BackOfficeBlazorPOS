@@ -8,6 +8,8 @@
 @using POS.UI.Services
 @inject IProductEnquiryService ProductEnquiryService
 @inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Product Enquiry</PageTitle>
 
@@ -22,6 +24,7 @@
                    placeholder="Part Number"
                    @bind="searchTerm"
                    @bind:event="oninput"
+                   @ref="searchInput"
                    @onkeydown="HandleSearchKey" />
             <button class="btn btn-primary px-3" @onclick="LoadHeaderAsync">Search</button>
         </div>
@@ -333,6 +336,8 @@
     private ProductEnquiryHeaderDto? header;
     private string searchTerm = string.Empty;
     private bool isLoadingHeader;
+    private ElementReference searchInput;
+    private DotNetObjectReference<ProductEnquiry>? dotNetRef;
 
     private readonly string[] tabs = new[]
     {
@@ -606,6 +611,14 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+    }
+
     private void ResetTabCache()
     {
         loadedTabs.Clear();
@@ -762,5 +775,10 @@
         }
 
         return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
     }
 }

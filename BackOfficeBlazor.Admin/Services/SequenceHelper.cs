@@ -9,7 +9,7 @@ namespace BackOfficeBlazor.Admin.Services
 {
     internal static class SequenceHelper
     {
-        public const int DefaultDigits = 10;
+        public const int DefaultDigits = 5;
 
         public static int GetMaxLength<T>(string propertyName, int fallbackLength)
         {

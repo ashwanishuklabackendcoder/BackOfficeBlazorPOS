@@ -635,7 +635,7 @@
                 @foreach (var p in SortedProducts)
                 {
                     <tr style="cursor:pointer"
-                        @onclick="() => LoadStockForProduct(p)">
+                        @onclick="() => HandleProductRowClick(p)">
 
                         <td>@p.PartNumber</td>
                         <td>@p.Make</td>
@@ -645,10 +645,11 @@
                         <td>@p.Supplier1Code</td>
                         <td>@p.CostPrice</td>
                         <td>
-                            @if (SelectionMode)
+                            @if (SelectionMode || IsReturnSelectionActive)
                             {
                                 <button class="btn btn-sm btn-success"
-                                        @onclick="async () => { await LoadStockForProduct(p); await SelectProduct(p); }">
+                                        @onclick="async () => { await SelectProduct(p); }">
+                                    Select
                                 </button>
                             }
                             else
@@ -740,6 +741,20 @@
         }).ToList();
     }
 
+    private bool IsReturnSelectionActive =>
+        !string.IsNullOrWhiteSpace(POS.UI.State.PosWorkflowState.PendingProductSearchReturnUri);
+
+    async Task HandleProductRowClick(ProductDto product)
+    {
+        if (SelectionMode || IsReturnSelectionActive)
+        {
+            await SelectProduct(product);
+            return;
+        }
+
+        await LoadStockForProduct(product);
+    }
+
 
 
     void ClearFilters()
@@ -810,6 +825,15 @@
     }
     async Task SelectProduct(ProductDto product)
     {
+        var returnUri = POS.UI.State.PosWorkflowState.PendingProductSearchReturnUri;
+        if (!string.IsNullOrWhiteSpace(returnUri))
+        {
+            POS.UI.State.PosWorkflowState.PendingProductSelection = product;
+            POS.UI.State.PosWorkflowState.PendingProductSearchReturnUri = null;
+            Navigation.NavigateTo(returnUri, replace: true);
+            return;
+        }
+
         if (OnProductSelected.HasDelegate)
             await OnProductSelected.InvokeAsync(product);
     }

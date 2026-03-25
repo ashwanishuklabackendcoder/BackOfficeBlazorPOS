@@ -9,6 +9,7 @@
 @inject IAuthService Auth
 @inject AppSnackbarService AppSnackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 <PageTitle>POS Returns</PageTitle>
 
 <div class="card shadow-sm">
@@ -119,7 +120,7 @@
                         <th>StockNo</th>
                         <th>Qty</th>
                         <th>Sell</th>
-                        <th>Refund</th>
+                        <th>Net Refund</th>
                         <th>Combo</th>
                         <th>Condition</th>
                         <th>Reason</th>
@@ -136,7 +137,15 @@
                                        disabled="@line.IsSelectionLocked" />
                             </td>
                             <td>@line.PartNumber</td>
-                            <td>@line.Description</td>
+                            <td>
+                                <div>@line.Description</div>
+                                @if (line.DiscountTotal > 0m)
+                                {
+                                    <div class="small text-muted">
+                                        Discount @line.DiscountTotal.ToString("0.00")
+                                    </div>
+                                }
+                            </td>
                             <td>@line.StockNo</td>
                             <td>@line.Quantity</td>
                             <td>@line.Sell</td>
@@ -186,7 +195,7 @@
 
         <div class="row mt-3 g-3">
             <div class="col-md-3">
-                <label>Calculated Refund</label>
+                <label>Calculated Net Refund</label>
                 <input type="number"
                        class="form-control"
                        value="@SelectedRefundAmount.ToString("0.00")"
@@ -288,9 +297,9 @@
 
     private string? SelectedInvoiceNo;
     private string? CustomerAccNoFilter;
-    private DateTime? FromDateFilter = DateTime.Today;
+    private DateTime? FromDateFilter =
+    new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-1);
     private DateTime? ToDateFilter = DateTime.Today;
-
     private bool AllowSeparateComboItemReturn = true;
     private string ReturnStockMode = ReturnStockModes.AskUserEveryReturn;
     private string CurrentLocation = "01";
@@ -368,6 +377,7 @@
                     SaleLineId = x.SaleLineId,
                     PartNumber = x.PartNumber,
                     Description = x.Description,
+                    DiscountTotal = x.DiscountAmount * x.Quantity,
                     StockNo = x.StockNo,
                     Quantity = x.Quantity,
                     Terminal = x.Terminal,
@@ -547,6 +557,7 @@
         public string PartNumber { get; set; } = string.Empty;
         public string StockNo { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public decimal DiscountTotal { get; set; }
         public string Terminal { get; set; } = string.Empty;
         public string Location { get; set; } = string.Empty;
         public int Quantity { get; set; }

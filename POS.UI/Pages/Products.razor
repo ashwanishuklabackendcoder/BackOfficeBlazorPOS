@@ -6,6 +6,7 @@
 @using System.Linq
 @using System.Text.RegularExpressions
 @inject HttpClient Http
+@inject NavigationManager Navigation
 @inject IImageApiService ImageApi
 @inject IProductApiService ProductApi
 @inject ICategoryService CategoryApi
@@ -50,6 +51,9 @@
                 </div>
                 <div class="col-sm-1 ps-0">
                     <button class="btn btn-primary w-100 search-btn" @onclick="Search">Search</button>
+                </div>
+                <div class="col-sm-2 d-flex align-items-center">
+                    <span class="badge rounded-pill text-bg-light border text-muted">F5 Search</span>
                 </div>
             </div>
             <div class="row mb-0 align-items-center">
@@ -678,6 +682,7 @@
     {
         await base.OnInitializedAsync();
         await LoadLocationThresholdsAsync();
+        await ConsumePendingProductSelectionAsync();
     }
 
     private async Task LoadLocationThresholdsAsync()
@@ -838,6 +843,13 @@
         await Reset();
         await AppSnackbar.Show("Enter Part Number to search product", SnackbarType.Info);
     }
+
+    [JSInvokable]
+    public Task OnF5()
+    {
+        Navigation.NavigateTo("/products");
+        return Task.CompletedTask;
+    }
     async Task OnPartNumberKeyDown(KeyboardEventArgs e)
     {
         if (e.Key != "Enter")
@@ -914,7 +926,8 @@
             {
                 scopeSelector = "#product-form",
                 enableEsc = true,
-                enableEnter = true
+                enableEnter = true,
+                enableF5 = true
             });
 
         await partNumberInput.FocusAsync();
@@ -1097,6 +1110,24 @@
             
         }
     }
+
+    private async Task ConsumePendingProductSelectionAsync()
+    {
+        var selected = POS.UI.State.PosWorkflowState.PendingProductSelection;
+        if (selected?.PartNumber == null)
+            return;
+
+        POS.UI.State.PosWorkflowState.PendingProductSelection = null;
+        POS.UI.State.PosWorkflowState.PendingProductSearchReturnUri = null;
+
+        model.PartNumber = selected.PartNumber;
+        isPartNumberDisabled = false;
+
+        await Search();
+        await InvokeAsync(StateHasChanged);
+        await partNumberInput.FocusAsync();
+    }
+
     void Cancel()
     {
         model = new ProductDto();

@@ -1,0 +1,42 @@
+@page "/purchase-orders"
+
+<PageTitle>Purchase Orders</PageTitle>
+
+<div class="card shadow-sm border-0 product-list-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <h5 class="fw-bold mb-0">Purchase Orders</h5>
+        <div class="small text-muted">Use a dedicated screen for each step of the purchase order flow</div>
+    </div>
+
+    <div class="card-body p-4">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card h-100 border">
+                    <div class="card-body">
+                        <h5 class="card-title">Create Draft</h5>
+                        <p class="card-text text-muted">Build a new draft purchase order and save it into the draft items table.</p>
+                        <a class="btn btn-primary" href="purchase-orders/create">Open Create Screen</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 border">
+                    <div class="card-body">
+                        <h5 class="card-title">Raise Order</h5>
+                        <p class="card-text text-muted">Select a supplier and location, then raise the purchase order directly.</p>
+                        <a class="btn btn-warning" href="purchase-orders/raise">Open Raise Screen</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 border">
+                    <div class="card-body">
+                        <h5 class="card-title">Receive Order</h5>
+                        <p class="card-text text-muted">Load a raised order, receive quantities, and update stock and product cost.</p>
+                        <a class="btn btn-info" href="purchase-orders/receive">Open Receive Screen</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

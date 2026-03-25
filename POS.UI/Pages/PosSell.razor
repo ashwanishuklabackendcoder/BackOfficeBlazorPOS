@@ -8,12 +8,15 @@
 @inject IProductApiService ProductApi
 @inject IComboApiService ComboApi
 @inject IStockService StockService
+@inject ICustomerService CustomerService
 @inject ILayawayService LayawayService
 @inject AppSnackbarService AppSnackbar
 @inject NavigationManager Nav
+@inject HttpClient Http
 @inject IAuthService AuthService
 @inject ISysOptionsService SysOptionsService
 @inject IQuickShortcutService QuickShortcutService
+@implements IAsyncDisposable
 
 
 <PageTitle>POS Sell</PageTitle>
@@ -101,9 +104,10 @@
                 <div class="col-md-4">
                     <label class="form-label">Part No / Barcode / MPN</label>
                         <input id="partNumber"
+                            
                                class="form-control"
                                autocomplete="new-password"
-                               autocorrect="off"
+                               autocorrect="off" 
                                autocapitalize="off"
                                spellcheck="false"
                                data-lpignore="true"
@@ -111,6 +115,7 @@
                                @bind="ProductCode"
                                @onkeydown="OnProductKeyDown"
                                placeholder="Scan or type and press Enter" />
+                    <div class="small text-muted mt-1">F5 Search</div>
                 </div>
                 @if (PendingMajorLine != null)
 
@@ -615,6 +620,7 @@
     string? PendingComboGroupId;
     PosCartLine? ViewingComboLine;
     DotNetObjectReference<PosSell>? dotNetRef;
+    string? productSearchShortcutId;
     decimal EditPrice;
     decimal EditDiscountPercent;
     decimal EditDiscountAmount;
@@ -623,7 +629,10 @@
     bool ShowCustomerPicker = false;
     bool NavigateToLayawayAfterCustomerPick;
 
-    string SelectedCustomerAccount = "WALKIN";
+    const string WalkInCustomerAccount = "WALKIN";
+    const string DayCustomerName = "Day Customer";
+
+    string SelectedCustomerAccount = WalkInCustomerAccount;
     string SelectedCustomerName = "Walk In";
 
     int TotalItems => Cart.Sum(x => x.Qty);
@@ -648,6 +657,7 @@
         await LoadQuickItemsAsync();
         await RestoreTillPinStateAsync();
         await LoadSysOptionsAsync();
+        await ConsumePendingProductSelectionAsync();
     }
 
     async Task OnProductKeyDown(KeyboardEventArgs e)
@@ -697,8 +707,18 @@
 
         dotNetRef = DotNetObjectReference.Create(this);
 
-        await JS.InvokeVoidAsync("enableProductShortcuts", dotNetRef);
         await JS.InvokeVoidAsync("enableEnterNavigation");
+        productSearchShortcutId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
+            {
+                scopeSelector = "#partNumber",
+                enableEsc = false,
+                enableEnter = false,
+                enableF1 = false,
+                enableF5 = true
+            });
 
         if (!IsLocked)
         {
@@ -707,6 +727,30 @@
                 "document.getElementById('partNumber')?.focus()"
             );
         }
+    }
+
+    [JSInvokable]
+    public Task OnF5()
+    {
+        PosWorkflowState.PendingProductSearchReturnUri = Nav.Uri;
+        Nav.NavigateTo("/products");
+        return Task.CompletedTask;
+    }
+
+    private async Task ConsumePendingProductSelectionAsync()
+    {
+        if (IsLocked)
+            return;
+
+        var selected = PosWorkflowState.PendingProductSelection;
+        if (selected?.PartNumber == null)
+            return;
+
+        PosWorkflowState.PendingProductSelection = null;
+        PosWorkflowState.PendingProductSearchReturnUri = null;
+
+        ProductCode = selected.PartNumber;
+        await LoadAndAddProduct();
     }
 
     async Task LoadAndAddProduct()
@@ -723,7 +767,7 @@
         if (string.IsNullOrWhiteSpace(ProductCode))
             return;
 
-        var res = await ProductApi.GetProduct(ProductCode);
+        var res = await ResolveProductForSellAsync(ProductCode);
 
         if (res?.Success == true && res.Data != null)
         {
@@ -1059,23 +1103,27 @@
         AppSnackbar.Show("Quote flow coming in Phase 2", SnackbarType.Info);
     }
 
-    void Pay()
+    async Task Pay()
     {
         if (EnsureUnlocked() == false)
             return;
 
         if (!Cart.Any())
         {
-            AppSnackbar.Show("Cart is empty", SnackbarType.Warning);
+            await AppSnackbar.Show("Cart is empty", SnackbarType.Warning);
             return;
         }
+
+        var transactionCustomerAccount = await ResolveTransactionCustomerAccountAsync();
+        if (string.IsNullOrWhiteSpace(transactionCustomerAccount))
+            return;
 
         var sale = new PosSaleRequestDto
         {
             Location = CurrentLocation,
             Terminal = "01",
             SalesPerson = "AD",
-            Customer = SelectedCustomerAccount,
+            Customer = transactionCustomerAccount,
 
             SubTotal = SubTotal,
             VatAmount = 0,
@@ -1496,7 +1544,7 @@
 
     void SetWalkInCustomer()
     {
-        SelectedCustomerAccount = "WALKIN";
+        SelectedCustomerAccount = WalkInCustomerAccount;
         SelectedCustomerName = "Walk In";
         ShowCustomerPicker = false;
         NavigateToLayawayAfterCustomerPick = false;
@@ -1523,6 +1571,66 @@
             NavigateToLayawayAfterCustomerPick = false;
             NavigateToLayawayWorkspace();
         }
+    }
+
+    bool ShouldCreateTemporaryCustomer()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedCustomerAccount))
+            return true;
+
+        if (string.Equals(SelectedCustomerAccount, WalkInCustomerAccount, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return string.Equals(SelectedCustomerName, "Walk In", StringComparison.OrdinalIgnoreCase);
+    }
+
+    async Task<string?> ResolveTransactionCustomerAccountAsync()
+    {
+        if (!ShouldCreateTemporaryCustomer())
+            return SelectedCustomerAccount;
+
+        var createResponse = await CustomerService.SaveAsync(new CustomerDto
+        {
+            Firstname = DayCustomerName,
+            Balance = 0m
+        });
+
+        if (!createResponse.Success || createResponse.Data == null || string.IsNullOrWhiteSpace(createResponse.Data.AccNo))
+        {
+            await AppSnackbar.Show(
+                createResponse.Message ?? "Unable to create customer account",
+                SnackbarType.Error);
+            return null;
+        }
+
+        SelectedCustomerAccount = createResponse.Data.AccNo.Trim().ToUpperInvariant();
+        SelectedCustomerName = DayCustomerName;
+        SaveUiState();
+        return SelectedCustomerAccount;
+    }
+
+    async Task<ApiResponse<ProductDto>?> ResolveProductForSellAsync(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return null;
+
+        var lookup = input.Trim();
+
+        var partNumberResult = await ProductApi.GetProduct(lookup);
+        if (partNumberResult?.Success == true && partNumberResult.Data != null)
+            return partNumberResult;
+
+        var barcodeResult = await Http.GetFromJsonAsync<ApiResponse<ProductDto>>(
+            $"api/product/GetBarcode?Barcode={Uri.EscapeDataString(lookup)}");
+        if (barcodeResult?.Success == true && barcodeResult.Data != null)
+            return barcodeResult;
+
+        var mfrResult = await Http.GetFromJsonAsync<ApiResponse<ProductDto>>(
+            $"api/product/GetMFRPartNo?MfrpartNumber={Uri.EscapeDataString(lookup)}");
+        if (mfrResult?.Success == true && mfrResult.Data != null)
+            return mfrResult;
+
+        return partNumberResult ?? barcodeResult ?? mfrResult;
     }
 
     void NavigateToLayawayWorkspace()
@@ -1819,4 +1927,21 @@
         => JS.InvokeVoidAsync(
             "eval",
             "document.getElementById('partNumber')?.focus()").AsTask();
+
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+
+        if (!string.IsNullOrWhiteSpace(productSearchShortcutId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", productSearchShortcutId);
+            }
+            catch
+            {
+                // Ignore JS disconnection during teardown.
+            }
+        }
+    }
 }

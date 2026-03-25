@@ -72,6 +72,7 @@ builder.Services.AddScoped<IProductStockRepository, ProductStockRepository>();
 builder.Services.AddScoped<IStockLevelRepository, StockLevelRepository>();
 
 builder.Services.AddScoped<IStockInputService, StockInputService>();
+builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 builder.Services.AddScoped<ISalesRepository, SalesRepositroy>();
 builder.Services.AddScoped<ISalesService, SalesService>();
 builder.Services.AddScoped<IComboService, ComboService>();

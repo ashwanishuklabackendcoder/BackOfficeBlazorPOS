@@ -176,6 +176,41 @@
                     }
                 }
             }
+
+            @if (ShowPurchaseOrderMenu())
+            {
+                <div class="nav-item px-3">
+                    <button class="nav-link section-toggle" @onclick="TogglePurchaseOrderMenu" @onclick:stopPropagation="true">
+                        <span class="bi bi-bag-check-fill-nav-menu" aria-hidden="true"></span>
+                        Purchase Orders
+                        <span class="ms-auto bi @(purchaseOrderMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
+                    </button>
+                </div>
+
+                @if (purchaseOrderMenuExpanded)
+                {
+                    <div class="nav-item px-4 submenu-item">
+                        <NavLink class="nav-link" href="purchase-orders">
+                            <span class="bi bi-collection me-2" aria-hidden="true"></span> Purchase Orders Home
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-4 submenu-item">
+                        <NavLink class="nav-link" href="purchase-orders/create">
+                            <span class="bi bi-plus-circle me-2" aria-hidden="true"></span> Create Draft
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-4 submenu-item">
+                        <NavLink class="nav-link" href="purchase-orders/raise">
+                            <span class="bi bi-arrow-up-circle me-2" aria-hidden="true"></span> Raise Order
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-4 submenu-item">
+                        <NavLink class="nav-link" href="purchase-orders/receive">
+                            <span class="bi bi-box-arrow-in-down me-2" aria-hidden="true"></span> Receive Order
+                        </NavLink>
+                    </div>
+                }
+            }
     
             @if (ShowSettingsMenu())
             {
@@ -297,6 +332,7 @@
     private bool maintenanceMenuExpanded;
     private bool tillMenuExpanded;
     private bool stockMenuExpanded;
+    private bool purchaseOrderMenuExpanded;
     private bool settingsMenuExpanded;
     private bool reportsMenuExpanded;
 
@@ -317,6 +353,7 @@
 
     private void ToggleTillMenu() => tillMenuExpanded = !tillMenuExpanded;
     private void ToggleStockMenu() => stockMenuExpanded = !stockMenuExpanded;
+    private void TogglePurchaseOrderMenu() => purchaseOrderMenuExpanded = !purchaseOrderMenuExpanded;
     private void ToggleSettingsMenu() => settingsMenuExpanded = !settingsMenuExpanded;
     private void ToggleReportsMenu() => reportsMenuExpanded = !reportsMenuExpanded;
 
@@ -338,6 +375,9 @@
             || AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
 
     private bool ShowStockMenu()
+        => AuthService.HasAccess(PermissionKeys.StockInput);
+
+    private bool ShowPurchaseOrderMenu()
         => AuthService.HasAccess(PermissionKeys.StockInput);
 
     private bool ShowSettingsMenu()

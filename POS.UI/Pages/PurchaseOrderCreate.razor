@@ -1,0 +1,568 @@
+@page "/purchase-orders/create"
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.Pages
+@using Microsoft.AspNetCore.Components.Web
+@inject IPurchaseOrderApiService PurchaseOrderApi
+@inject IProductApiService ProductApi
+@inject IStockService StockService
+@inject IProductEnquiryService ProductEnquiryService
+@inject AppSnackbarService AppSnackbar
+@inject IAuthService AuthService
+@inject ISupplierService SupplierService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Purchase Order Create</PageTitle>
+
+<div class="card shadow-sm border-0 product-list-card" id="po-create-form">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <div>
+            <h5 class="fw-bold mb-0">Purchase Order Creation</h5>
+            <div class="small text-muted">Create a draft purchase order from one form</div>
+        </div>
+        <div class="small text-muted text-end">
+            <div>Draft Ref: <strong>@DraftRefDisplay</strong></div>
+            <div>Order No: <strong>@(string.IsNullOrWhiteSpace(OrderNumber) ? "-" : OrderNumber)</strong></div>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-4 fw-semibold text-uppercase">Order Type</div>
+                    <div class="col-md-8">STOCK ORDER</div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Location</div>
+                    <div class="col-md-8">
+                        <LocationSelector @bind-Value="StockLocationCode" @bind-Value:after="OnLocationChanged" />
+                        <div class="small text-primary fw-semibold mt-1">@(string.IsNullOrWhiteSpace(StockLocationCode) ? "ALL LOC" : StockLocationCode)</div>
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Mfr Part No</div>
+                    <div class="col-md-8">
+                        <input class="form-control" @bind="MfrPartNumber" @bind:event="oninput" @onkeydown="OnPartKeyDown" />
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Part No</div>
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-danger fw-bold small">F5</span>
+                            <input class="form-control" @bind="PartNumber" @bind:event="oninput" @onkeydown="OnPartKeyDown" />
+                        </div>
+                        <div class="small text-primary fw-semibold mt-1">@CurrentProductDisplay</div>
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Supplier</div>
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-danger fw-bold small">F5</span>
+                            <div class="flex-grow-1">
+                                <SupplierSelector Value="@SupplierCode" ValueChanged="OnSupplierChanged" />
+                            </div>
+                        </div>
+                        <div class="small text-primary fw-semibold mt-1">@SupplierNameOrFallback</div>
+                    </div>
+
+       @*              <div class="col-md-4 fw-semibold text-uppercase">Customer</div>
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-danger fw-bold small">F5</span>
+                            <input class="form-control" @bind="CustomerAccNo" @bind:event="oninput" />
+                        </div>
+                        <div class="small text-primary fw-semibold mt-1">@CustomerNameOrFallback</div>
+                    </div> *@
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Cost Price</div>
+                    <div class="col-md-8">
+                        <input type="number" step="0.01" class="form-control" @bind="CostPrice" />
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Retail Price</div>
+                    <div class="col-md-8">
+                        <input type="number" step="0.01" class="form-control" @bind="RetailPrice" />
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Qty Required</div>
+                    <div class="col-md-8">
+                        <input type="number" class="form-control" @bind="QtyRequired" />
+                        <div class="small text-primary fw-semibold mt-1">TOTAL ROUNDUP QTY = @RoundedQty</div>
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Box Qty</div>
+                    <div class="col-md-8">
+                        <input type="number" class="form-control" disabled @bind="BoxQty" />
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Sales Code</div>
+                    <div class="col-md-8">
+                        <input class="form-control w-25" @bind="SalesCode" />
+                    </div>
+
+                    <div class="col-md-4 fw-semibold text-uppercase">Notes</div>
+                    <div class="col-md-8">
+                        <textarea class="form-control" rows="3" @bind="Notes"></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-3 d-flex gap-2 flex-wrap">
+                    <button class="btn btn-success" @onclick="PlaceOrder">ORDER</button>
+                    <button class="btn btn-outline-secondary" @onclick="CancelCurrentLine">CANCEL</button>
+                    <button class="btn btn-outline-danger" @onclick="Exit">EXIT</button>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="border rounded p-3 bg-light h-100">
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><strong>Margin</strong></div>
+                        <div class="col-6 text-end text-danger">@MarginText</div>
+                        <div class="col-6"><strong>Stock Level</strong></div>
+                        <div class="col-6 text-end">@CurrentStockLevel</div>
+                        <div class="col-6"><strong>Total Sold</strong></div>
+                        <div class="col-6 text-end">@TotalSold</div>
+                        <div class="col-6"><strong>On Order</strong></div>
+                        <div class="col-6 text-end">@OnOrderQty</div>
+                        <div class="col-6"><strong>Roundup Box Qty</strong></div>
+                        <div class="col-6 text-end"><input type="checkbox" class="form-check-input" @bind="RoundupBoxQty" /></div>
+                        <div class="col-6"><strong>Send SMS</strong></div>
+                        <div class="col-6 text-end"><input type="checkbox" class="form-check-input" @bind="SendSms" /></div>
+                        <div class="col-6"><strong>Xmas Club</strong></div>
+                        <div class="col-6 text-end"><input type="checkbox" class="form-check-input" @bind="XmasClub" /></div>
+                    </div>
+
+                    <div class="border rounded p-3 bg-white text-center">
+                        <div class="small text-muted">Order Total</div>
+                        <div class="display-6 fw-bold text-primary">@OrderTotal.ToString("0.00")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-bold">Order Lines</div>
+                <div class="text-muted small">Draft lines are stored first, then raised separately</div>
+            </div>
+            <div class="table-responsive" style="max-height: 320px; overflow:auto;">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Part No</th>
+                            <th>MFR</th>
+                            <th>Description</th>
+                            <th>Qty</th>
+                            <th>Cost</th>
+                            <th>Total</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Lines.Any())
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">No order lines yet</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var line in Lines.OrderBy(x => x.SequenceId))
+                            {
+                                <tr>
+                                    <td>@line.SequenceId</td>
+                                    <td>@line.PartNumber</td>
+                                    <td>@line.MfrPartNumber</td>
+                                    <td>@line.Description</td>
+                                    <td>@line.QtyRequired</td>
+                                    <td>@line.CostPrice.ToString("0.00")</td>
+                                    <td>@line.LineTotal.ToString("0.00")</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLine(line)">X</button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (ShowProductSearch)
+{
+    <div class="modal fade show d-block" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Product</h5>
+                    <button class="btn-close" @onclick="CloseProductSearch"></button>
+                </div>
+                <div class="modal-body">
+                    <ProductSearchGrid OnSelected="OnProductSelected" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    DotNetObjectReference<PurchaseOrderCreate>? dotNetRef;
+    string? shortcutRegistrationId;
+
+    int? DraftRef;
+    string OrderNumber = string.Empty;
+    string SupplierCode = string.Empty;
+    string SupplierName = string.Empty;
+    string CustomerAccNo = string.Empty;
+    string CustomerName = string.Empty;
+    string SalesCode = string.Empty;
+    string PartNumber = string.Empty;
+    string MfrPartNumber = string.Empty;
+    string Description = string.Empty;
+    string StockLocationCode = "01";
+    string Notes = string.Empty;
+    decimal CostPrice;
+    decimal RetailPrice;
+    int QtyRequired = 1;
+    int BoxQty = 1;
+    bool RoundupBoxQty = true;
+    bool SendSms;
+    bool XmasClub;
+    bool ShowProductSearch;
+    int CurrentStockLevel;
+    int OnOrderQty;
+    int TotalSold;
+
+    List<PurchaseOrderLineDto> Lines = new();
+    ProductDto? CurrentProduct;
+
+    string DraftRefDisplay => DraftRef?.ToString() ?? "-";
+    string CurrentProductDisplay => string.IsNullOrWhiteSpace(Description) ? "-" : Description;
+    string SupplierNameOrFallback => string.IsNullOrWhiteSpace(SupplierName) ? "ALL SUPPLIERS" : SupplierName;
+    string CustomerNameOrFallback => string.IsNullOrWhiteSpace(CustomerName) ? "-" : CustomerName;
+    string MarginText
+    {
+        get
+        {
+            if (RetailPrice <= 0 || CostPrice <= 0)
+                return "0.00%";
+
+            var margin = ((RetailPrice - CostPrice) / RetailPrice) * 100m;
+            return $"{margin:0.00}%";
+        }
+    }
+    int RoundedQty => RoundupBoxQty && BoxQty > 0
+        ? (int)(Math.Ceiling(Math.Max(QtyRequired, 1) / (decimal)BoxQty) * BoxQty)
+        : Math.Max(QtyRequired, 1);
+    decimal OrderTotal => Lines.Sum(x => x.LineTotal);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        dotNetRef = DotNetObjectReference.Create(this);
+        shortcutRegistrationId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
+            {
+                scopeSelector = "#po-create-form",
+                enableEsc = true,
+                enableEnter = true,
+                enableF5 = true
+            });
+    }
+
+    async Task OnSupplierChanged(string? value)
+    {
+        SupplierCode = value?.Trim() ?? string.Empty;
+        SupplierName = string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(SupplierCode))
+        {
+            var supplier = await SupplierService.GetSupplier(SupplierCode);
+            SupplierName = supplier.Success && supplier.Data != null
+                ? supplier.Data.Name ?? string.Empty
+                : string.Empty;
+        }
+    }
+
+    async Task OnPartKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Task.Yield();
+            await LoadProductAsync();
+        }
+    }
+
+    [JSInvokable]
+    public Task OnF5()
+    {
+        ShowProductSearch = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnEsc()
+    {
+        CloseProductSearch();
+        return Task.CompletedTask;
+    }
+
+    async Task LoadProductAsync()
+    {
+        var part = PartNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(part))
+        {
+            await AppSnackbar.Show("Enter part number", SnackbarType.Warning);
+            return;
+        }
+
+        var result = await ProductApi.GetProduct(part);
+        if (!result.Success || result.Data == null)
+        {
+            await AppSnackbar.Show("Product not found", SnackbarType.Error);
+            return;
+        }
+
+        ApplyProduct(result.Data);
+        await RefreshProductStatsAsync();
+    }
+
+    async Task OnProductSelected(ProductDto product)
+    {
+        ShowProductSearch = false;
+        if (product == null)
+            return;
+
+        ApplyProduct(product);
+        await RefreshProductStatsAsync();
+    }
+
+    void ApplyProduct(ProductDto product)
+    {
+        CurrentProduct = product;
+        PartNumber = product.PartNumber ?? string.Empty;
+        MfrPartNumber = product.MfrPartNumber ?? string.Empty;
+        Description = product.Details ?? product.ShortDescription ?? product.GroupName ?? product.PartNumber ?? string.Empty;
+        BoxQty = product.BoxQuantity ?? 1;
+        CostPrice = product.CostPrice;
+        RetailPrice = product.SuggestedRRP ?? product.StorePrice ?? product.TradePrice ?? 0m;
+        QtyRequired = Math.Max(QtyRequired, 1);
+        if (string.IsNullOrWhiteSpace(SupplierCode) && !string.IsNullOrWhiteSpace(product.Supplier1Code))
+            SupplierCode = product.Supplier1Code ?? string.Empty;
+    }
+
+    async Task RefreshProductStatsAsync()
+    {
+        var part = PartNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(part))
+        {
+            CurrentStockLevel = 0;
+            return;
+        }
+
+        var levels = await StockService.GetStockLevelsAsync(part);
+        CurrentStockLevel = GetStockLevelForSelectedLocation(levels);
+
+        var purchaseOrders = await ProductEnquiryService.GetPurchaseOrdersAsync(part);
+        OnOrderQty = purchaseOrders.Sum(x => x.OutstandingQty);
+        TotalSold = purchaseOrders.Sum(x => x.Qty);
+    }
+
+    async Task OnLocationChanged()
+    {
+        await RefreshProductStatsAsync();
+        StateHasChanged();
+    }
+
+    int GetStockLevelForSelectedLocation(IEnumerable<ProductStockLevelDto> levels)
+    {
+        var selectedLocation = StockLocationCode?.Trim();
+
+        if (string.IsNullOrWhiteSpace(selectedLocation))
+            return levels.Sum(x => x.Quantity);
+
+        return levels
+            .Where(x => string.Equals(x.LocationCode, selectedLocation, StringComparison.OrdinalIgnoreCase))
+            .Sum(x => x.Quantity);
+    }
+
+    async Task PlaceOrder()
+    {
+        if (!ValidateCurrentLine())
+            return;
+
+        var line = BuildCurrentLine();
+        var existing = Lines.FirstOrDefault(x => string.Equals(x.PartNumber, line.PartNumber, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            existing.MfrPartNumber = line.MfrPartNumber;
+            existing.Description = line.Description;
+            existing.BoxQty = line.BoxQty;
+            existing.QtyRequired = line.QtyRequired;
+            existing.CostPrice = line.CostPrice;
+            existing.StockLocationCode = line.StockLocationCode;
+            existing.DeliveryLocationCode = line.DeliveryLocationCode;
+            existing.CustomerAccNo = line.CustomerAccNo;
+            existing.IsMajor = line.IsMajor;
+            existing.XmasClub = line.XmasClub;
+            existing.SmsCustomerOnArrival = line.SmsCustomerOnArrival;
+            existing.Notes = line.Notes;
+            existing.OrderedByCode = line.OrderedByCode;
+            existing.SupplierCode = line.SupplierCode;
+            existing.CreatedOnDate = line.CreatedOnDate;
+            existing.Reason = line.Reason;
+        }
+        else
+        {
+            line.SequenceId = Lines.Count + 1;
+            Lines.Add(line);
+        }
+
+        var result = await PurchaseOrderApi.SaveDraftAsync(new PurchaseOrderUpsertRequestDto
+        {
+            DraftRef = DraftRef,
+            SupplierCode = SupplierCode,
+            RaisedByStaffCode = AuthService.CurrentUser?.StaffCode ?? string.Empty,
+            CarriageCost = 0,
+            DirectToStore = false,
+            Lines = Lines.ToList()
+        });
+
+        if (!result.Success || result.Data == null)
+        {
+            await AppSnackbar.Show(result.Message, SnackbarType.Error);
+            return;
+        }
+
+        DraftRef = result.Data.DraftRef == 0 ? DraftRef : result.Data.DraftRef;
+        OrderNumber = result.Data.Header?.OrderNumber ?? OrderNumber;
+        if (result.Data.Lines.Any())
+            Lines = result.Data.Lines.ToList();
+
+        ClearCurrentLine(keepSupplier: true);
+        await AppSnackbar.Show("Order line saved", SnackbarType.Success);
+    }
+
+    bool ValidateCurrentLine()
+    {
+        if (string.IsNullOrWhiteSpace(PartNumber))
+        {
+            AppSnackbar.Show("Enter part number", SnackbarType.Warning);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(SupplierCode))
+        {
+            AppSnackbar.Show("Select supplier", SnackbarType.Warning);
+            return false;
+        }
+
+        if (QtyRequired <= 0)
+        {
+            AppSnackbar.Show("Quantity required must be greater than zero", SnackbarType.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    PurchaseOrderLineDto BuildCurrentLine()
+    {
+        var qty = RoundedQty;
+        return new PurchaseOrderLineDto
+        {
+            SequenceId = Lines.Count + 1,
+            PartNumber = PartNumber.Trim(),
+            MfrPartNumber = MfrPartNumber.Trim(),
+            Description = Description.Trim(),
+            BoxQty = Math.Max(BoxQty, 1),
+            QtyRequired = qty,
+            CostPrice = CostPrice,
+            QtyRecieved = 0,
+            StockLocationCode = string.IsNullOrWhiteSpace(StockLocationCode) ? "01" : StockLocationCode.Trim(),
+            DeliveryLocationCode = string.IsNullOrWhiteSpace(StockLocationCode) ? "01" : StockLocationCode.Trim(),
+            CustomerAccNo = CustomerAccNo.Trim(),
+            IsMajor = CurrentProduct?.Major ?? false,
+            XmasClub = XmasClub,
+            SmsCustomerOnArrival = SendSms,
+            Notes = Notes.Trim(),
+            OrderedByCode = AuthService.CurrentUser?.StaffCode ?? string.Empty,
+            SupplierCode = SupplierCode.Trim(),
+            CreatedOnDate = DateTime.UtcNow,
+            Reason = SalesCode.Trim()
+        };
+    }
+
+    void RemoveLine(PurchaseOrderLineDto line)
+    {
+        Lines.Remove(line);
+        ReSequence();
+    }
+
+    void ReSequence()
+    {
+        var idx = 1;
+        foreach (var line in Lines.OrderBy(x => x.SequenceId))
+            line.SequenceId = idx++;
+    }
+
+    void ClearCurrentLine(bool keepSupplier = false)
+    {
+        var supplier = SupplierCode;
+
+        PartNumber = string.Empty;
+        MfrPartNumber = string.Empty;
+        Description = string.Empty;
+        CostPrice = 0;
+        RetailPrice = 0;
+        QtyRequired = 1;
+        BoxQty = 1;
+        Notes = string.Empty;
+        SendSms = false;
+        XmasClub = false;
+        CurrentProduct = null;
+        CurrentStockLevel = 0;
+        OnOrderQty = 0;
+        TotalSold = 0;
+        CustomerAccNo = string.Empty;
+        SalesCode = string.Empty;
+        StockLocationCode = "01";
+
+        SupplierCode = keepSupplier ? supplier : string.Empty;
+    }
+
+    void CancelCurrentLine() => ClearCurrentLine(keepSupplier: true);
+
+    void CloseProductSearch()
+    {
+        ShowProductSearch = false;
+    }
+
+    void Exit()
+    {
+        Navigation.NavigateTo("/purchase-orders");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(shortcutRegistrationId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", shortcutRegistrationId);
+            }
+            catch
+            {
+            }
+        }
+
+        dotNetRef?.Dispose();
+    }
+}

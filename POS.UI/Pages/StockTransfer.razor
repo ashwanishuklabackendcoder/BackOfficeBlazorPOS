@@ -10,6 +10,7 @@
 @inject IStockTransferUiService StockTransferService
 @inject AppSnackbarService AppSnackbar
 
+
 <PageTitle>Stock Transfer</PageTitle>
 
 <div class="card shadow-sm border-0 product-list-card">
@@ -24,7 +25,9 @@
         <div class="row mb-3">
             <label class="col-sm-2 form-label-custom required-label">Part No</label>
             <div  class="col-sm-3">
-                <input id="partNumber"
+                    @* @ref="partNumberInput" *@
+                    <input id="partNumber"
+                       
                        class="form-control"
                        @bind-value="PartNumber"
                        maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.PartNumber)))"
@@ -212,7 +215,7 @@
     {
         if (string.IsNullOrWhiteSpace(PartNumber))
         {
-           await AppSnackbar.Show("Enter Part Number", SnackbarType.Warning);
+            await AppSnackbar.Show("Enter Part Number", SnackbarType.Warning);
             return;
         }
 
@@ -227,7 +230,7 @@
 
         Product = res.Data;
         await RefreshAvailableFromStockAsync();
-       await AppSnackbar.Show("Product loaded", SnackbarType.Success);
+        await AppSnackbar.Show("Product loaded", SnackbarType.Success);
     }
 
     // async Task OnPartKeyDown(KeyboardEventArgs e)
@@ -265,9 +268,18 @@
 
         if (Quantity > AvailableFromStock)
         {
-            Quantity = AvailableFromStock;
-            await AppSnackbar.Show($"Only {AvailableFromStock} item(s) available in {FromLocation}", SnackbarType.Warning);
-            return;
+            if (AvailableFromStock==0)
+            {
+                await AppSnackbar.Show($"Stock is un-available in location {FromLocation}", SnackbarType.Warning);
+                return;
+            }
+            else
+            {
+                Quantity = AvailableFromStock;
+                await AppSnackbar.Show($"Only {AvailableFromStock} item(s) available in location {FromLocation}", SnackbarType.Warning);
+                return;
+            }
+            
         }
 
         var dto = new StockTransferInputDto
@@ -331,5 +343,6 @@
 
         StateHasChanged();
     }
+
 }
 

@@ -222,6 +222,8 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
 
                 var customer = await GetCustomerByInvoiceAsync(dto.InvoiceNo);
                 var invoiceLines = await GetInvoiceLinesAsync(dto.InvoiceNo);
+                var invoiceLineMap = invoiceLines.ToDictionary(x => x.SaleLineId);
+                var discountPartNumber = await GetConfiguredDiscountPartNumberAsync();
                 var saleRows = await _context.FTT05
                     .Where(x => x.InvoiceNumber == dto.InvoiceNo && x.InOut == "O")
                     .ToDictionaryAsync(x => x.Id);
@@ -242,9 +244,7 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
 
                 foreach (var line in dto.Lines)
                 {
-                    var originalLine = invoiceLines.FirstOrDefault(x => x.SaleLineId == line.SaleLineId);
-
-                    if (originalLine == null)
+                    if (!invoiceLineMap.TryGetValue(line.SaleLineId, out var originalLine))
                         throw new Exception($"Original sale line not found for {line.PartNumber}.");
 
                     if (line.Qty <= 0)
@@ -309,16 +309,20 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
 
                 foreach (var line in dto.Lines)
                 {
+                    if (!invoiceLineMap.TryGetValue(line.SaleLineId, out var originalLine))
+                        throw new Exception($"Original sale line not found for {line.PartNumber}.");
+
                     if (!saleRows.TryGetValue(line.SaleLineId, out var originalSaleRow))
                         throw new Exception($"Sale row metadata not found for {line.PartNumber}.");
 
-                    var returnRow = await InsertReturnFtt05(dto, line, customer);
+                    var discountAmount = Math.Max(0m, Math.Round((originalLine.Sell * line.Qty) - line.RefundAmount, 2, MidpointRounding.AwayFromZero));
+                    var returnRow = await InsertReturnFtt05(dto, line, customer, discountPartNumber, discountAmount);
                     var stockMovementStatus = await HandleReturnStockAsync(line, addSellableItemsToStock);
 
                     await InsertReturnTrackingAsync(dto, line, originalSaleRow, returnRow.Id, stockMovementStatus);
 
                     if (!ReturnConditions.IsSellable(line.Condition))
-                        await InsertFaultyReturnAsync(dto, line, originalSaleRow, customer, returnRow.Id);
+                        await InsertFaultyReturnAsync(dto, line, originalSaleRow, customer, returnRow.Id, discountAmount);
                 }
 
                 await InsertRefundFtt11(dto);
@@ -355,6 +359,12 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                     StringComparer.OrdinalIgnoreCase);
         }
 
+        private async Task<string?> GetConfiguredDiscountPartNumberAsync()
+            => await _context.SysOptions
+                .OrderByDescending(x => x.Id)
+                .Select(x => x.DiscountPartNumber)
+                .FirstOrDefaultAsync();
+
         private static string? GetMake(Dictionary<string, string> lookup, string? partNumber)
         {
             if (string.IsNullOrWhiteSpace(partNumber))
@@ -366,18 +376,19 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
         private async Task<List<PosSaleLineDto>> BuildSaleLinesAsync(List<FTT05> rows)
         {
             var makeLookup = await LoadMakeLookupAsync(rows);
+            var discountPartNumber = await GetConfiguredDiscountPartNumberAsync();
             var lines = new List<PosSaleLineDto>();
 
             foreach (var row in rows)
             {
-                if (string.IsNullOrWhiteSpace(row.PartNumber))
+                if (string.IsNullOrWhiteSpace(row.PartNumber) || IsSaleDiscountRow(row, discountPartNumber))
                 {
                     if (lines.Count > 0 && row.Net < 0)
                     {
                         var previousLine = lines[^1];
                         var discountTotal = Math.Abs(row.Net);
-                        previousLine.DiscountAmount = previousLine.Quantity == 0
-                            ? 0
+                        previousLine.DiscountAmount += previousLine.Quantity == 0
+                            ? 0m
                             : discountTotal / previousLine.Quantity;
                         previousLine.DiscountPercent = previousLine.Sell == 0
                             ? 0
@@ -439,16 +450,10 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             if (saleLines.Count == 0)
                 return saleLines;
 
-            var indexedReturnedQuantities = returnRows
+            var indexedReturnedAggregates = returnRows
                 .Where(x => x.OriginalSaleLineId.HasValue)
                 .GroupBy(x => x.OriginalSaleLineId!.Value)
-                .ToDictionary(
-                    g => g.Key,
-                    g => new ReturnAggregation
-                    {
-                        Quantity = g.Sum(x => Math.Abs(x.Quantity)),
-                        Amount = g.Sum(x => Math.Abs(x.Net))
-                    });
+                .ToDictionary(g => g.Key, g => BuildReturnAggregation(g));
 
             var legacyReturnRows = returnRows
                 .Where(x => !x.OriginalSaleLineId.HasValue)
@@ -461,7 +466,7 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 var returnedQuantity = 0;
                 var returnedAmount = 0m;
 
-                if (indexedReturnedQuantities.TryGetValue(saleLine.SaleLineId, out var indexedReturn))
+                if (indexedReturnedAggregates.TryGetValue(saleLine.SaleLineId, out var indexedReturn))
                 {
                     returnedQuantity += indexedReturn.Quantity;
                     returnedAmount += indexedReturn.Amount;
@@ -475,8 +480,9 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                             string.Equals(x.ComboGroupId ?? string.Empty, saleLine.ComboGroupId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                         .ToList();
 
-                    returnedQuantity += matchingLegacyRows.Sum(x => Math.Abs(x.Quantity));
-                    returnedAmount += matchingLegacyRows.Sum(x => Math.Abs(x.Net));
+                    var legacyAggregate = BuildReturnAggregation(matchingLegacyRows);
+                    returnedQuantity += legacyAggregate.Quantity;
+                    returnedAmount += legacyAggregate.Amount;
 
                     if (matchingLegacyRows.Count > 0)
                         legacyReturnRows.RemoveAll(x => matchingLegacyRows.Contains(x));
@@ -501,11 +507,17 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             return lines;
         }
 
-        private async Task<FTT05> InsertReturnFtt05(ReturnProcessDto header, ReturnLineDto line, string customer)
+        private async Task<FTT05> InsertReturnFtt05(
+            ReturnProcessDto header,
+            ReturnLineDto line,
+            string customer,
+            string? discountPartNumber,
+            decimal discountAmount)
         {
             var salesPersonCode = NormalizeSalesPersonCode(header.Staff);
+            var grossAmount = Math.Round(line.Sell * line.Qty, 2, MidpointRounding.AwayFromZero);
 
-            var entity = new FTT05
+            var productReturn = new FTT05
             {
                 DateAndTime = DateTime.Now,
                 Date = DateTime.Now.ToString("yyyyMMdd"),
@@ -521,8 +533,8 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 OriginalSaleLineId = line.SaleLineId,
                 StockNo = line.StockNo ?? string.Empty,
                 Quantity = -line.Qty,
-                Sell = -(line.RefundAmount <= 0 ? line.Sell : line.RefundAmount),
-                Net = -(line.RefundAmount <= 0 ? line.Sell : line.RefundAmount),
+                Sell = -line.Sell,
+                Net = -grossAmount,
                 InOut = "R",
                 Source = "RE",
                 SalesPerson = salesPersonCode,
@@ -530,9 +542,42 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 Terminal = line.Terminal
             };
 
-            _context.FTT05.Add(entity);
+            _context.FTT05.Add(productReturn);
+
+            if (discountAmount > 0m)
+            {
+                _context.FTT05.Add(new FTT05
+                {
+                    DateAndTime = DateTime.Now,
+                    Date = DateTime.Now.ToString("yyyyMMdd"),
+                    Time = DateTime.Now.ToString("HHmmss"),
+                    Location = line.Location,
+                    InvoiceNumber = header.InvoiceNo,
+                    PartNumber = string.IsNullOrWhiteSpace(discountPartNumber) ? string.Empty : discountPartNumber.Trim(),
+                    Description = $"DISCOUNT {line.PartNumber}".Trim(),
+                    ComboId = line.ComboId,
+                    IsCombo = line.IsCombo,
+                    ComboGroupId = line.ComboGroupId ?? string.Empty,
+                    IsComboReturnPolicyApplied = line.IsComboReturnPolicyApplied,
+                    OriginalSaleLineId = line.SaleLineId,
+                    StockNo = string.Empty,
+                    Quantity = 0,
+                    Cost = 0,
+                    Sell = discountAmount,
+                    VAT = 0,
+                    Profit = discountAmount,
+                    Net = discountAmount,
+                    InOut = "R",
+                    Source = "RE",
+                    SalesPerson = salesPersonCode,
+                    Customer = customer,
+                    Terminal = line.Terminal,
+                    DiscountCode = "DR"
+                });
+            }
+
             await _context.SaveChangesAsync();
-            return entity;
+            return productReturn;
         }
 
         private async Task InsertReturnTrackingAsync(
@@ -567,7 +612,8 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             ReturnLineDto line,
             FTT05 originalSaleRow,
             string customer,
-            int referenceReturnId)
+            int referenceReturnId,
+            decimal discountAmount)
         {
             var entity = new ReturnFaultyItem
             {
@@ -580,7 +626,7 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 SaleDate = originalSaleRow.DateAndTime,
                 SaleAmount = Math.Round(originalSaleRow.Sell * line.Qty, 2, MidpointRounding.AwayFromZero),
                 ReturnAmount = Math.Round(line.RefundAmount, 2, MidpointRounding.AwayFromZero),
-                DiscountAmount = CalculateDiscountAmount(originalSaleRow, line),
+                DiscountAmount = Math.Round(discountAmount, 2, MidpointRounding.AwayFromZero),
                 CustomerAccount = customer,
                 SalesCode = originalSaleRow.SalesPerson ?? string.Empty,
                 StoreId = NormalizeStoreId(line.Location),
@@ -652,20 +698,52 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             return customer ?? string.Empty;
         }
 
-        private static decimal CalculateDiscountAmount(FTT05 originalSaleRow, ReturnLineDto line)
+        private static ReturnAggregation BuildReturnAggregation(IEnumerable<FTT05> rows)
         {
-            if (originalSaleRow.Quantity <= 0)
-                return 0m;
+            var materializedRows = rows.ToList();
+            if (materializedRows.Count == 0)
+                return new ReturnAggregation();
 
-            var gross = originalSaleRow.Sell * originalSaleRow.Quantity;
-            var net = originalSaleRow.Net;
-            var discountTotal = Math.Max(0m, gross - net);
-            if (discountTotal <= 0)
-                return 0m;
+            var discountRows = materializedRows.Where(IsDiscountReversalRow).ToList();
+            var regularRows = materializedRows.Where(x => !IsDiscountReversalRow(x)).ToList();
 
-            var unitDiscount = discountTotal / originalSaleRow.Quantity;
-            return Math.Round(unitDiscount * line.Qty, 2, MidpointRounding.AwayFromZero);
+            var quantity = regularRows.Sum(x => Math.Abs(x.Quantity));
+            var amount = regularRows.Sum(x => Math.Abs(x.Net));
+
+            if (discountRows.Count > 0)
+                amount -= discountRows.Sum(x => Math.Abs(x.Net));
+
+            return new ReturnAggregation
+            {
+                Quantity = quantity,
+                Amount = Math.Max(0m, amount)
+            };
         }
+
+        private static bool IsSaleDiscountRow(FTT05 row, string? configuredDiscountPartNumber)
+        {
+            if (row.Net >= 0)
+                return false;
+
+            if (string.Equals(row.DiscountCode, "DI", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!string.IsNullOrWhiteSpace(configuredDiscountPartNumber) &&
+                string.Equals(row.PartNumber, configuredDiscountPartNumber, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(row.PartNumber))
+                return true;
+
+            return !string.IsNullOrWhiteSpace(row.Description) &&
+                   row.Description.StartsWith("DISCOUNT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsDiscountReversalRow(FTT05 row)
+            => string.Equals(row.DiscountCode, "DR", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(row.InOut, "R", StringComparison.OrdinalIgnoreCase);
 
         private static string NormalizeReturnStockMode(string? mode)
         {

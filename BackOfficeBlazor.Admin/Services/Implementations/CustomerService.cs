@@ -39,31 +39,42 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         }
         public async Task<ApiResponse<CustomerDto>> SaveAsync(CustomerDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto.AccNo))
+            try
             {
-                var last = await _repo.GetLastAccountNumberAsync();
-                dto.AccNo = SequenceHelper.GenerateNextFiveDigitCode(last);
+                dto.Balance ??= 0m;
+
+                if (string.IsNullOrWhiteSpace(dto.AccNo))
+                {
+                    var last = await _repo.GetLastAccountNumberAsync();
+                    dto.AccNo = SequenceHelper.GenerateNextFiveDigitCode(last);
+                }
+
+                dto.AccNo = dto.AccNo?.Trim().ToUpperInvariant();
+
+                var entity = await _repo.GetByAccNoAsync(dto.AccNo);
+
+                if (entity == null)
+                {
+                    entity = FromDto(dto);
+                    await _repo.AddAsync(entity);
+                }
+                else
+                {
+                    // Update without touching Id or CreatedOn
+                    entity = FromDto(dto, entity);
+                }
+
+                await _repo.SaveChangesAsync();
+
+                return ApiResponse<CustomerDto>.Ok(dto, "Saved Successfully");
             }
-
-            dto.AccNo = dto.AccNo?.Trim().ToUpperInvariant();
-
-            var entity = await _repo.GetByAccNoAsync(dto.AccNo);
-
-            if (entity == null)
+            catch (Exception ex)
             {
-                entity = FromDto(dto);
-               // entity.CreatedOn = DateTime.Now;
-                await _repo.AddAsync(entity);
+                // Ideally log this with ILogger
+                return ApiResponse<CustomerDto>.Fail(
+                    "An error occurred while saving customer: " + ex.Message
+                );
             }
-            else
-            {
-                // Update without touching Id or CreatedOn
-                var tempEntity = FromDto(dto, entity);
-                entity = tempEntity;
-            }
-
-            await _repo.SaveChangesAsync();
-            return ApiResponse<CustomerDto>.Ok(dto, "Saved Successfully");
         }
 
         public async Task<ApiResponse<object>> DeleteAsync(string accNo)

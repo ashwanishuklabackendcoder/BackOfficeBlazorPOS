@@ -8,6 +8,8 @@ namespace POS.UI.State
         public static string PosCustomerAccount { get; set; } = "WALKIN";
         public static string PosCustomerName { get; set; } = "Walk In";
         public static string PosLocation { get; set; } = "01";
+        public static string? PendingProductSearchReturnUri { get; set; }
+        public static ProductDto? PendingProductSelection { get; set; }
 
         public static string LayawayCustomerAccount { get; set; } = "WALKIN";
         public static string LayawayCustomerName { get; set; } = "Walk In";

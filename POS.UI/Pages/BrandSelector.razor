@@ -2,9 +2,10 @@
 @using POS.UI.Services
 @inject IManufacturerService BrandService
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 
-<div class="position-relative" @ref="root">
+<div class="position-relative" @ref="root" tabindex="0">
     <!-- Selector -->
     <div class="form-control d-flex justify-content-between align-items-center"
          style="cursor:pointer; min-height: calc(1.5em + 0.75rem + 2px);"
@@ -46,6 +47,7 @@
             <!-- Search (fixed) -->
             <div class="p-2 border-bottom">
                 <input class="form-control border"
+                       @ref="searchInput"
                        @bind="search"
                        @bind:event="oninput" />
          
@@ -163,6 +165,7 @@
     string editId;
     string editBrandName = "";
     ElementReference root;
+    ElementReference searchInput;
     IJSObjectReference? module;
     IJSObjectReference? outsideHandler;
     DotNetObjectReference<BrandSelector>? dotNetRef;
@@ -206,11 +209,23 @@
 
     void ToggleDropdown() => isOpen = !isOpen;
 
+    [JSInvokable]
+    public async Task OnF5()
+    {
+        isOpen = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+        await searchInput.FocusAsync();
+    }
+
     async Task SelectBrand(ManufacturerDto b)
     {
         Value = b.Name;
         await ValueChanged.InvokeAsync(Value);
         isOpen = false;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+        await root.FocusAsync();
     }
 
     async Task ClearSelection()
@@ -219,6 +234,9 @@
         search = "";
         await ValueChanged.InvokeAsync(Value);
         isOpen = false;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+        await root.FocusAsync();
     }
 
     void OpenManageModal()

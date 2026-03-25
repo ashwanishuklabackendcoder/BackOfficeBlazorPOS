@@ -222,10 +222,10 @@
         }
 
         window.__legacyShortcutId = register(dotnetHelper, {
-            enableEsc: true,
             enableEnter: true,
-            enableF1: true,
-            enableF5: true
+            enableEsc: false,
+            enableF1: false,
+            enableF5: false
         });
     };
 

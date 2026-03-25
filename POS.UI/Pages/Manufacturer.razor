@@ -1,6 +1,8 @@
 ﻿@page "/manufacturer"
 @using BackOfficeBlazor.Shared.DTOs
+@using System.Linq
 @using POS.UI.Services
+@using POS.UI.Shared
 @inject IManufacturerService ManufacturerService
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
@@ -10,70 +12,118 @@
 
 <PageTitle>Manufacturer Maintenance</PageTitle>
 
-<h5 class="fw-bold mt-3">Brand Maintenance</h5>
+<FormGlassLayout Title="Brand Maintenance"
+                 Id="manufacturer-form"
+                 ScopeId="manufacturer-form">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3">
+            <div class="row mb-3 align-items-center">
+                <label class="col-sm-2 col-lg-1 form-label-custom">Code</label>
 
-<div id="manufacturer-form" class="card card-warning card-outline" data-shortcuts-scope>
-    <div class="card-body">
+                <div class="col-sm-3 col-lg-2">
+                    <input type="text"
+                           class="form-control"
+                           @bind="model.Code"
+                           maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Code)))"
+                           @onkeydown="OnCodeKeyDown"
+                           data-enter-skip="true"
+                           disabled="@isCodeLocked"
+                           @ref="codeInput" />
+                    <div class="form-text text-muted small mt-1">
+                        Leave blank to auto-generate on save.
+                    </div>
+                </div>
 
-        <!-- Code + Search -->
-        <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Code</label>
-
-            <div class="col-sm-1">
-                <input type="text"
-                       class="form-control"
-                       @bind="model.Code"
-                       maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Code)))"
-                       @onkeydown="OnCodeKeyDown"
-                       data-enter-skip="true"
-                       disabled="@isCodeLocked"
-                       @ref="codeInput" />
+                <div class="col-sm-2 col-lg-1">
+                    <button type="button"
+                            class="btn btn-primary w-100 search-btn"
+                            @onclick="Search">
+                        Search
+                    </button>
+                </div>
             </div>
 
-            <div class="col-sm-1">
+            <div class="section-divider"></div>
+
+            <div class="row mb-3 align-items-center">
+                <label class="col-sm-2 col-lg-1 form-label-custom required-label">Description</label>
+
+                <div class="col-sm-4 col-lg-3">
+                    <input type="text"
+                           class="form-control"
+                           @bind="model.Name"
+                           maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Name)))"
+                           @ref="nameInput" />
+                </div>
+            </div>
+        </div>
+
+    </ChildContent>
+    <FooterContent>
+        <div>
+            @if (recordExists)
+            {
                 <button type="button"
-                        class="btn btn-primary w-100"
-                        @onclick="Search">
-                    Search
+                        class="btn btn-danger"
+                        @onclick="Delete">
+                    Delete
                 </button>
-            </div>
+            }
         </div>
-
-        <!-- Description -->
-        <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Description</label>
-
-            <div class="col-sm-3">
-                <input type="text"
-                       class="form-control"
-                       @bind="model.Name"
-                       maxlength="@(MaxLengthHelper.For<ManufacturerDto>(nameof(ManufacturerDto.Name)))"
-                       @ref="nameInput" />
-            </div>
+        <div class="d-flex justify-content-end gap-2 ms-auto">
+            <button type="button" class="btn btn-primary px-4" @onclick="Save">OK</button>
+            <button type="button" class="btn btn-outline-secondary px-4" @onclick="Reset">Cancel</button>
         </div>
+    </FooterContent>
+</FormGlassLayout>
 
-    </div>
-
-    <div class="card-footer text-end">
-        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
-        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
-
-        @if (recordExists)
-        {
-            <button type="button"
-                    class="btn btn-danger float-start"
-                    @onclick="Delete">
-                Delete
-            </button>
-        }
+<div class="card mt-4 shadow-sm border-0">
+    
+    <div class="card-body p-0">
+        <GenericGrid @ref="savedManufacturersGrid"
+                     Title="Saved Manufacturers"
+                     GridKey="saved-manufacturers"
+                     Columns="SavedManufacturerColumns"
+                     LoadData="LoadSavedManufacturersForGrid"
+                     OnRowClick="@( (ManufacturerDto item) => FillFormFromRow(item) )"
+                     RowCssClass="GetManufacturerRowClass" />
     </div>
 </div>
 
 @code {
 
+    private string? selectedManufacturerCode;
+    private bool isRowSelecting;
+    private GenericGrid<ManufacturerDto>? savedManufacturersGrid;
+    private readonly List<GridColumn<ManufacturerDto>> SavedManufacturerColumns = new()
+    {
+        new GridColumn<ManufacturerDto>
+        {
+            Title = "Code",
+            Key = nameof(ManufacturerDto.Code),
+            Value = m => m.Code,
+            ColumnFilterType = GridFilterType.Text,
+            IsHideable = false,
+            IsVisible = true
+        },
+        new GridColumn<ManufacturerDto>
+        {
+            Title = "Description",
+            Key = nameof(ManufacturerDto.Name),
+            Value = m => m.Name,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        }
+    };
+
     ManufacturerDto model = new();
     bool recordExists = false;
     bool isCodeLocked = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
 
     ElementReference codeInput;
     ElementReference nameInput;
@@ -162,31 +212,48 @@
             await AppSnackbar.Show(
                 "No record found. New manufacturer will be created.",
                 SnackbarType.Warning);
+            model.Code = "";
+            isCodeLocked = true;
         }
     }
 
     async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(model.Code))
-        {
-            await AppSnackbar.Show("Manufacturer Code required", SnackbarType.Error);
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(model.Name))
         {
             await AppSnackbar.Show("Description required", SnackbarType.Error);
             return;
         }
 
+        var isNewInsert = string.IsNullOrWhiteSpace(model.Code);
         var res = await ManufacturerService.SaveManufacturer(model);
 
         if (res?.Success == true)
-            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
-        else
-            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+        {
+            if (isNewInsert)
+            {
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                await Reset();
+            }
+            else
+            {
+                if (res.Data != null)
+                {
+                    model = res.Data;
+                }
 
-        recordExists = true;
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                recordExists = true;
+                selectedManufacturerCode = model.Code;
+                isCodeLocked = true;
+                if (savedManufacturersGrid != null)
+                    await savedManufacturersGrid.ReloadAsync();
+            }
+        }
+        else
+        {
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+        }
     }
 
     async Task Delete()
@@ -208,10 +275,62 @@
         model = new ();
         recordExists = false;
         isCodeLocked = false;   // 🔴 IMPORTANT
+        selectedManufacturerCode = null;
 
         await InvokeAsync(StateHasChanged);
+        if (savedManufacturersGrid != null)
+            await savedManufacturersGrid.ReloadAsync();
         await codeInput.FocusAsync();
     }
+
+    private async Task<List<ManufacturerDto>> LoadSavedManufacturersForGrid()
+    {
+        var list = await ManufacturerService.GetAllAsync();
+
+        return list
+            .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+            .OrderBy(x => x.Code)
+            .ToList();
+    }
+
+    private async Task FillFormFromRow(ManufacturerDto manufacturer)
+    {
+        if (manufacturer == null || string.IsNullOrWhiteSpace(manufacturer.Code))
+            return;
+
+        // Avoid wiping unsaved changes on repeated clicks of the already-selected row.
+        if (string.Equals(manufacturer.Code, selectedManufacturerCode, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (isRowSelecting)
+            return;
+
+        isRowSelecting = true;
+        try
+        {
+        model = new ManufacturerDto
+        {
+            Code = manufacturer.Code,
+            Name = manufacturer.Name
+        };
+
+        recordExists = true;
+        isCodeLocked = true;
+        selectedManufacturerCode = manufacturer.Code;
+
+        await InvokeAsync(StateHasChanged);
+        await nameInput.FocusAsync();
+        }
+        finally
+        {
+            isRowSelecting = false;
+        }
+    }
+
+    private string GetManufacturerRowClass(ManufacturerDto item) =>
+        string.Equals(item.Code, selectedManufacturerCode, StringComparison.OrdinalIgnoreCase)
+            ? "table-primary"
+            : string.Empty;
     public async ValueTask DisposeAsync()
     {
         dotNetRef?.Dispose();

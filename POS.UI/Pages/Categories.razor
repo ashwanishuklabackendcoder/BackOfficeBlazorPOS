@@ -1,6 +1,7 @@
 ﻿@page "/category"
 @using BackOfficeBlazor.Shared.DTOs
 @using POS.UI.Services
+@using POS.UI.Shared
 @inject ICategoryService CategoryService
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
@@ -10,118 +11,166 @@
 
 <PageTitle>Category Maintenance</PageTitle>
 
-<h5 class="fw-bold mt-3">Category Maintenance</h5>
-
-<div id="category-form" class="card card-warning card-outline" data-shortcuts-scope>
-    <div class="card-body">
-
-        <!-- Category Code -->
-        <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Category Code</label>
-
-            <div class="col-sm-1">
-                <input type="text"
-                       class="form-control"
+<FormGlassLayout Title="Category Maintenance"
+                 Id="category-form"
+                 ScopeId="category-form">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3">
+        <div class="row mb-3 align-items-center">
+            <label class="col-sm-2 form-label-custom">Category Code</label>
+            <div class="col-sm-3">
+                <input class="form-control"
                        @bind="model.Code"
-                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Code)))"
                        @onkeydown="OnCodeKeyDown"
+                       maxlength="5"
                        data-enter-skip="true"
                        disabled="@isCodeLocked"
                        @ref="codeInput" />
+                <div class="form-text text-muted small mt-1">
+                    Leave blank to auto-generate after saving.
+                </div>
             </div>
-
-            <div class="col-sm-1">
-                <button type="button"
-                        class="btn btn-primary w-100"
-                        @onclick="Search">
-                    Search
-                </button>
-            </div>
-        </div>
-
-        <!-- Description -->
-        <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Description</label>
-
-            <div class="col-sm-3">
-                <input type="text"
-                       class="form-control"
-                       @bind="model.Name"
-                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Name)))"
-                       @ref="nameInput" />
-            </div>
-        </div>
-
-        <!-- Included In -->
-        <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Included In</label>
-
             <div class="col-sm-2">
+                <button class="btn btn-primary w-100 search-btn" @onclick="Search">Search</button>
+            </div>
+        </div>
 
+        <div class="section-divider"></div>
+
+        <div class="row mb-3">
+            <label class="col-sm-2 form-label-custom required-label">Description</label>
+            <div class="col-sm-4">
+                <input class="form-control"
+                       @bind="model.Name"
+                       @ref="nameInput"
+                       maxlength="@(MaxLengthHelper.For<CategoryDto>(nameof(CategoryDto.Name)))" />
+            </div>
+        </div>
+        <div class="row mb-3">
+            <label class="col-sm-2 form-label-custom">Included In</label>
+            <div class="col-sm-6">
                 <div class="form-check form-switch">
-                    <input class="form-check-input"
-                           type="checkbox"
-                           role="switch"
-                           id="catA"
-                           @bind="model.A" />
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.A" id="catA" />
                     <label class="form-check-label" for="catA">Cat A</label>
                 </div>
-
                 <div class="form-check form-switch">
-                    <input class="form-check-input"
-                           type="checkbox"
-                           role="switch"
-                           id="catB"
-                           @bind="model.B" />
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.B" id="catB" />
                     <label class="form-check-label" for="catB">Cat B</label>
                 </div>
-
                 <div class="form-check form-switch">
-                    <input class="form-check-input"
-                           type="checkbox"
-                           role="switch"
-                           id="catC"
-                           @bind="model.C" />
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.C" id="catC" />
                     <label class="form-check-label" for="catC">Cat C</label>
                 </div>
-
             </div>
         </div>
 
-        <!-- Major -->
         <div class="row mb-3">
-            <label class="col-sm-1 col-form-label">Major Item</label>
-
+            <label class="col-sm-2 form-label-custom">Major Item</label>
             <div class="col-sm-2">
                 <div class="form-check form-switch">
-                    <input class="form-check-input"
-                           type="checkbox"
-                           role="switch"
-                           id="major"
-                           @bind="model.Major" />
-                    <label class="form-check-label" for="major">Major</label>
+                    <input class="form-check-input" type="checkbox" role="switch" @bind="model.Major" id="majorItem" />
+                    <label class="form-check-label" for="majorItem">Major</label>
                 </div>
             </div>
         </div>
-
+      
+        
     </div>
+    </ChildContent>
+    <FooterContent>
+        <div>
+            @if (recordExists)
+            {
+                <button type="button"
+                        class="btn btn-danger"
+                        @onclick="Delete">
+                    Delete
+                </button>
+            }
+        </div>
+        <div class="d-flex justify-content-end gap-2 ms-auto">
+            <button type="button" class="btn btn-primary px-4" @onclick="Save">OK</button>
+            <button type="button" class="btn btn-outline-secondary px-4" @onclick="Reset">Cancel</button>
+        </div>
+    </FooterContent>
+</FormGlassLayout>
 
-    <div class="card-footer text-end">
-        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
-        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
-
-        @if (recordExists)
-        {
-            <button type="button"
-                    class="btn btn-danger float-start"
-                    @onclick="Delete">
-                Delete
-            </button>
-        }
+<div class="card mt-4 shadow-sm border-0">
+   
+    <div class="card-body p-0">
+        <GenericGrid @ref="savedCategoriesGrid"
+                     Title="Saved Categories"
+                     GridKey="saved-categories"
+                     Columns="SavedCategoryColumns"
+                     LoadData="LoadSavedCategoriesForGrid"
+                     OnRowClick="@( (CategoryDto item) => FillFormFromRow(item) )"
+                     RowCssClass="GetCategoryRowClass" />
     </div>
 </div>
 
 @code {
+
+    private static readonly string[] CategoryLevels = { "A", "B", "C" };
+    private string? selectedCategoryCode;
+    private bool isRowSelecting;
+    private GenericGrid<CategoryDto>? savedCategoriesGrid;
+    private readonly List<GridColumn<CategoryDto>> SavedCategoryColumns = new()
+    {
+        new GridColumn<CategoryDto>
+        {
+            Title = "Code",
+            Key = "Code",
+            Value = c => c.Code,
+            ColumnFilterType = GridFilterType.Text,
+            IsHideable = false,
+            IsVisible = true
+        },
+        new GridColumn<CategoryDto>
+        {
+            Title = "Description",
+            Key = "Name",
+            Value = c => c.Name,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<CategoryDto>
+        {
+            Title = "Cat A",
+            Key = "A",
+            Value = c => c.A ? "Yes" : "No",
+            ColumnFilterType = GridFilterType.Dropdown,
+            LookupValues = new[] { "Yes", "No" },
+            IsVisible = true
+        },
+        new GridColumn<CategoryDto>
+        {
+            Title = "Cat B",
+            Key = "B",
+            Value = c => c.B ? "Yes" : "No",
+            ColumnFilterType = GridFilterType.Dropdown,
+            LookupValues = new[] { "Yes", "No" },
+            IsVisible = true
+        },
+        new GridColumn<CategoryDto>
+        {
+            Title = "Cat C",
+            Key = "C",
+            Value = c => c.C ? "Yes" : "No",
+            ColumnFilterType = GridFilterType.Dropdown,
+            LookupValues = new[] { "Yes", "No" },
+            IsVisible = true
+        },
+        new GridColumn<CategoryDto>
+        {
+            Title = "Major",
+            Key = "Major",
+            Value = c => c.Major ? "Yes" : "No",
+            ColumnFilterType = GridFilterType.Dropdown,
+            LookupValues = new[] { "Yes", "No" },
+            IsHideable = false,
+            IsVisible = true
+        }
+    };
 
     CategoryDto model = new();
     bool recordExists = false;
@@ -129,7 +178,6 @@
 
     ElementReference codeInput;
     ElementReference nameInput;
-
 
     DotNetObjectReference<Categories>? dotNetRef;
     string? shortcutRegistrationId;
@@ -215,31 +263,49 @@
             await AppSnackbar.Show(
                 "No record found. New category will be created.",
                 SnackbarType.Info);
+            model.Code = "";
+            isCodeLocked = true;
         }
     }
 
     async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(model.Code))
-        {
-            await AppSnackbar.Show("Category Code required", SnackbarType.Error);
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(model.Name))
         {
             await AppSnackbar.Show("Description required", SnackbarType.Error);
             return;
         }
 
+        var isNewInsert = string.IsNullOrWhiteSpace(model.Code);
         var res = await CategoryService.SaveCategory(model);
 
         if (res?.Success == true)
-            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
-        else
-            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+        {
+            if (isNewInsert)
+            {
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                await Reset();
+            }
+            else
+            {
+                if (res.Data != null)
+                {
+                    model = res.Data;
+                }
 
-        recordExists = true;
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                recordExists = true;
+                selectedCategoryCode = model.Code;
+                isCodeLocked = true;
+
+                if (savedCategoriesGrid != null)
+                    await savedCategoriesGrid.ReloadAsync();
+            }
+        }
+        else
+        {
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
+        }
     }
 
     async Task Delete()
@@ -251,10 +317,11 @@
         if (res?.Success == true)
             await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
         else
-            await 
-            AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
+            await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
 
         await Reset();
+        if (savedCategoriesGrid != null)
+            await savedCategoriesGrid.ReloadAsync();
     }
 
     async Task Reset()
@@ -262,10 +329,78 @@
         model = new CategoryDto();
         recordExists = false;
         isCodeLocked = false;   // 🔴 IMPORTANT
+        selectedCategoryCode = null;
 
         await InvokeAsync(StateHasChanged);
         await codeInput.FocusAsync();
+        if (savedCategoriesGrid != null)
+            await savedCategoriesGrid.ReloadAsync();
     }
+
+    private async Task<List<CategoryDto>> LoadSavedCategoriesForGrid()
+    {
+        var aggregate = new Dictionary<string, CategoryDto>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var level in CategoryLevels)
+        {
+            var list = await CategoryService.GetAllCategory(level);
+            foreach (var item in list)
+            {
+                if (string.IsNullOrWhiteSpace(item.Code))
+                    continue;
+
+                if (!aggregate.ContainsKey(item.Code))
+                    aggregate[item.Code] = item;
+            }
+        }
+
+        return aggregate.Values
+            .OrderBy(x => x.Code)
+            .ToList();
+    }
+
+    private async Task FillFormFromRow(CategoryDto category)
+    {
+        if (string.IsNullOrWhiteSpace(category.Code))
+            return;
+
+        // Avoid wiping unsaved changes on repeated clicks of the already-selected row.
+        if (string.Equals(category.Code, selectedCategoryCode, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (isRowSelecting)
+            return;
+
+        isRowSelecting = true;
+        try
+        {
+        model = new CategoryDto
+        {
+            Code = category.Code,
+            Name = category.Name,
+            A = category.A,
+            B = category.B,
+            C = category.C,
+            Major = category.Major
+        };
+
+        recordExists = true;
+        isCodeLocked = true;
+        selectedCategoryCode = category.Code;
+
+        await InvokeAsync(StateHasChanged);
+        await nameInput.FocusAsync();
+        }
+        finally
+        {
+            isRowSelecting = false;
+        }
+    }
+
+    private string GetCategoryRowClass(CategoryDto item) =>
+        string.Equals(item.Code, selectedCategoryCode, StringComparison.OrdinalIgnoreCase)
+            ? "table-primary"
+            : string.Empty;
     public async ValueTask DisposeAsync()
     {
         dotNetRef?.Dispose();

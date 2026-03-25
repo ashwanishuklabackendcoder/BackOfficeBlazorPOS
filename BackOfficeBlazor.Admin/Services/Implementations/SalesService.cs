@@ -72,12 +72,10 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 // 4. Update Stock + StockLevels
                 foreach (var line in request.Lines)
                 {
-                    await _repo.UpdateStockAfterSaleAsync(
-                        line.PartNumber,
-                        line.StockNo,
-                        request.Location,
-                        line.Quantity);
+                    await _repo.UpdateStockAfterSaleAsync(line, request.Location);
                 }
+
+                await _context.SaveChangesAsync();
 
                 await tx.CommitAsync();
 

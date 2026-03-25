@@ -38,6 +38,11 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             return await _repo.GetReceiptAsync(invoiceNo);
         }
 
+        public async Task<List<ReturnHistoryDto>> GetReturnHistoryAsync(string invoiceNo)
+        {
+            return await _repo.GetReturnHistoryAsync(invoiceNo);
+        }
+
     }
 
 }

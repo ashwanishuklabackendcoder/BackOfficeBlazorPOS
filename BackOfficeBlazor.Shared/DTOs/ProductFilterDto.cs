@@ -48,6 +48,8 @@ namespace BackOfficeBlazor.Shared.DTOs
         public string? CatCCode { get; set; }
         public bool? Website { get; set; } = false;
         public decimal? CostPrice { get; set; } = 0.00m;
+        public decimal? pricefrom { get; set; } = 0.00m;
+        public decimal? priceto { get; set; } = 0.00m;
         public string? Details { get; set; }
 
         [StringLength(300)]

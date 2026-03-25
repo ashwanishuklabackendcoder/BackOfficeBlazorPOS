@@ -42,6 +42,28 @@
                             </li>
                         }
                     </ul>
+                    <!-- COMPANY -->
+                    @if (activeTab == "Company")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Company</div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Company No</label>
+                                    <input class="form-control" @bind="model.CompanyNo" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Company Name</label>
+                                    <input class="form-control" @bind="model.CompanyName" />
+                                </div>
+                                <div>
+                                    <label class="form-label">Base Currency</label>
+                                    <input class="form-control" @bind="model.BaseCurrency" />
+                                </div>
+
+                            </div>
+                        </div>
+                    }
 
                     <!-- SECURITY -->
                     @if (activeTab == "Security")
@@ -85,28 +107,7 @@
                         </div>
                     }
 
-                    <!-- COMPANY -->
-                    @if (activeTab == "Company")
-                    {
-                        <div class="card">
-                            <div class="card-header fw-semibold">Company</div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Company No</label>
-                                    <input class="form-control" @bind="model.CompanyNo" />
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Company Name</label>
-                                    <input class="form-control" @bind="model.CompanyName" />
-                                </div>
-                                <div>
-                                    <label class="form-label">Base Currency</label>
-                                    <input class="form-control" @bind="model.BaseCurrency" />
-                                </div>
-                            </div>
-                        </div>
-                    }
-
+               
                     <!-- PURCHASE ORDERS -->
                     @if (activeTab == "Purchase Orders")
                     {
@@ -165,6 +166,14 @@
                                 <div class="form-check form-switch mt-2">
                                     <input class="form-check-input" type="checkbox" @bind="model.AutoStockNo" />
                                     <label class="form-check-label">Auto Stock No</label>
+                                </div>
+
+                                <div class="mt-3">
+                                    <label class="form-label">Discount Part Number</label>
+                                    <input class="form-control"
+                                           @bind="model.DiscountPartNumber"
+                                           placeholder="e.g. DISC" />
+                                    <div class="form-text">This part number is used for the generated discount row on each sale and refund.</div>
                                 </div>
 
                             </div>
@@ -296,6 +305,42 @@
                         </div>
                     }
 
+                    @if (activeTab == "Combo Returns")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Combo Returns</div>
+                            <div class="card-body">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" @bind="model.AllowSeparateComboItemReturn" />
+                                    <label class="form-check-label">Allow Separate Combo Item Return</label>
+                                </div>
+                                <div>
+                                    <label class="form-label">Partial Return Refund Mode</label>
+                                    <input class="form-control" value="Allocated Share" readonly />
+                                    <div class="form-text">Partial combo returns refund the stored combo-discounted share on each sold item.</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (activeTab == "Returns")
+                    {
+                        <div class="card">
+                            <div class="card-header fw-semibold">Returns</div>
+                            <div class="card-body">
+                                <label class="form-label">Return Stock Mode</label>
+                                <select class="form-select" @bind="model.ReturnStockMode">
+                                    <option value="@ReturnStockModes.AlwaysAddToStock">Always add to stock</option>
+                                    <option value="@ReturnStockModes.AskUserEveryReturn">Ask user every return</option>
+                                    <option value="@ReturnStockModes.NeverAddAutomatically">Never add automatically</option>
+                                </select>
+                                <div class="form-text mt-2">
+                                    Non-sellable conditions never go back to sellable stock even if the return mode normally adds stock.
+                                </div>
+                            </div>
+                        </div>
+                    }
+
                     <!-- SYSTEM MESSAGES -->
                     @if (activeTab == "System Messages")
                     {
@@ -328,6 +373,7 @@
                                     <div class="col-md-4"><label class="form-label">Next Batch No</label><input class="form-control" @bind="model.NxtBatchNo" /></div>
                                     <div class="col-md-4"><label class="form-label">Next Quote No</label><input class="form-control" @bind="model.NxtQuoteNo" /></div>
                                     <div class="col-md-4"><label class="form-label">Warehouse Shop No</label><input class="form-control" @bind="model.WhareHouseShopNo" /></div>
+                                    
 
                                 </div>
                             </div>
@@ -359,12 +405,12 @@
     private bool showPassword2;
     private bool showPassword3;
 
-    private string activeTab = "Security";
+    private string activeTab = "Company";
 
     private readonly string[] Tabs =
-    {
-    "Security","Company","Purchase Orders","Stock & Pricing","Layaway",
-    "Till","Invoices","Customer Orders","Insurance",
+    {"Company",
+    "Security","Purchase Orders","Stock & Pricing","Layaway",
+    "Till","Invoices","Customer Orders","Insurance","Combo Returns","Returns",
     "System Messages","Number Sequences"
 };
 

@@ -28,7 +28,12 @@ namespace POS.UI.State
         public bool AllowDiscount { get; set; } = true;
         public DiscountMode DiscountMode { get; set; } = DiscountMode.Percent;
         public bool IsMajor { get; set; }
+        public bool IsCombo { get; set; }
+        public int? ComboId { get; set; }
+        public string? ComboGroupId { get; set; }
+        public bool IsComboReturnPolicyApplied { get; set; }
         public string? StockNumber { get; set; }
+        public List<ComboInvoiceItemDto> ComboItems { get; set; } = new();
     }
 
     public enum DiscountMode

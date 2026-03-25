@@ -8,6 +8,9 @@ namespace BackOfficeBlazor.Shared.DTOs
         public string InvoiceNumber { get; set; } = "";
         public string PartNumber { get; set; } = "";
         public string StockNo { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Manufacturer { get; set; } = "";
+        public string Brand { get; set; } = "";
         public int Quantity { get; set; }
         public decimal Sell { get; set; }
         public decimal Net { get; set; }

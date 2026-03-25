@@ -9,6 +9,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
 {
     public interface ICategoryRepository : IGenericRepository<Category>
     {
+        Task<string?> GetLastCodeAsync();
         // Add future custom queries here
     }
 }

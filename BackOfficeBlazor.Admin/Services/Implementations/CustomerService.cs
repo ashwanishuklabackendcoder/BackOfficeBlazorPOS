@@ -1,5 +1,6 @@
 ﻿using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using BackOfficeBlazor.Admin.Services;
 using BackOfficeBlazor.Admin.Services.Interfaces;
 using BackOfficeBlazor.Shared.DTOs;
 using System;
@@ -39,7 +40,12 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         public async Task<ApiResponse<CustomerDto>> SaveAsync(CustomerDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.AccNo))
-                return ApiResponse<CustomerDto>.Fail("Account No is required");
+            {
+                var last = await _repo.GetLastAccountNumberAsync();
+                dto.AccNo = SequenceHelper.GenerateNextFiveDigitCode(last);
+            }
+
+            dto.AccNo = dto.AccNo?.Trim().ToUpperInvariant();
 
             var entity = await _repo.GetByAccNoAsync(dto.AccNo);
 

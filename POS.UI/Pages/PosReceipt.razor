@@ -1,9 +1,11 @@
 @page "/pos-receipt/{InvoiceNo}"
 @using System.Net.Http.Json
 @using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject POS.UI.Services.ISysOptionsService SysOptionsService
+@inject IAuthService AuthService
 
 <style>
     :root {
@@ -101,10 +103,25 @@
         @foreach (var line in _receipt.Lines)
         {
             <div class="item-code">@GetItemCode(line)</div>
+            @if (!string.IsNullOrWhiteSpace(line.Description))
+            {
+                <div class="muted">@line.Description</div>
+            }
             <div class="row">
                 <span>@($"{line.Quantity} x {line.Sell:0.00}")</span>
                 <span>@($"{line.Net:0.00}")</span>
             </div>
+            @if (line.IsCombo && line.ComboItems.Any())
+            {
+                @foreach (var child in line.ComboItems)
+                {
+                    <div class="muted">  @child.ProductName x @child.Qty</div>
+                    @if (child.IsMajor && child.StockNumbers.Any())
+                    {
+                        <div class="muted">    Stock: @string.Join(", ", child.StockNumbers)</div>
+                    }
+                }
+            }
         }
 
         <div class="divider"></div>
@@ -215,13 +232,20 @@
             _error = ex.Message;
         }
 
-        try
+        if (AuthService.CurrentUser?.IsAdmin == true)
         {
-            var optResult = await SysOptionsService.GetAsync();
-            if (optResult.Success && optResult.Data != null)
-                _sysOptions = optResult.Data;
+            try
+            {
+                var optResult = await SysOptionsService.GetAsync();
+                if (optResult.Success && optResult.Data != null)
+                    _sysOptions = optResult.Data;
+            }
+            catch
+            {
+                _sysOptions = null;
+            }
         }
-        catch
+        else
         {
             _sysOptions = null;
         }
@@ -239,6 +263,9 @@
     private string GetItemCode(PosSaleLineDto line)
     {
         var code = string.IsNullOrWhiteSpace(line.PartNumber) ? line.StockNo : line.PartNumber;
+        if (line.IsCombo)
+            return code;
+
         if (_sysOptions?.MakeOnInvice == true && !string.IsNullOrWhiteSpace(line.Make))
             return $"{line.Make} {code}";
 

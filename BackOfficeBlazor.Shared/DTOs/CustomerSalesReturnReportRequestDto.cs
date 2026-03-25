@@ -8,5 +8,6 @@ namespace BackOfficeBlazor.Shared.DTOs
         public DateTime From { get; set; }
         public DateTime To { get; set; }
         public List<string> Locations { get; set; } = new();
+        public List<string> TransactionTypes { get; set; } = new();
     }
 }

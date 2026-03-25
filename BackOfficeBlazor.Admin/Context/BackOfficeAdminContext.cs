@@ -29,6 +29,8 @@ namespace BackOfficeBlazor.Admin.Context
         public DbSet<Customer> Customers { get; set; }
         public DbSet<ProductItem> ProductItems { get; set; }
         public DbSet<ProductLevel> ProductLevels { get; set; }
+        public DbSet<ComboMaster> ComboMasters { get; set; }
+        public DbSet<ComboDetail> ComboDetails { get; set; }
 
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<ProductGroupItem> ProductGroupItems { get; set; }
@@ -42,6 +44,8 @@ namespace BackOfficeBlazor.Admin.Context
         public DbSet<PrintJob> PrintJobs { get; set; }
         public DbSet<SysOption> SysOptions { get; set; }
         public DbSet<QuickShortcutItem> QuickShortcutItems { get; set; }
+        public DbSet<ReturnItemTracking> ReturnItemTracking { get; set; }
+        public DbSet<ReturnFaultyItem> ReturnFaultyItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -99,6 +103,22 @@ namespace BackOfficeBlazor.Admin.Context
 
             modelBuilder.Entity<QuickShortcutItem>()
                 .HasIndex(x => x.DisplayOrder);
+
+            modelBuilder.Entity<ReturnItemTracking>()
+                .HasIndex(x => new { x.InvoiceNo, x.OriginalSaleLineId, x.ReferenceReturnId });
+
+            modelBuilder.Entity<ReturnFaultyItem>()
+                .HasIndex(x => new { x.InvoiceNo, x.ProductId, x.ReferenceReturnId });
+
+            modelBuilder.Entity<ComboMaster>()
+                .HasIndex(x => x.ComboPartNumber)
+                .IsUnique();
+
+            modelBuilder.Entity<ComboDetail>()
+                .HasOne(x => x.Combo)
+                .WithMany(x => x.Details)
+                .HasForeignKey(x => x.ComboId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
 
     }

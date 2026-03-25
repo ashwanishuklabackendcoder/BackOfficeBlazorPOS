@@ -149,7 +149,11 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 MakeOnInvice = false,
                 DefaultWebProd = false,
                 WhareHouseShopNo = string.Empty,
-                BaseCurrency = string.Empty
+                BaseCurrency = string.Empty,
+                AllowSeparateComboItemReturn = true,
+                ComboPartialReturnRefundMode = "ALLOCATED",
+                DiscountPartNumber = string.Empty,
+                ReturnStockMode = ReturnStockModes.AskUserEveryReturn
             };
         }
 
@@ -245,7 +249,13 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 MakeOnInvice = x.MakeOnInvice ?? false,
                 DefaultWebProd = x.DefaultWebProd ?? false,
                 WhareHouseShopNo = x.WhareHouseShopNo ?? string.Empty,
-                BaseCurrency = x.BaseCurrency ?? string.Empty
+                BaseCurrency = x.BaseCurrency ?? string.Empty,
+                AllowSeparateComboItemReturn = x.AllowSeparateComboItemReturn ?? true,
+                ComboPartialReturnRefundMode = x.ComboPartialReturnRefundMode ?? "ALLOCATED",
+                DiscountPartNumber = x.DiscountPartNumber ?? string.Empty,
+                ReturnStockMode = string.IsNullOrWhiteSpace(x.ReturnStockMode)
+                    ? ReturnStockModes.AskUserEveryReturn
+                    : x.ReturnStockMode
             };
         }
 
@@ -339,6 +349,14 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             entity.DefaultWebProd = dto.DefaultWebProd;
             entity.WhareHouseShopNo = dto.WhareHouseShopNo?.Trim() ?? string.Empty;
             entity.BaseCurrency = dto.BaseCurrency?.Trim() ?? string.Empty;
+            entity.AllowSeparateComboItemReturn = dto.AllowSeparateComboItemReturn;
+            entity.ComboPartialReturnRefundMode = string.IsNullOrWhiteSpace(dto.ComboPartialReturnRefundMode)
+                ? "ALLOCATED"
+                : dto.ComboPartialReturnRefundMode.Trim().ToUpperInvariant();
+            entity.DiscountPartNumber = dto.DiscountPartNumber?.Trim() ?? string.Empty;
+            entity.ReturnStockMode = string.IsNullOrWhiteSpace(dto.ReturnStockMode)
+                ? ReturnStockModes.AskUserEveryReturn
+                : dto.ReturnStockMode.Trim().ToUpperInvariant();
         }
     }
 }

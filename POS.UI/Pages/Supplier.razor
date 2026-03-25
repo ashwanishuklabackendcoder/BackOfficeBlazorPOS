@@ -1,6 +1,9 @@
 ﻿@page "/supplier"
 @using BackOfficeBlazor.Shared.DTOs
+@using System.Linq
 @using POS.UI.Services
+@using POS.UI.Shared
+
 @inject ISupplierService SupplierService
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
@@ -10,13 +13,46 @@
 
 <PageTitle>Supplier Maintenance</PageTitle>
 
-<h5 class="fw-bold mt-3">Supplier Maintenance</h5>
+<FormGlassLayout Title="Supplier Maintenance"
+                 Id="supplier-form"
+                 ScopeId="supplier-form">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3">
+            <div class="row mb-3 align-items-center">
+                <label class="col-sm-3 form-label-custom">Supplier Number</label>
+                <div class="col-sm-3">
+                    <input class="form-control"
+                           @bind="model.AccountNo"
+                           maxlength="5"
+                           @onkeydown="OnAccKeyDown"
+                           data-enter-skip="true"
+                           disabled="@isAccLocked"
+                           @ref="accInput" />
+                    <div class="form-text text-muted small mt-1">
+                        Leave blank to auto-generate after saving.
+                    </div>
+                </div>
+                <div class="col-sm-2">
+                    <button class="btn btn-primary w-100 search-btn" @onclick="Search">Search</button>
+                </div>
+            </div>
 
-<div id="supplier-form" class="card card-warning card-outline" data-shortcuts-scope>
-    <div class="card-body">
+            <div class="section-divider"></div>
 
-        <!-- Supplier Number + Search -->
-        <div class="row mb-3">
+            <div class="info-header">
+                <h6 class="fw-bold mb-0 text-primary">Supplier Details</h6>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-sm-4">
+                    <label class="form-label-custom required-label">Name</label>
+                    <input class="form-control"
+                           @bind="model.Name"
+                           @ref="nameInput"
+                           maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Name)))" />
+                </div>
+            </div>
+@*         <div class="row mb-3">
             <label class="col-sm-2 col-form-label">Supplier Number</label>
             <div class="col-sm-1">
                 <input type="text"
@@ -47,17 +83,17 @@
                 </div>
 
 
-         </div>
+         </div> *@
          <div class="row mb-2">
             <div class="col-sm-3">
-                <label>Address 1</label>
+                <label class="form-label-custom">Address 1</label>
                 <input class="form-control mb-1"
                        @bind="model.Address1"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address1)))" />
            
             </div>
             <div class="col-sm-3">
-                <label>Address 2</label>
+                <label class="form-label-custom">Address 2</label>
                 <input class="form-control mb-1"
                        @bind="model.Address2"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address2)))" />
@@ -67,13 +103,13 @@
          </div>
          <div class="row mb-2">
             <div class="col-sm-3">
-                <label>Address 3</label>
+                <label class="form-label-custom">Address 3</label>
                 <input class="form-control mb-1"
                        @bind="model.Address3"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address3)))" />
             </div>
             <div class="col-sm-3">
-                <label>Address 4</label>
+                <label class="form-label-custom">Address 4</label>
                 <input class="form-control mb-2"
                        @bind="model.Address4"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Address4)))" />
@@ -81,21 +117,21 @@
          </div>
          <div class="row mb-2">
             <div class="col-sm-2">
-                <label class="form-label">Postcode</label>
+                <label class="form-label-custom">Postcode</label>
                 <input type="text"
                        class="form-control"
                        @bind="model.Postcode"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Postcode)))" />
             </div>
             <div class="col-sm-2">
-                <label class="form-label">Telephone</label>
+                <label class="form-label-custom">Telephone</label>
                 <input type="text"
                        class="form-control"
                        @bind="model.Telephone"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Telephone)))" />
             </div>
             <div class="col-sm-2">
-                <label class="form-label">Fax</label>
+                <label class="form-label-custom">Fax</label>
                 <input type="text"
                        class="form-control"
                        @bind="model.Fax"
@@ -106,21 +142,21 @@
         </div>
         <div class="row mb-2">
             <div class="col-sm-2">
-                <label class="form-label">Email</label>
+                <label class="form-label-custom">Email</label>
                 <input type="text"
                        class="form-control"
                        @bind="model.Email"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.Email)))" />
             </div>
             <div class="col-sm-2">
-                <label class="form-label">B2B File Name</label>
+                <label class="form-label-custom">B2B File Name</label>
                 <input type="text"
                        class="form-control"
                        @bind="model.B2BFileName"
                        maxlength="@(MaxLengthHelper.For<SupplierDto>(nameof(SupplierDto.B2BFileName)))" />
             </div>
             <div class="col-sm-2">
-                <label class="form-label">B2B File Type</label>
+                <label class="form-label-custom">B2B File Type</label>
                 <input type="number" class="form-control" @bind="model.B2BFileType" />
             </div>
     
@@ -128,11 +164,11 @@
         </div>
         <div class="row mb-2">
             <div class="col-sm-2">
-                <label class="form-label">Settlement Discount</label>
+                <label class="form-label-custom">Settlement Discount</label>
                 <input type="number" step="0.01" class="form-control" @bind="model.SettlementDiscount" />
             </div>
             <div class="col-sm-2 ">
-                <label class="form-label">Carriage Paid Amount</label>
+                <label class="form-label-custom">Carriage Paid Amount</label>
                 <input type="number" step="0.01" class="form-control" @bind="model.CarriagePaidAmount" />
             </div>
             <div class="col-sm-3">
@@ -164,16 +200,34 @@
 
     </div>
 
-    <div class="card-footer text-end">
-        <button type="button" class="btn btn-primary" @onclick="Save">OK</button>
-        <button type="button" class="btn btn-secondary" @onclick="Reset">Cancel</button>
 
-        @if (recordExists)
-        {
-            <button type="button" class="btn btn-danger float-start" @onclick="Delete">
-                Delete
-            </button>
-        }
+    </ChildContent>
+    <FooterContent>
+        <div>
+            @if (recordExists)
+            {
+                <button type="button" class="btn btn-danger" @onclick="Delete">
+                    Delete
+                </button>
+            }
+        </div>
+        <div class="d-flex justify-content-end gap-2 ms-auto">
+            <button type="button" class="btn btn-primary px-4" @onclick="Save">OK</button>
+            <button type="button" class="btn btn-outline-secondary px-4" @onclick="Reset">Cancel</button>
+        </div>
+    </FooterContent>
+</FormGlassLayout>
+
+<div class="card mt-4 shadow-sm border-0">
+   
+    <div class="card-body p-0">
+        <GenericGrid @ref="savedSuppliersGrid"
+                     Title="Saved Suppliers"
+                     GridKey="saved-suppliers"
+                     Columns="SavedSupplierColumns"
+                     LoadData="LoadSavedSuppliersForGrid"
+                     OnRowClick="@( (SupplierDto item) => FillFormFromRow(item) )"
+                     RowCssClass="GetSupplierRowClass" />
     </div>
 </div>
 
@@ -181,6 +235,50 @@
     SupplierDto model = new();
     bool recordExists = false;
     bool isAccLocked = false;
+    private string? selectedSupplierAccount;
+    private bool isRowSelecting;
+    private GenericGrid<SupplierDto>? savedSuppliersGrid;
+    private readonly List<GridColumn<SupplierDto>> SavedSupplierColumns = new()
+    {
+        new GridColumn<SupplierDto>
+        {
+            Title = "Account",
+            Key = nameof(SupplierDto.AccountNo),
+            Value = s => s.AccountNo,
+            ColumnFilterType = GridFilterType.Text,
+            IsHideable = false,
+            IsVisible = true
+        },
+        new GridColumn<SupplierDto>
+        {
+            Title = "Name",
+            Key = nameof(SupplierDto.Name),
+            Value = s => s.Name,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<SupplierDto>
+        {
+            Title = "Telephone",
+            Key = nameof(SupplierDto.Telephone),
+            Value = s => s.Telephone,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<SupplierDto>
+        {
+            Title = "Email",
+            Key = nameof(SupplierDto.Email),
+            Value = s => s.Email,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
 
     ElementReference accInput;
     ElementReference nameInput;
@@ -272,32 +370,47 @@
             var acc = model.AccountNo;
             model = new SupplierDto { AccountNo = acc };
             await AppSnackbar.Show(res?.Message ?? "Supplier not found. A new record will be created.", SnackbarType.Warning);
+            model.AccountNo = "";
+            isAccLocked = true;
         }
     }
 
     async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(model.AccountNo))
-        {
-            await AppSnackbar.Show("Supplier Number is required", SnackbarType.Error);
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(model.Name))
         {
             await AppSnackbar.Show("Supplier Name is required", SnackbarType.Error);
             return;
         }
 
+        var isNewInsert = string.IsNullOrWhiteSpace(model.AccountNo);
         var res = await SupplierService.SaveSupplier(model);
 
         if (res?.Success == true)
-            await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
-        else
-            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
-        if (res?.Success == true)
         {
-            recordExists = true;
+            if (isNewInsert)
+            {
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                await Reset();
+            }
+            else
+            {
+                if (res.Data != null)
+                {
+                    model = res.Data;
+                }
+
+                await AppSnackbar.Show(res?.Message ?? "Saved", SnackbarType.Success);
+                recordExists = true;
+                selectedSupplierAccount = model.AccountNo;
+                isAccLocked = true;
+                if (savedSuppliersGrid != null)
+                    await savedSuppliersGrid.ReloadAsync();
+            }
+        }
+        else
+        {
+            await AppSnackbar.Show(res?.Message ?? "Save failed", SnackbarType.Error);
         }
     }
 
@@ -309,12 +422,13 @@
         var res = await SupplierService.DeleteSupplier(model.AccountNo);
 
         if (res?.Success == true)
-            await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
-        else
-            await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
-        if (res?.Success == true)
         {
+            await AppSnackbar.Show(res?.Message ?? "Deleted", SnackbarType.Success);
             await Reset();
+        }
+        else
+        {
+            await AppSnackbar.Show(res?.Message ?? "Delete failed", SnackbarType.Error);
         }
     }
 
@@ -323,10 +437,64 @@
         model = new SupplierDto();
         recordExists = false;
         isAccLocked = false;   // 🔴 IMPORTANT
+        selectedSupplierAccount = null;
 
         await InvokeAsync(StateHasChanged);
+        if (savedSuppliersGrid != null)
+            await savedSuppliersGrid.ReloadAsync();
         await accInput.FocusAsync();
     }
+
+    private async Task<List<SupplierDto>> LoadSavedSuppliersForGrid()
+    {
+        var list = await SupplierService.GetAllAsync();
+
+        return list
+            .Where(x => !string.IsNullOrWhiteSpace(x.AccountNo))
+            .OrderBy(x => x.AccountNo)
+            .ToList();
+    }
+
+    private async Task FillFormFromRow(SupplierDto supplier)
+    {
+        if (supplier == null || string.IsNullOrWhiteSpace(supplier.AccountNo))
+            return;
+
+        // Avoid wiping unsaved changes on repeated clicks of the already-selected row.
+        if (string.Equals(supplier.AccountNo, selectedSupplierAccount, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (isRowSelecting)
+            return;
+
+        isRowSelecting = true;
+        try
+        {
+        var res = await SupplierService.GetSupplier(supplier.AccountNo);
+        if (res?.Success != true || res.Data == null)
+        {
+            await AppSnackbar.Show(res?.Message ?? "Unable to load supplier details", SnackbarType.Error);
+            return;
+        }
+
+        model = res.Data;
+        recordExists = true;
+        isAccLocked = true;
+        selectedSupplierAccount = supplier.AccountNo;
+
+        await InvokeAsync(StateHasChanged);
+        await nameInput.FocusAsync();
+        }
+        finally
+        {
+            isRowSelecting = false;
+        }
+    }
+
+    private string GetSupplierRowClass(SupplierDto item) =>
+        string.Equals(item.AccountNo, selectedSupplierAccount, StringComparison.OrdinalIgnoreCase)
+            ? "table-primary"
+            : string.Empty;
     public async ValueTask DisposeAsync()
     {
         dotNetRef?.Dispose();

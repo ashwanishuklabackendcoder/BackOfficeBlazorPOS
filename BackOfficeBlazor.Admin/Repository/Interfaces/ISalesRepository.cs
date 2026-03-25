@@ -18,10 +18,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
         Task InsertFtt11Async(string invoiceNo,
                                PosSaleRequestDto header);
 
-        Task UpdateStockAfterSaleAsync(string partNumber,
-                                       string stockNo,
-                                       string location,
-                                       int qty);
+        Task UpdateStockAfterSaleAsync(PosSaleLineDto line, string location);
     }
 
 }

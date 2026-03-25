@@ -1,287 +1,232 @@
 @page "/staff-users"
+@using System.Linq
 @using BackOfficeBlazor.Shared.DTOs
 @using POS.UI.Services
+@using POS.UI.Shared
 @inject IStaffUserService StaffUserApi
 @inject IAuthService Auth
 @inject NavigationManager Nav
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
 
-<PageTitle>Staff Users</PageTitle>
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+
+<PageTitle>Staff User Maintenance</PageTitle>
 
 @if (Auth.CurrentUser?.IsAdmin == true)
 {
-    <div class="row g-3">
 
-        <!-- CREATE USER -->
-        <div class="col-lg-5">
-            <div class="card shadow-sm">
-                <div class="card-header fw-bold">Create Staff User</div>
+    <FormGlassLayout Title="Staff User Maintenance" Id="staff-user-form" ScopeId="staff-user-form">
 
-                <div class="card-body">
+        <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3">
+            <div class="row mb-3 align-items-center">
+                <label class="col-sm-2 form-label-custom required-label">Username</label>
+                <div class="col-sm-3">
+                    <input class="form-control"
+                           @bind="model.Username"
+                           maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.Username)))"
+                           @onkeydown="OnUsernameKeyDown"
+                           data-enter-skip="true"
+                           disabled="@isUsernameLocked"
+                           autocomplete="off"
+                           @ref="usernameInput" />
+                </div>
+                <div class="col-sm-2">
+                    <button class="btn btn-primary w-100 search-btn" @onclick="Search">Search</button>
+                </div>
+            </div>
 
-                    <div class="mb-2">
-                        <input class="form-control"
-                               placeholder="Username"
-                               @bind="newUser.Username"
-                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.Username)))"
-                               autocomplete="off"
-                               name="user-name"
-                               @ref="usernameInput"
-                               @onkeydown="OnFieldKeyDown" />
-                    </div>
+            <div class="section-divider"></div>
 
-                    <div class="mb-2">
-                        <input class="form-control"
-                               placeholder="Full Name"
-                               @bind="newUser.FullName"
-                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.FullName)))"
-                               autocomplete="off"
-                               name="full-name"
-                               @onkeydown="OnFieldKeyDown" />
-                    </div>
+            <div class="row mb-3">
+                <div class="col-sm-4">
+                    <label class="form-label-custom required-label">Full Name</label>
+                    <input class="form-control"
+                           @bind="model.FullName"
+                           maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.FullName)))"
+                           autocomplete="off"
+                           @ref="fullNameInput" />
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label-custom required-label">Staff Code</label>
+                    <input class="form-control"
+                           @bind="model.StaffCode"
+                           maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.StaffCode)))"
+                           autocomplete="off" />
+                </div>
+            </div>
 
-                    <div class="mb-2">
-                        <input class="form-control"
-                               placeholder="Staff Code"
-                               @bind="newUser.StaffCode"
-                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.StaffCode)))"
-                               autocomplete="off"
-                               name="staff-code"
-                               @onkeydown="OnFieldKeyDown" />
-                    </div>
-
-                    <div class="mb-2">
-                        <input class="form-control"
-                               type="password"
-                               placeholder="Password"
-                               @bind="newUser.Password"
-                               autocomplete="new-password"
-                               name="new-password"
-                               @onkeydown="OnFieldKeyDown" />
-                    </div>
-
-                    <!-- Toggle -->
-                    <div class="form-check form-switch mb-2">
+            <div class="row mb-3">
+                <div class="col-sm-3">
+                    @if (recordExists)
+                    {
+                        <label class="form-label-custom">New Password</label>
+                    }
+                    else
+                    {
+                        <label class="form-label-custom required-label">Password</label>
+                    }
+                    <input class="form-control"
+                           type="password"
+                           @bind="passwordInput"
+                           autocomplete="@(recordExists ? "new-password" : "off")" />
+                    @if (recordExists)
+                    {
+                        <div class="form-text">Leave blank to keep the current password.</div>
+                    }
+                </div>
+                <div class="col-sm-3 d-flex align-items-end">
+                    <div class="form-check form-switch me-4">
                         <input class="form-check-input"
                                type="checkbox"
                                role="switch"
-                               @bind="newUser.IsAdmin"
-                               id="newIsAdmin"
-                               @onkeydown="OnFieldKeyDown" />
-                        <label class="form-check-label" for="newIsAdmin">
-                            Is Admin
-                        </label>
+                               id="staff-is-admin"
+                               @bind="model.IsAdmin" />
+                        <label class="form-check-label" for="staff-is-admin">Is Admin</label>
                     </div>
 
-                    <button class="btn btn-primary" @onclick="CreateUser">
-                        Create
-                    </button>
-
+                    <div class="form-check form-switch">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               role="switch"
+                               id="staff-is-active"
+                               @bind="model.IsActive" />
+                        <label class="form-check-label" for="staff-is-active">Is Active</label>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- USERS LIST -->
-        <div class="col-lg-7">
-            <div class="card shadow-sm">
-                <div class="card-header fw-bold">Users</div>
+            <div class="section-divider"></div>
 
-                <div class="card-body">
-                    <table class="table table-sm table-bordered align-middle">
-                        <thead>
-                            <tr>
-                                <th>User</th>
-                                <th>Staff</th>
-                                <th>Admin</th>
-                                <th>Active</th>
-                                <th></th>
-                            </tr>
-                        </thead>
+            <div class="mb-3">
+                <div class="info-header">
+                    <div class="fw-semibold mb-0">User Roles</div>
+                </div>
+                @if (model.IsAdmin)
+                {
+                    <div class="text-muted small mb-3">
+                        Administrators automatically have full access to all permissions.
+                    </div>
+                }
 
-                        <tbody>
-                            @foreach (var u in users)
+                @foreach (var group in permissionGroups)
+                {
+                    <div class="mb-3">
+                        <div class="fw-semibold mb-2">@group.Key</div>
+                        <div class="row g-2">
+                            @foreach (var permission in group)
                             {
-                                var isEditing = selected?.Id == u.Id;
-
-                                <tr class="@(isEditing ? "table-primary" : "")">
-
-                                    <td>@u.Username - @u.FullName</td>
-
-                                    <td>@u.StaffCode</td>
-
-                                    <!-- ADMIN TOGGLE -->
-                                    <td>
-                                        <div class="form-check form-switch m-0 d-flex justify-content-center">
-                                            <input class="form-check-input"
-                                                   type="checkbox"
-                                                   role="switch"
-                                                   checked="@u.IsAdmin"
-                                                   disabled="@(!isEditing)"
-                                                   @onchange="(e) => OnGridAdminChanged(u, e)" />
-                                        </div>
-                                    </td>
-
-                                    <!-- ACTIVE TOGGLE -->
-                                    <td>
-                                        <div class="form-check form-switch m-0 d-flex justify-content-center">
-                                            <input class="form-check-input"
-                                                   type="checkbox"
-                                                   role="switch"
-                                                   checked="@u.IsActive"
-                                                   disabled="@(!isEditing)"
-                                                   @onchange="(e) => OnGridActiveChanged(u, e)" />
-                                        </div>
-                                    </td>
-
-                                    <td>
-                                        <button class="btn btn-sm btn-outline-primary"
-                                                @onclick="() => Select(u)">
-                                            Edit
-                                        </button>
-                                    </td>
-
-                                </tr>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               role="switch"
+                                               id="perm_@permission.Key"
+                                               checked="@IsPermissionSelected(permission.Key)"
+                                               @onchange="e => TogglePermission(permission.Key, e)"
+                                               disabled="@model.IsAdmin" />
+                                        <label class="form-check-label" for="perm_@permission.Key">
+                                            @permission.Label
+                                        </label>
+                                    </div>
+                                </div>
                             }
-                        </tbody>
-                    </table>
-                </div>
+                        </div>
+                    </div>
+                }
             </div>
+            </div>
+
+
+        </ChildContent>
+        <FooterContent>
+            <button type="button" class="btn btn-primary px-4" @onclick="Save">OK</button>
+            <button type="button" class="btn btn-outline-secondary px-4" @onclick="Reset">Cancel</button>
+        </FooterContent>
+
+    </FormGlassLayout>
+    
+    <div class="card mt-4 shadow-sm border-0">
+        <div class="card-body p-0">
+            <GenericGrid @ref="savedUsersGrid"
+                         Title="Saved Staff Users"
+                         GridKey="saved-staff-users"
+                         Columns="SavedUserColumns"
+                         LoadData="LoadSavedUsersForGrid"
+                         OnRowClick="@( (StaffUserDto item) => FillFormFromRow(item) )"
+                         RowCssClass="GetStaffUserRowClass" />
         </div>
     </div>
-
-    <!-- EDIT USER -->
-    @if (selected != null)
-    {
-        <div class="card shadow-sm mt-3">
-            <div class="card-header fw-bold">
-                Edit User: @selected.Username
-            </div>
-
-            <div class="card-body">
-
-                <div class="row g-2">
-
-                    <div class="col-md-4">
-                        <input class="form-control"
-                               placeholder="Full Name"
-                               @bind="editFullName"
-                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.FullName)))"
-                               autocomplete="off"
-                               @onkeydown="OnFieldKeyDown" />
-                    </div>
-
-                    <div class="col-md-3">
-                        <input class="form-control"
-                               placeholder="Staff Code"
-                               @bind="editStaffCode"
-                               maxlength="@(MaxLengthHelper.For<StaffUserDto>(nameof(StaffUserDto.StaffCode)))"
-                               autocomplete="off"
-                               @onkeydown="OnFieldKeyDown" />
-                    </div>
-
-                    <!-- Toggle Admin -->
-                    <div class="col-md-2 d-flex align-items-center">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   role="switch"
-                                   @bind="editIsAdmin"
-                                   id="editAdmin"
-                                   @onkeydown="OnFieldKeyDown" />
-                            <label class="form-check-label" for="editAdmin">
-                                Is Admin
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Toggle Active -->
-                    <div class="col-md-2 d-flex align-items-center">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   role="switch"
-                                   @bind="editIsActive"
-                                   id="editActive"
-                                   @onkeydown="OnFieldKeyDown" />
-                            <label class="form-check-label" for="editActive">
-                                Is Active
-                            </label>
-                        </div>
-                    </div>
-
-                </div>
-
-                <!-- ACTIONS -->
-                <div class="mt-3 d-flex flex-wrap gap-2">
-
-                    <button class="btn btn-success"
-                            @onclick="UpdateUser">
-                        Save User
-                    </button>
-
-                    <input class="form-control"
-                           style="max-width:240px"
-                           type="password"
-                           placeholder="New Password"
-                           @bind="resetPassword"
-                           autocomplete="new-password"
-                           name="reset-password"
-                           @onkeydown="OnFieldKeyDown" />
-
-                    <button class="btn btn-warning"
-                            @onclick="ResetPassword">
-                        Reset Password
-                    </button>
-
-                    <button class="btn btn-outline-secondary"
-                            @onclick="GoToPermissions">
-                        Open User Permissions
-                    </button>
-
-                </div>
-
-            </div>
-        </div>
-    }
 }
 
 @code {
+    private readonly IEnumerable<IGrouping<string, PermissionDefinition>> permissionGroups =
+        PermissionCatalog.All.GroupBy(x => x.Group);
 
-    private List<StaffUserDto> users = new();
-    private StaffUserDto? selected;
-    private string resetPassword = "";
-    private CreateStaffUserDto newUser = new();
-    ElementReference usernameInput;
-    private string editFullName = "";
-    private string editStaffCode = "";
-    private bool editIsAdmin;
-    private bool editIsActive;
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private readonly List<GridColumn<StaffUserDto>> SavedUserColumns = new()
     {
-        if (firstRender)
+        new GridColumn<StaffUserDto>
         {
-            await Task.Delay(50); // ensure DOM ready
-            await usernameInput.FocusAsync();
+            Title = "Username",
+            Key = nameof(StaffUserDto.Username),
+            Value = user => user.Username,
+            ColumnFilterType = GridFilterType.Text,
+            IsHideable = false,
+            IsVisible = true
+        },
+        new GridColumn<StaffUserDto>
+        {
+            Title = "Full Name",
+            Key = nameof(StaffUserDto.FullName),
+            Value = user => user.FullName,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<StaffUserDto>
+        {
+            Title = "Staff Code",
+            Key = nameof(StaffUserDto.StaffCode),
+            Value = user => user.StaffCode,
+            ColumnFilterType = GridFilterType.Text,
+            IsVisible = true
+        },
+        new GridColumn<StaffUserDto>
+        {
+            Title = "Admin",
+            Key = nameof(StaffUserDto.IsAdmin),
+            Value = user => user.IsAdmin ? "Yes" : "No",
+            ColumnFilterType = GridFilterType.Dropdown,
+            LookupValues = new[] { "Yes", "No" },
+            IsVisible = true
+        },
+        new GridColumn<StaffUserDto>
+        {
+            Title = "Active",
+            Key = nameof(StaffUserDto.IsActive),
+            Value = user => user.IsActive ? "Yes" : "No",
+            ColumnFilterType = GridFilterType.Dropdown,
+            LookupValues = new[] { "Yes", "No" },
+            IsVisible = true
         }
-    }
-    void OnGridAdminChanged(StaffUserDto user, ChangeEventArgs e)
-    {
-        if (selected?.Id != user.Id)
-            return;
+    };
 
-        user.IsAdmin = (bool)e.Value!;
-        editIsAdmin = user.IsAdmin;
-    }
+    private readonly HashSet<string> selectedKeys = new(StringComparer.OrdinalIgnoreCase);
+    private List<StaffUserDto> users = new();
+    private StaffUserDto model = CreateEmptyModel();
+    private GenericGrid<StaffUserDto>? savedUsersGrid;
+    private string? selectedUsername;
+    private string passwordInput = "";
+    private bool recordExists;
+    private bool isUsernameLocked;
+    private bool isRowSelecting;
 
-    void OnGridActiveChanged(StaffUserDto user, ChangeEventArgs e)
-    {
-        if (selected?.Id != user.Id)
-            return;
+    private ElementReference usernameInput;
+    private ElementReference fullNameInput;
+    private DotNetObjectReference<StaffUsers>? dotNetRef;
+    private string? shortcutRegistrationId;
 
-        user.IsActive = (bool)e.Value!;
-        editIsActive = user.IsActive;
-    }
     protected override async Task OnInitializedAsync()
     {
         if (!Auth.IsAuthenticated)
@@ -292,110 +237,349 @@
 
         if (Auth.CurrentUser?.IsAdmin != true)
         {
-            AppSnackbar.Show("Admin access required.", SnackbarType.Warning);
+            await AppSnackbar.Show("Admin access required.", SnackbarType.Warning);
             Nav.NavigateTo("/", true);
             return;
         }
 
-        await LoadUsers();
+        await LoadUsersAsync();
     }
 
-    async Task LoadUsers()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        var res = await StaffUserApi.GetAllAsync();
-
-        if (!res.Success || res.Data == null)
-        {
-            AppSnackbar.Show(res.Message, SnackbarType.Error);
-            return;
-        }
-
-        users = res.Data;
-    }
-
-    void Select(StaffUserDto user)
-    {
-        selected = user;
-        editFullName = user.FullName;
-        editStaffCode = user.StaffCode;
-        editIsAdmin = user.IsAdmin;
-        editIsActive = user.IsActive;
-        resetPassword = "";
-    }
-
-    async Task CreateUser()
-    {
-        var res = await StaffUserApi.CreateAsync(newUser);
-
-        if (!res.Success)
-        {
-            AppSnackbar.Show(res.Message, SnackbarType.Error);
-            return;
-        }
-
-        AppSnackbar.Show("User created", SnackbarType.Success);
-        newUser = new CreateStaffUserDto();
-        await LoadUsers();
-    }
-
-    async Task UpdateUser()
-    {
-        if (selected == null)
+        if (!firstRender)
             return;
 
-        var res = await StaffUserApi.UpdateAsync(new UpdateStaffUserDto
-        {
-            Id = selected.Id,
-            FullName = editFullName,
-            StaffCode = editStaffCode,
-            IsAdmin = editIsAdmin,
-            IsActive = editIsActive
-        });
-
-        if (!res.Success)
-        {
-            AppSnackbar.Show(res.Message, SnackbarType.Error);
-            return;
-        }
-
-        AppSnackbar.Show("User updated", SnackbarType.Success);
-        await LoadUsers();
-
-        var refreshed = users.FirstOrDefault(x => x.Id == selected.Id);
-        if (refreshed != null)
-            Select(refreshed);
-    }
-
-    async Task ResetPassword()
-    {
-        if (selected == null || string.IsNullOrWhiteSpace(resetPassword))
-            return;
-
-        var res = await StaffUserApi.ResetPasswordAsync(
-            new ResetStaffUserPasswordDto
+        dotNetRef = DotNetObjectReference.Create(this);
+        shortcutRegistrationId = await JS.InvokeAsync<string>(
+            "blazorShortcuts.register",
+            dotNetRef,
+            new
             {
-                UserId = selected.Id,
-                NewPassword = resetPassword
+                scopeSelector = "#staff-user-form",
+                enableEsc = true,
+                enableEnter = true
             });
 
-        if (!res.Success)
+        await usernameInput.FocusAsync();
+    }
+
+    [JSInvokable]
+    public async Task OnEsc()
+    {
+        await Reset();
+        await AppSnackbar.Show("Enter Username to search staff user", SnackbarType.Info);
+    }
+
+    private async Task OnUsernameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter")
+            return;
+
+        await Task.Yield();
+        await Search();
+
+        if (!string.IsNullOrWhiteSpace(model.Username) && isUsernameLocked)
         {
-            AppSnackbar.Show(res.Message, SnackbarType.Error);
+            await Task.Delay(50);
+            await fullNameInput.FocusAsync();
+        }
+    }
+
+    private async Task Search()
+    {
+        var username = model.Username?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            await AppSnackbar.Show("Enter Username", SnackbarType.Warning);
             return;
         }
 
-        resetPassword = "";
-        AppSnackbar.Show("Password reset", SnackbarType.Success);
+        await LoadUsersAsync();
+
+        var existingUser = users.FirstOrDefault(x =>
+            string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
+
+        if (existingUser != null)
+        {
+            await LoadExistingUserAsync(existingUser);
+            await AppSnackbar.Show("Staff user loaded", SnackbarType.Success);
+            await InvokeAsync(StateHasChanged);
+            await fullNameInput.FocusAsync();
+            return;
+        }
+
+        model = CreateEmptyModel();
+        model.Username = username;
+        model.IsActive = true;
+        selectedKeys.Clear();
+        recordExists = false;
+        isUsernameLocked = true;
+        selectedUsername = username;
+        passwordInput = "";
+
+        await InvokeAsync(StateHasChanged);
+        await AppSnackbar.Show("No record found. New staff user will be created.", SnackbarType.Info);
+        await fullNameInput.FocusAsync();
     }
 
-    void GoToPermissions()
+    private async Task Save()
     {
-        Nav.NavigateTo("/user-permissions");
+        var wasExisting = recordExists;
+
+        if (string.IsNullOrWhiteSpace(model.Username))
+        {
+            await AppSnackbar.Show("Username is required", SnackbarType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.FullName))
+        {
+            await AppSnackbar.Show("Full Name is required", SnackbarType.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.StaffCode))
+        {
+            await AppSnackbar.Show("Staff Code is required", SnackbarType.Error);
+            return;
+        }
+
+        if (!recordExists && string.IsNullOrWhiteSpace(passwordInput))
+        {
+            await AppSnackbar.Show("Password is required for a new staff user", SnackbarType.Error);
+            return;
+        }
+
+        StaffUserDto? persistedUser;
+        if (wasExisting)
+        {
+            var updateResponse = await StaffUserApi.UpdateAsync(new UpdateStaffUserDto
+            {
+                Id = model.Id,
+                FullName = model.FullName,
+                StaffCode = model.StaffCode,
+                IsAdmin = model.IsAdmin,
+                IsActive = model.IsActive
+            });
+
+            if (!updateResponse.Success)
+            {
+                await AppSnackbar.Show(updateResponse.Message, SnackbarType.Error);
+                return;
+            }
+
+            persistedUser = updateResponse.Data ?? CloneUser(model);
+        }
+        else
+        {
+            var createResponse = await StaffUserApi.CreateAsync(new CreateStaffUserDto
+            {
+                Username = model.Username,
+                FullName = model.FullName,
+                StaffCode = model.StaffCode,
+                Password = passwordInput,
+                IsAdmin = model.IsAdmin,
+                IsActive = model.IsActive
+            });
+
+            if (!createResponse.Success || createResponse.Data == null)
+            {
+                await AppSnackbar.Show(createResponse.Message, SnackbarType.Error);
+                return;
+            }
+
+            persistedUser = createResponse.Data;
+        }
+
+        var permissionResponse = await StaffUserApi.SavePermissionKeysAsync(new UpdateStaffUserPermissionKeysDto
+        {
+            UserId = persistedUser.Id,
+            PermissionKeys = BuildPermissionKeysForSave()
+        });
+
+        if (!permissionResponse.Success)
+        {
+            await AppSnackbar.Show(permissionResponse.Message, SnackbarType.Error);
+            return;
+        }
+
+        if (wasExisting && !string.IsNullOrWhiteSpace(passwordInput))
+        {
+            var passwordResponse = await StaffUserApi.ResetPasswordAsync(new ResetStaffUserPasswordDto
+            {
+                UserId = persistedUser.Id,
+                NewPassword = passwordInput
+            });
+
+            if (!passwordResponse.Success)
+            {
+                await AppSnackbar.Show(passwordResponse.Message, SnackbarType.Error);
+                return;
+            }
+        }
+
+        passwordInput = "";
+        await LoadUsersAsync();
+
+        var refreshedUser = users.FirstOrDefault(x => x.Id == persistedUser.Id)
+            ?? users.FirstOrDefault(x => string.Equals(x.Username, persistedUser.Username, StringComparison.OrdinalIgnoreCase))
+            ?? persistedUser;
+
+        await LoadExistingUserAsync(refreshedUser);
+        await AppSnackbar.Show(wasExisting ? "Staff user updated successfully" : "Staff user created successfully", SnackbarType.Success);
+
+        if (savedUsersGrid != null)
+            await savedUsersGrid.ReloadAsync();
     }
 
-    async Task OnFieldKeyDown(KeyboardEventArgs e)
+    private async Task Reset()
     {
-        if (e.Key == "Enter")
-            await JS.InvokeVoidAsync("focusNextInput");
+        model = CreateEmptyModel();
+        selectedKeys.Clear();
+        passwordInput = "";
+        recordExists = false;
+        isUsernameLocked = false;
+        selectedUsername = null;
+
+        await InvokeAsync(StateHasChanged);
+        if (savedUsersGrid != null)
+            await savedUsersGrid.ReloadAsync();
+        await usernameInput.FocusAsync();
+    }
+
+    private async Task<List<StaffUserDto>> LoadSavedUsersForGrid()
+    {
+        await LoadUsersAsync();
+
+        return users
+            .Where(x => !string.IsNullOrWhiteSpace(x.Username))
+            .OrderBy(x => x.Username)
+            .ToList();
+    }
+
+    private async Task FillFormFromRow(StaffUserDto staffUser)
+    {
+        if (staffUser == null || string.IsNullOrWhiteSpace(staffUser.Username))
+            return;
+
+        if (string.Equals(staffUser.Username, selectedUsername, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (isRowSelecting)
+            return;
+
+        isRowSelecting = true;
+        try
+        {
+            await LoadExistingUserAsync(staffUser);
+            await InvokeAsync(StateHasChanged);
+            await fullNameInput.FocusAsync();
+        }
+        finally
+        {
+            isRowSelecting = false;
+        }
+    }
+
+    private async Task LoadExistingUserAsync(StaffUserDto staffUser)
+    {
+        model = CloneUser(staffUser);
+        recordExists = true;
+        isUsernameLocked = true;
+        selectedUsername = model.Username;
+        passwordInput = "";
+
+        selectedKeys.Clear();
+        if (model.IsAdmin)
+        {
+            foreach (var key in PermissionCatalog.AllKeys)
+            {
+                selectedKeys.Add(key);
+            }
+        }
+        else
+        {
+            var permissionResponse = await StaffUserApi.GetPermissionKeysAsync(model.Id);
+            var keys = permissionResponse.Success && permissionResponse.Data != null
+                ? permissionResponse.Data
+                : PermissionCatalog.ToKeys(model.Permissions ?? new StaffUserPermissionDto());
+
+            foreach (var key in keys)
+            {
+                selectedKeys.Add(key);
+            }
+        }
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        var response = await StaffUserApi.GetAllAsync();
+        if (!response.Success || response.Data == null)
+        {
+            await AppSnackbar.Show(response.Message, SnackbarType.Error);
+            return;
+        }
+
+        users = response.Data;
+    }
+
+    private void TogglePermission(string key, ChangeEventArgs e)
+    {
+        if (model.IsAdmin)
+            return;
+
+        var isChecked = e.Value is bool boolValue && boolValue;
+        if (isChecked)
+            selectedKeys.Add(key);
+        else
+            selectedKeys.Remove(key);
+    }
+
+    private bool IsPermissionSelected(string key) =>
+        model.IsAdmin || selectedKeys.Contains(key);
+
+    private List<string> BuildPermissionKeysForSave() =>
+        (model.IsAdmin ? PermissionCatalog.All.Select(x => x.Key) : selectedKeys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+
+    private string GetStaffUserRowClass(StaffUserDto item) =>
+        string.Equals(item.Username, selectedUsername, StringComparison.OrdinalIgnoreCase)
+            ? "table-primary"
+            : string.Empty;
+
+    private static StaffUserDto CreateEmptyModel() => new()
+    {
+        IsActive = true
+    };
+
+    private static StaffUserDto CloneUser(StaffUserDto source) => new()
+    {
+        Id = source.Id,
+        Username = source.Username,
+        FullName = source.FullName,
+        StaffCode = source.StaffCode,
+        IsAdmin = source.IsAdmin,
+        IsActive = source.IsActive,
+        Permissions = source.Permissions ?? new StaffUserPermissionDto(),
+        PermissionKeys = source.PermissionKeys?.ToList() ?? new List<string>()
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        dotNetRef?.Dispose();
+        if (!string.IsNullOrWhiteSpace(shortcutRegistrationId))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorShortcuts.unregister", shortcutRegistrationId);
+            }
+            catch
+            {
+                // Ignore JS disconnection during teardown.
+            }
+        }
     }
 }

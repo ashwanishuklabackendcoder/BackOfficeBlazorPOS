@@ -37,24 +37,44 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             if (request.Locations != null && request.Locations.Count > 0)
                 query = query.Where(x => request.Locations.Contains(x.Location));
 
-            return await query
-                .OrderBy(x => x.DateAndTime)
-                .Select(x => new CustomerSalesReturnLineDto
-                {
-                    DateAndTime = x.DateAndTime ?? DateTime.MinValue,
-                    InvoiceNumber = x.InvoiceNumber,
-                    PartNumber = x.PartNumber,
-                    StockNo = x.StockNo,
-                    Quantity = x.Quantity,
-                    Sell = x.Sell,
-                    Net = x.Net,
-                    Vat = x.VAT,
-                    InOut = x.InOut,
-                    Location = x.Location,
-                    Terminal = x.Terminal,
-                    Customer = x.Customer
-                })
-                .ToListAsync();
+            var types = request.TransactionTypes?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .ToList();
+
+            if (types != null && types.Count > 0)
+                query = query.Where(x => types.Contains(x.InOut));
+
+            var productItems = _context.ProductItems.AsNoTracking();
+            var manufacturers = _context._Makes.AsNoTracking();
+
+            return await (from sale in query
+                          join product in productItems on sale.PartNumber equals product.PartNumber into productGroup
+                          from product in productGroup.DefaultIfEmpty()
+                          join make in manufacturers on product.MakeCode equals make.Code into makeGroup
+                          from make in makeGroup.DefaultIfEmpty()
+                          orderby sale.DateAndTime
+                          select new CustomerSalesReturnLineDto
+                          {
+                              DateAndTime = sale.DateAndTime ?? DateTime.MinValue,
+                              InvoiceNumber = sale.InvoiceNumber,
+                              PartNumber = sale.PartNumber,
+                              StockNo = sale.StockNo,
+                              Description = sale.Description,
+                              Manufacturer = make != null
+                                  ? make.Name
+                                  : product.Make ?? string.Empty,
+                              Brand = sale.Band ?? string.Empty,
+                              Quantity = sale.Quantity,
+                              Sell = sale.Sell,
+                              Net = sale.Net,
+                              Vat = sale.VAT,
+                              InOut = sale.InOut,
+                              Location = sale.Location,
+                              Terminal = sale.Terminal,
+                              Customer = sale.Customer
+                          })
+                         .ToListAsync();
         }
     }
 }

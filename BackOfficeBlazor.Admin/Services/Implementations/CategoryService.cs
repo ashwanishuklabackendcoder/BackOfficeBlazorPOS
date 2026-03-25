@@ -1,5 +1,6 @@
 ﻿using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using BackOfficeBlazor.Admin.Services;
 using BackOfficeBlazor.Admin.Services.Interfaces;
 using BackOfficeBlazor.Shared.DTOs;
 
@@ -31,6 +32,9 @@ public class CategoryService : ICategoryService
     }
     public async Task<CategoryDto?> GetAsync(string code)
     {
+        if (string.IsNullOrWhiteSpace(code))
+            return null;
+
         var entity = await _repo.GetByCodeAsync(code);
         if (entity == null) return null;
 
@@ -46,16 +50,24 @@ public class CategoryService : ICategoryService
     }
     public async Task<CategoryDto> CreateAsync(CategoryDto dto)
     {
+        if (string.IsNullOrWhiteSpace(dto.Code))
+        {
+            var last = await _repo.GetLastCodeAsync();
+            dto.Code = SequenceHelper.GenerateNextFiveDigitCode(last);
+        }
+
+        dto.Code = dto.Code?.Trim().ToUpperInvariant();
+
         var entity = new Category
         {
-            Code=dto.Code,
+            Code = dto.Code,
             Name = dto.Name,
-            A=dto.A,
-            B=dto.B,
-            C=dto.C,
-            IsDeleted=dto.IsDeleted,
-            Major=dto.Major,
-            DateCreated=dto.DateCreated
+            A = dto.A,
+            B = dto.B,
+            C = dto.C,
+            IsDeleted = dto.IsDeleted,
+            Major = dto.Major,
+            DateCreated = dto.DateCreated
         };
 
         await _repo.AddAsync(entity);
@@ -64,23 +76,24 @@ public class CategoryService : ICategoryService
         return dto;
     }
   
-    public async Task<CategoryDto> UpdateAsync(CategoryDto dto)
-    {
-        var entity = await _repo.GetByCodeAsync(dto.Code);
+        public async Task<CategoryDto> UpdateAsync(CategoryDto dto)
+        {
+            dto.Code = dto.Code?.Trim().ToUpperInvariant();
+            var entity = await _repo.GetByCodeAsync(dto.Code);
 
-        if (entity == null)
-            return null; // or throw exception
+            if (entity == null)
+                return null; // or throw exception
 
-        entity.Name = dto.Name;
-        entity.A = dto.A;
-        entity.B = dto.B;
-        entity.C = dto.C;
-        entity.Major = dto.Major;
+            entity.Name = dto.Name;
+            entity.A = dto.A;
+            entity.B = dto.B;
+            entity.C = dto.C;
+            entity.Major = dto.Major;
 
-        await _repo.UpdateAsync(entity);
+            await _repo.UpdateAsync(entity);
 
-        return dto;
-    }
+            return dto;
+        }
 
 
     public async Task<bool> DeleteAsync(string code)

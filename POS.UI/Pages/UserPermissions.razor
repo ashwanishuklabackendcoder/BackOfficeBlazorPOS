@@ -1,5 +1,6 @@
 @page "/user-permissions"
 @using BackOfficeBlazor.Shared.DTOs
+@using Microsoft.AspNetCore.WebUtilities
 @using POS.UI.Services
 @inject IStaffUserService StaffUserApi
 @inject IAuthService Auth
@@ -22,6 +23,12 @@
                             <option value="@user.Id">@user.Username - @user.FullName (@user.StaffCode)</option>
                         }
                     </select>
+                    @if (SelectedUserIsAdmin)
+                    {
+                        <div class="text-muted small mt-2">
+                            Administrators already have full access; permissions cannot be changed here.
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -47,7 +54,8 @@
                                                role="switch"
                                                id="perm_@p.Key"
                                                checked="@selectedKeys.Contains(p.Key)"
-                                               @onchange="e => TogglePermission(p.Key, e)" />
+                                               @onchange="e => TogglePermission(p.Key, e)"
+                                               disabled="@SelectedUserIsAdmin" />
 
                                         <label class="form-check-label"
                                                for="perm_@p.Key">
@@ -63,7 +71,11 @@
                     </div>
                 }
                 <div class="mt-3">
-                    <button class="btn btn-success" @onclick="SavePermissions">Save Permissions</button>
+                    <button class="btn btn-success"
+                            @onclick="SavePermissions"
+                            disabled="@SelectedUserIsAdmin">
+                        Save Permissions
+                    </button>
                 </div>
             }
         </div>
@@ -74,9 +86,12 @@
     private List<StaffUserDto> users = new();
     private StaffUserDto? selectedUser;
     private int selectedUserId;
+    private int? pendingUserId;
     private HashSet<string> selectedKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly IEnumerable<IGrouping<string, PermissionDefinition>> permissionGroups =
         PermissionCatalog.All.GroupBy(x => x.Group);
+
+    private bool SelectedUserIsAdmin => selectedUser?.IsAdmin == true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -92,7 +107,14 @@
             return;
         }
 
+        pendingUserId = TryExtractUserId();
         await LoadUsers();
+
+        if (pendingUserId.HasValue)
+        {
+            selectedUserId = pendingUserId.Value;
+            await OnUserChanged();
+        }
     }
 
     private async Task LoadUsers()
@@ -107,6 +129,18 @@
         users = res.Data;
     }
 
+    private int? TryExtractUserId()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("userId", out var value) && int.TryParse(value, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
     private async Task OnUserChanged()
     {
         selectedUser = users.FirstOrDefault(x => x.Id == selectedUserId);
@@ -114,6 +148,14 @@
 
         if (selectedUser == null)
             return;
+
+        if (selectedUser.IsAdmin)
+        {
+            selectedKeys = PermissionCatalog.All
+                .Select(p => p.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
 
         var res = await StaffUserApi.GetPermissionKeysAsync(selectedUser.Id);
         if (res.Success && res.Data != null)

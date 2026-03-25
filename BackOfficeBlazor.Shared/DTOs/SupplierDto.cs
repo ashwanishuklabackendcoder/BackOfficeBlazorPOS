@@ -10,7 +10,7 @@ namespace BackOfficeBlazor.Shared.DTOs
     public class SupplierDto
     {
         [StringLength(6)]
-        public string AccountNo { get; set; }
+        public string? AccountNo { get; set; }
 
         [StringLength(30)]
         public string? Name { get; set; }

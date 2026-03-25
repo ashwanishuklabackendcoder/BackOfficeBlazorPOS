@@ -1,0 +1,766 @@
+@page "/product-enquiry"
+@page "/product-enquiry/{PartNumber}"
+@using BackOfficeBlazor.Shared.DTOs
+@using System
+@using System.Collections.Generic
+@using System.Linq
+@using Microsoft.AspNetCore.Components.Web
+@using POS.UI.Services
+@inject IProductEnquiryService ProductEnquiryService
+@inject AppSnackbarService AppSnackbar
+
+<PageTitle>Product Enquiry</PageTitle>
+
+<div class="card shadow-sm border-0 product-list-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <div>
+            <h5 class="fw-bold mb-0">Product Enquiry</h5>
+            <div class="text-muted small">Lookup the lifecycle of a part number.</div>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <input class="form-control form-control-sm"
+                   placeholder="Part Number"
+                   @bind="searchTerm"
+                   @bind:event="oninput"
+                   @onkeydown="HandleSearchKey" />
+            <button class="btn btn-primary px-3" @onclick="LoadHeaderAsync">Search</button>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        <div class="glass-panel border rounded-3 px-3 py-3">
+            @if (isLoadingHeader)
+            {
+                <div class="text-center py-4 text-muted">Loading product data...</div>
+            }
+            else if (header == null)
+            {
+                <div class="text-center py-4 text-muted">Enter a Part Number to view analytics.</div>
+            }
+            else
+            {
+                <div class="row g-3 align-items-start">
+                    <div class="col-lg-3">
+                        <div class="text-muted small">Part Number</div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fs-5 fw-bold">@header.PartNumber</span>
+                            @if (!string.IsNullOrWhiteSpace(header.ImageUrl))
+                            {
+                                <img src="@header.ImageUrl" alt="Product" class="img-fluid" style="max-height:60px;" />
+                            }
+                        </div>
+                        <div class="text-muted small">@((header.MfrPartNumber ?? "N/A"))</div>
+                    </div>
+                    <div class="col-lg-9">
+                        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+                            <div class="col">
+                                <div class="text-muted small">Brand / Make</div>
+                                <div class="fw-semibold">@((header.Make ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Barcode</div>
+                                <div class="fw-semibold">@((header.Barcode ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Supplier 1</div>
+                                <div class="fw-semibold">@((header.Supplier1 ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Supplier 2</div>
+                                <div class="fw-semibold">@((header.Supplier2 ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Size / Colour</div>
+                                <div class="fw-semibold">@((header.Size ?? "N/A"))</div>
+                                <div class="text-muted small">@((header.Color ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Category</div>
+                                <div class="fw-semibold">@((header.CategoryHierarchy ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Search Keywords</div>
+                                <div class="fw-semibold text-truncate">@((header.SearchKeywords ?? "N/A"))</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Total Stock</div>
+                                <div class="fs-3 fw-bold">@header.TotalStock</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Last Sold</div>
+                                <div class="fw-semibold">@((header.LastSoldDate?.ToString("yyyy-MM-dd")) ?? "N/A")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Last Stock Check</div>
+                                <div class="fw-semibold">@((header.LastStockCheck?.ToString("yyyy-MM-dd")) ?? "N/A")</div>
+                            </div>
+                        </div>
+                        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3 mt-3 text-center">
+                            <div class="col">
+                                <div class="text-muted small">Latest Cost</div>
+                                <div class="fw-semibold">@header.LatestCost.ToString("C")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Average Cost</div>
+                                <div class="fw-semibold">@header.AverageCost.ToString("C")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Suggested RRP</div>
+                                <div class="fw-semibold">@((header.SuggestedRrp?.ToString("C")) ?? "N/A")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Margin %</div>
+                                <div class="fw-semibold">@($"{header.MarginPercent:0.00}%")</div>
+                            </div>
+                        </div>
+                        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3 mt-3 text-center">
+                            <div class="col">
+                                <div class="text-muted small">Total Sales</div>
+                                <div class="fw-semibold">@header.TotalSalesValue.ToString("C")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Revenue</div>
+                                <div class="fw-semibold">@header.TotalRevenue.ToString("C")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">VAT</div>
+                                <div class="fw-semibold">@header.TotalVat.ToString("C")</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Faulty Stock</div>
+                                <div class="fw-semibold">@header.FaultyStockQty</div>
+                            </div>
+                        </div>
+                        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3 mt-3 text-center">
+                            <div class="col">
+                                <div class="text-muted small">Back Orders</div>
+                                <div class="fw-semibold">@header.BackOrdersQty</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Allocated</div>
+                                <div class="fw-semibold">@header.AllocatedStock</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Min Stock</div>
+                                <div class="fw-semibold">@header.MinStock</div>
+                            </div>
+                            <div class="col">
+                                <div class="text-muted small">Max Stock</div>
+                                <div class="fw-semibold">@header.MaxStock</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="section-divider mt-4"></div>
+            }
+        </div>
+    </div>
+
+    <div class="card-body pb-4 pt-2 px-4">
+        <ul class="nav nav-tabs mb-2 nav-tabs-custom" role="tablist" style="flex-wrap: wrap;">
+            @foreach (var tab in tabs)
+            {
+                <li class="nav-item" role="presentation">
+                    <button type="button"
+                            class="nav-link @(activeTab == tab ? "active fw-semibold" : "text-dark")"
+                            role="tab"
+                            @onclick="() => SetActiveTab(tab)">
+                        @tab
+                    </button>
+                </li>
+            }
+        </ul>
+
+        <div class="tab-content">
+            @switch (activeTab)
+            {
+                case "Product Info":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <div class="row g-3 text-center">
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Supplier 1</div>
+                                    <div class="fw-semibold">@((header?.Supplier1) ?? "N/A")</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Supplier 2</div>
+                                    <div class="fw-semibold">@((header?.Supplier2) ?? "N/A")</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Last Sold</div>
+                                    <div class="fw-semibold">@((header?.LastSoldDate?.ToString("yyyy-MM-dd")) ?? "N/A")</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Qty Sold</div>
+                                    <div class="fw-semibold">@header?.TotalQtySold ?? 0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    break;
+                case "History":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <strong>History</strong>
+                                <div class="text-muted small">
+                                    Suggested Stock:
+                                    <span class="fw-semibold">@historyDto?.SuggestedStockLevel ?? 0</span>
+                                </div>
+                            </div>
+                            <GenericGrid @ref="historyGrid"
+                                         Title="History"
+                                         GridKey="product-enquiry-history"
+                                         Columns="HistoryGridColumns"
+                                         LoadData="LoadHistoryGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Location":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="locationGrid"
+                                         Title="Locations"
+                                         GridKey="product-enquiry-location"
+                                         Columns="LocationGridColumns"
+                                         LoadData="LoadLocationGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Stock Transfers":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="transferGrid"
+                                         Title="Stock Transfers"
+                                         GridKey="product-enquiry-transfers"
+                                         Columns="TransferGridColumns"
+                                         LoadData="LoadTransferGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Purchase Orders":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="purchaseOrdersGrid"
+                                         Title="Purchase Orders"
+                                         GridKey="product-enquiry-purchase-orders"
+                                         Columns="PurchaseOrderGridColumns"
+                                         LoadData="LoadPurchaseOrderGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Transactions":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="transactionsGrid"
+                                         Title="Transactions"
+                                         GridKey="product-enquiry-transactions"
+                                         Columns="TransactionGridColumns"
+                                         LoadData="LoadTransactionGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Sales":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="salesGrid"
+                                         Title="Sales"
+                                         GridKey="product-enquiry-sales"
+                                         Columns="SalesGridColumns"
+                                         LoadData="LoadSalesGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Stock Check History":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="stockCheckGrid"
+                                         Title="Stock Check History"
+                                         GridKey="product-enquiry-stock-check"
+                                         Columns="StockCheckGridColumns"
+                                         LoadData="LoadStockCheckGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Layaways":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="layawayGrid"
+                                         Title="Layaways"
+                                         GridKey="product-enquiry-layaways"
+                                         Columns="LayawayGridColumns"
+                                         LoadData="LoadLayawayGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Logs":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="logGrid"
+                                         Title="Logs"
+                                         GridKey="product-enquiry-logs"
+                                         Columns="LogGridColumns"
+                                         LoadData="LoadLogGridData" />
+                        </div>
+                    </div>
+                    break;
+                case "Internal Orders":
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-3">
+                            <GenericGrid @ref="internalOrderGrid"
+                                         Title="Internal Orders"
+                                         GridKey="product-enquiry-internal-orders"
+                                         Columns="InternalOrderGridColumns"
+                                         LoadData="LoadInternalOrderGridData" />
+                        </div>
+                    </div>
+                    break;
+                default:
+                    <div class="tab-pane fade show active">
+                        <div class="glass-panel border rounded-3 px-3 py-5 text-center text-muted">
+                            <div>This tab is not yet implemented.</div>
+                        </div>
+                    </div>
+                    break;
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? PartNumber { get; set; }
+
+    private ProductEnquiryHeaderDto? header;
+    private string searchTerm = string.Empty;
+    private bool isLoadingHeader;
+
+    private readonly string[] tabs = new[]
+    {
+        "Product Info",
+        "History",
+        "Location",
+        "Stock Transfers",
+        "Purchase Orders",
+        "Transactions",
+        "Sales",
+        "Stock Check History",
+        "Layaways",
+        "Logs",
+        "Internal Orders"
+    };
+
+    private string activeTab = "Product Info";
+    private readonly HashSet<string> loadedTabs = new(StringComparer.OrdinalIgnoreCase);
+
+    private ProductEnquiryHistoryDto? historyDto;
+    private List<ProductEnquiryHistoryRowDto> historyRows = new();
+    private GenericGrid<ProductEnquiryHistoryRowDto>? historyGrid;
+
+    private List<ProductEnquiryLocationDto> locationRows = new();
+    private GenericGrid<ProductEnquiryLocationDto>? locationGrid;
+
+    private List<ProductEnquiryTransferDto> transferRows = new();
+    private GenericGrid<ProductEnquiryTransferDto>? transferGrid;
+
+    private List<ProductEnquiryPurchaseOrderDto> purchaseOrderRows = new();
+    private GenericGrid<ProductEnquiryPurchaseOrderDto>? purchaseOrdersGrid;
+
+    private List<ProductEnquiryTransactionDto> transactionRows = new();
+    private GenericGrid<ProductEnquiryTransactionDto>? transactionsGrid;
+
+    private List<ProductEnquirySaleDto> saleRows = new();
+    private GenericGrid<ProductEnquirySaleDto>? salesGrid;
+
+    private List<ProductEnquiryStockCheckDto> stockCheckRows = new();
+    private GenericGrid<ProductEnquiryStockCheckDto>? stockCheckGrid;
+
+    private List<ProductEnquiryLayawayDto> layawayRows = new();
+    private GenericGrid<ProductEnquiryLayawayDto>? layawayGrid;
+
+    private List<ProductEnquiryLogDto> logRows = new();
+    private GenericGrid<ProductEnquiryLogDto>? logGrid;
+
+    private List<ProductEnquiryInternalOrderDto> internalOrderRows = new();
+    private GenericGrid<ProductEnquiryInternalOrderDto>? internalOrderGrid;
+
+    private static readonly List<GridColumn<ProductEnquiryHistoryRowDto>> HistoryGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryHistoryRowDto>
+        {
+            Title = "Month",
+            Value = row => row.Month,
+            IsHideable = false
+        },
+        new GridColumn<ProductEnquiryHistoryRowDto>
+        {
+            Title = "Units In",
+            Value = row => row.UnitsIn,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryHistoryRowDto>
+        {
+            Title = "Units Sold",
+            Value = row => row.UnitsSold,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryHistoryRowDto>
+        {
+            Title = "Turnover",
+            Value = row => row.Turnover,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryHistoryRowDto>
+        {
+            Title = "Profit",
+            Value = row => row.Profit,
+            ColumnFilterType = GridFilterType.NumericRange
+        }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryLocationDto>> LocationGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Location",
+            Value = row => $"{row.LocationCode} {row.LocationName}",
+            ColumnFilterType = GridFilterType.Text,
+            IsHideable = false
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "In Stock",
+            Value = row => row.InStockQty,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Stock Value",
+            Value = row => row.StockValue,
+            ColumnFilterType = GridFilterType.NumericRange,
+            Filterable = false,
+            Sortable = false
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Returned",
+            Value = row => row.ReturnedQty,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Reserved",
+            Value = row => row.ReservedQty,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Min",
+            Value = row => row.MinStock,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Max",
+            Value = row => row.MaxStock,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Back Orders",
+            Value = row => row.BackOrdersQty,
+            ColumnFilterType = GridFilterType.NumericRange
+        },
+        new GridColumn<ProductEnquiryLocationDto>
+        {
+            Title = "Sales (12M)",
+            Value = row => row.SalesLast12Months,
+            ColumnFilterType = GridFilterType.NumericRange
+        }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryTransferDto>> TransferGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryTransferDto> { Title = "Date", Value = row => row.Date, ColumnFilterType = GridFilterType.Text },
+        new GridColumn<ProductEnquiryTransferDto> { Title = "Dispatch Id", Value = row => row.DispatchId, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryTransferDto> { Title = "From", Value = row => row.FromLocation },
+        new GridColumn<ProductEnquiryTransferDto> { Title = "To", Value = row => row.ToLocation },
+        new GridColumn<ProductEnquiryTransferDto> { Title = "Qty", Value = row => row.Qty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryTransferDto> { Title = "Serial", Value = row => row.SerialNumber },
+        new GridColumn<ProductEnquiryTransferDto> { Title = "Sales Code", Value = row => row.SalesCode }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryPurchaseOrderDto>> PurchaseOrderGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Order No", Value = row => row.OrderNo },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Status", Value = row => row.Status },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Qty", Value = row => row.Qty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Outstanding", Value = row => row.OutstandingQty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Date", Value = row => row.Date },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Location", Value = row => row.Location },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Customer", Value = row => row.CustomerAccount },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Cost", Value = row => row.Cost, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryPurchaseOrderDto> { Title = "Supplier", Value = row => row.Supplier }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryTransactionDto>> TransactionGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Date", Value = row => row.Date },
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Description", Value = row => row.Description },
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Qty In", Value = row => row.QtyIn, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Qty Out", Value = row => row.QtyOut, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Location", Value = row => row.Location },
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Balance", Value = row => row.StockBalanceAfter, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryTransactionDto> { Title = "Sales Person", Value = row => row.SalesPerson }
+    };
+
+    private static readonly List<GridColumn<ProductEnquirySaleDto>> SalesGridColumns = new()
+    {
+        new GridColumn<ProductEnquirySaleDto> { Title = "Invoice", Value = row => row.Invoice },
+        new GridColumn<ProductEnquirySaleDto> { Title = "Customer", Value = row => row.Customer },
+        new GridColumn<ProductEnquirySaleDto> { Title = "Qty", Value = row => row.Qty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquirySaleDto> { Title = "Price", Value = row => row.Price, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquirySaleDto> { Title = "Cost", Value = row => row.Cost, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquirySaleDto> { Title = "Serial", Value = row => row.Serial },
+        new GridColumn<ProductEnquirySaleDto> { Title = "Balance", Value = row => row.Balance, ColumnFilterType = GridFilterType.NumericRange }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryStockCheckDto>> StockCheckGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryStockCheckDto> { Title = "Stock Check Date", Value = row => row.StockCheckDate },
+        new GridColumn<ProductEnquiryStockCheckDto> { Title = "System Qty", Value = row => row.SystemQty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryStockCheckDto> { Title = "Physical Qty", Value = row => row.PhysicalQty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryStockCheckDto> { Title = "Difference", Value = row => row.Difference, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryStockCheckDto> { Title = "Location", Value = row => row.Location }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryLayawayDto>> LayawayGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryLayawayDto> { Title = "Ref", Value = row => row.LayawayRef },
+        new GridColumn<ProductEnquiryLayawayDto> { Title = "Customer", Value = row => row.Customer },
+        new GridColumn<ProductEnquiryLayawayDto> { Title = "Qty", Value = row => row.Qty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryLayawayDto> { Title = "Price", Value = row => row.Price, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryLayawayDto> { Title = "Status", Value = row => row.Status },
+        new GridColumn<ProductEnquiryLayawayDto> { Title = "Date", Value = row => row.Date }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryLogDto>> LogGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryLogDto> { Title = "Date", Value = row => row.Date },
+        new GridColumn<ProductEnquiryLogDto> { Title = "User", Value = row => row.User },
+        new GridColumn<ProductEnquiryLogDto> { Title = "Action", Value = row => row.Action },
+        new GridColumn<ProductEnquiryLogDto> { Title = "Description", Value = row => row.Description }
+    };
+
+    private static readonly List<GridColumn<ProductEnquiryInternalOrderDto>> InternalOrderGridColumns = new()
+    {
+        new GridColumn<ProductEnquiryInternalOrderDto> { Title = "Date", Value = row => row.Date },
+        new GridColumn<ProductEnquiryInternalOrderDto> { Title = "Order No", Value = row => row.InternalOrderNo },
+        new GridColumn<ProductEnquiryInternalOrderDto> { Title = "From", Value = row => row.FromLocation },
+        new GridColumn<ProductEnquiryInternalOrderDto> { Title = "To", Value = row => row.ToLocation },
+        new GridColumn<ProductEnquiryInternalOrderDto> { Title = "Qty", Value = row => row.Qty, ColumnFilterType = GridFilterType.NumericRange },
+        new GridColumn<ProductEnquiryInternalOrderDto> { Title = "Status", Value = row => row.Status }
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(PartNumber))
+        {
+            searchTerm = PartNumber!;
+            await LoadHeaderAsync();
+        }
+    }
+
+    private async Task LoadHeaderAsync()
+    {
+        var query = searchTerm?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            await AppSnackbar.Show("Enter a part number", SnackbarType.Warning);
+            return;
+        }
+
+        searchTerm = query;
+        ResetTabCache();
+        isLoadingHeader = true;
+
+        try
+        {
+            header = await ProductEnquiryService.GetHeaderAsync(query);
+            if (header == null)
+            {
+                await AppSnackbar.Show("Product not found", SnackbarType.Info);
+            }
+            else
+            {
+                await LoadTabData(activeTab);
+            }
+        }
+        catch (Exception ex)
+        {
+            await AppSnackbar.Show($"Unable to load product info: {ex.Message}", SnackbarType.Error);
+        }
+        finally
+        {
+            isLoadingHeader = false;
+        }
+    }
+
+    private void ResetTabCache()
+    {
+        loadedTabs.Clear();
+        historyDto = null;
+        historyRows = new();
+        locationRows = new();
+        transferRows = new();
+        purchaseOrderRows = new();
+        transactionRows = new();
+        saleRows = new();
+        stockCheckRows = new();
+        layawayRows = new();
+        logRows = new();
+        internalOrderRows = new();
+    }
+
+    private async Task SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        await LoadTabData(tab);
+    }
+
+    private async Task LoadTabData(string tab)
+    {
+        var query = searchTerm?.Trim();
+        if (string.IsNullOrWhiteSpace(query) || tab == "Product Info")
+            return;
+
+        if (loadedTabs.Contains(tab))
+            return;
+
+        try
+        {
+            switch (tab)
+            {
+                case "History":
+                    await EnsureHistoryDataAsync(query);
+                    break;
+                case "Location":
+                    await EnsureLocationDataAsync(query);
+                    break;
+                case "Stock Transfers":
+                    await EnsureTransferDataAsync(query);
+                    break;
+                case "Purchase Orders":
+                    await EnsurePurchaseOrderDataAsync(query);
+                    break;
+                case "Transactions":
+                    await EnsureTransactionDataAsync(query);
+                    break;
+                case "Sales":
+                    await EnsureSalesDataAsync(query);
+                    break;
+                case "Stock Check History":
+                    await EnsureStockCheckDataAsync(query);
+                    break;
+                case "Layaways":
+                    await EnsureLayawayDataAsync(query);
+                    break;
+                case "Logs":
+                    await EnsureLogDataAsync(query);
+                    break;
+                case "Internal Orders":
+                    await EnsureInternalOrderDataAsync(query);
+                    break;
+            }
+
+            loadedTabs.Add(tab);
+        }
+        catch (Exception ex)
+        {
+            await AppSnackbar.Show($"Unable to load {tab}: {ex.Message}", SnackbarType.Error);
+        }
+    }
+
+    private async Task EnsureHistoryDataAsync(string query)
+    {
+        var data = await ProductEnquiryService.GetHistoryAsync(query);
+        historyDto = data;
+        historyRows = data?.MonthlySummaries ?? new();
+        await historyGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureLocationDataAsync(string query)
+    {
+        locationRows = await ProductEnquiryService.GetLocationDistributionAsync(query);
+        await locationGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureTransferDataAsync(string query)
+    {
+        transferRows = await ProductEnquiryService.GetTransfersAsync(query);
+        await transferGrid?.ReloadAsync();
+    }
+
+    private async Task EnsurePurchaseOrderDataAsync(string query)
+    {
+        purchaseOrderRows = await ProductEnquiryService.GetPurchaseOrdersAsync(query);
+        await purchaseOrdersGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureTransactionDataAsync(string query)
+    {
+        transactionRows = await ProductEnquiryService.GetTransactionsAsync(query);
+        await transactionsGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureSalesDataAsync(string query)
+    {
+        saleRows = await ProductEnquiryService.GetSalesAsync(query);
+        await salesGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureStockCheckDataAsync(string query)
+    {
+        stockCheckRows = await ProductEnquiryService.GetStockCheckHistoryAsync(query);
+        await stockCheckGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureLayawayDataAsync(string query)
+    {
+        layawayRows = await ProductEnquiryService.GetLayawaysAsync(query);
+        await layawayGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureLogDataAsync(string query)
+    {
+        logRows = await ProductEnquiryService.GetLogsAsync(query);
+        await logGrid?.ReloadAsync();
+    }
+
+    private async Task EnsureInternalOrderDataAsync(string query)
+    {
+        internalOrderRows = await ProductEnquiryService.GetInternalOrdersAsync(query);
+        await internalOrderGrid?.ReloadAsync();
+    }
+
+    private Task<List<ProductEnquiryHistoryRowDto>> LoadHistoryGridData() => Task.FromResult(historyRows);
+    private Task<List<ProductEnquiryLocationDto>> LoadLocationGridData() => Task.FromResult(locationRows);
+    private Task<List<ProductEnquiryTransferDto>> LoadTransferGridData() => Task.FromResult(transferRows);
+    private Task<List<ProductEnquiryPurchaseOrderDto>> LoadPurchaseOrderGridData() => Task.FromResult(purchaseOrderRows);
+    private Task<List<ProductEnquiryTransactionDto>> LoadTransactionGridData() => Task.FromResult(transactionRows);
+    private Task<List<ProductEnquirySaleDto>> LoadSalesGridData() => Task.FromResult(saleRows);
+    private Task<List<ProductEnquiryStockCheckDto>> LoadStockCheckGridData() => Task.FromResult(stockCheckRows);
+    private Task<List<ProductEnquiryLayawayDto>> LoadLayawayGridData() => Task.FromResult(layawayRows);
+    private Task<List<ProductEnquiryLogDto>> LoadLogGridData() => Task.FromResult(logRows);
+    private Task<List<ProductEnquiryInternalOrderDto>> LoadInternalOrderGridData() => Task.FromResult(internalOrderRows);
+
+    private Task HandleSearchKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            return LoadHeaderAsync();
+        }
+
+        return Task.CompletedTask;
+    }
+}

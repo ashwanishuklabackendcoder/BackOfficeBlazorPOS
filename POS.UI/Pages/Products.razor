@@ -3,6 +3,7 @@
 @using BackOfficeBlazor.Shared.DTOs
 @using POS.UI.Services
 @using Microsoft.AspNetCore.Components.Forms
+@using System.Linq
 @using System.Text.RegularExpressions
 @inject HttpClient Http
 @inject IImageApiService ImageApi
@@ -11,6 +12,7 @@
 @inject ISupplierService SupplierApi
 @inject IManufacturerService ManufacturerService
 @inject IJSRuntime JS
+@inject ILocationService LocationService
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 @inject AppSnackbarService AppSnackbar
@@ -21,208 +23,152 @@
 
 <PageTitle>Product Maintenance</PageTitle>
 
-<style>
-    /* Styling to match the original screenshot exactly */
-    .form-label-custom {
-        color: #333;
-        font-size: 13px;
-        padding-top: 7px;
-    }
-
-    .required-label::after {
-        content: " *";
-        color: #d9534f;
-    }
-
-    .text-danger-custom {
-        color: #b94a48;
-        font-weight: 500;
-    }
-    /* Brownish-red for pricing */
-
-    .image-upload-box {
-        border: 1px dashed #ccc;
-        background-color: #fafafa;
-        border-radius: 4px;
-        min-height: 180px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        color: #666;
-        cursor: pointer;
-    }
-
-        .image-upload-box:hover {
-            border-color: #007bff;
-            background-color: #f0f7ff;
-        }
-
-    .form-control, .form-select {
-        border-color: #ced4da;
-        font-size: 14px;
-    }
-
-    .section-divider {
-        border-top: 1px solid #eee;
-        margin: 25px 0;
-    }
-
-    .info-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-bottom: 1px solid #eee;
-        padding-bottom: 8px;
-        margin-bottom: 15px;
-    }
-
-    .validation-field-error .form-control,
-    .validation-field-error .form-select,
-    .validation-field-error .form-check-input,
-    .validation-field-error .input-group-text {
-        border-color: #dc3545;
-        box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.15);
-    }
-
-    .validation-message {
-        color: #dc3545;
-        font-size: 12px;
-        margin-top: 4px;
-    }
-</style>
 @* @if (!string.IsNullOrWhiteSpace(message))
 {
     <div class="alert alert-info mt-3">@message</div>
 } *@
-<div id="product-form" class="card shadow-sm border-0" data-shortcuts-scope>
+<div id="product-form" class="card shadow-sm border-0 product-list-card" data-shortcuts-scope>
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
         <h5 class="fw-bold mb-0">@PageHeader</h5>
     
     </div>
 
     <div class="card-body p-4">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="row mb-3 align-items-center">
-                    <label class="col-sm-2 form-label-custom">Type</label>
-                    <div class="col-sm-4">
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="itemType" id="goods" checked>
-                            <label class="form-check-label" for="goods">Goods</label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="itemType" id="service">
-                            <label class="form-check-label" for="service">Service</label>
-                        </div>
-                    </div>
+        <div class="border rounded-3 px-3 py-3 mt-2 mb-2 glass-panel">
+            <div class="row mb-3 align-items-center">
+                <label class="col-sm-1 form-label-custom required-label">Part Number</label>
+                <div class="col-sm-2">
+                    <input id="partNumber"
+                           class="form-control"
+                           @bind-value="model.PartNumber"
+                           @bind-value:event="oninput"
+                           maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.PartNumber)))"
+                           @onkeydown="OnPartNumberKeyDown"
+                           @ref="partNumberInput"
+                           data-enter-skip="true"
+                           disabled="@isPartNumberDisabled" />
                 </div>
-
-                <div class="row mb-3">
-                    <label class="col-sm-2 form-label-custom required-label">Part Number</label>
-                    <div class="col-sm-4">
-                        <input id="partNumber"
-                               class="form-control"
-                               @bind-value="model.PartNumber"
-                               @bind-value:event="oninput"
-                               maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.PartNumber)))"
-                               @onkeydown="OnPartNumberKeyDown"
-                               @ref="partNumberInput"
-                               data-enter-skip="true"
-                               disabled="@isPartNumberDisabled" />
-                    </div>
-                    <div class="col-sm-2">
-                        <button class="btn btn-primary w-100" @onclick="Search">Search</button>
-                    </div>
-                
-
+                <div class="col-sm-1 ps-0">
+                    <button class="btn btn-primary w-100 search-btn" @onclick="Search">Search</button>
                 </div>
-              @*   @if (showNewItemMessage)
-                {
-                    <div class="row mb-2">
-                        <div class="col-sm-6 offset-sm-2">
-                            <label class="text-warning fw-semibold">
-                                You’re going to add a new item
-                            </label>
-                        </div>
-                    </div>
-                }
-   *@
-                <div class="row mb-3">
-                    <label class="col-sm-2 form-label-custom required-label">MFR Part No</label>
-                    <div id="mfrPartField" class="col-sm-4 @(GetFieldCss(nameof(ProductDto.MfrPartNumber)))">
-                        <input class="form-control" tabindex="2"
-                               maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.MfrPartNumber)))"
-                               style="text-transform:uppercase"
-                               @bind="model.MfrPartNumber"
-                               @ref="mfrPartInput"
-                               @oninput="e => model.MfrPartNumber = RegexKeepCapsAlnum(e.Value?.ToString(), 50)" />
-                        @if (TryGetFieldError(nameof(ProductDto.MfrPartNumber), out var mfrPartError))
-                        {
-                            <div class="validation-message">@mfrPartError</div>
-                        }
-
-                       @*  <input class="form-control" @bind="model.MfrPartNumber"
-                               @ref="mfrPartInput" /> *@
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <label class="col-sm-2 form-label-custom ">Barcode</label>
-                    <div class="col-sm-4">
-                        <input class="form-control"
-                               @bind="model.Barcode"
-                               maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Barcode)))" />
-                    </div>
-                </div>
-
-                <div class="row mb-3 align-items-center">
-
-                    <!-- Major Toggle -->
-                    <label class="col-sm-2 form-label-custom">Major</label>
-                    <div class="col-sm-4">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   role="switch"
-                                   @bind="model.Major" />
-                        </div>
-                    </div>
-
-                    <!-- Current Toggle -->
-                    <label class="col-sm-2 form-label-custom">Current</label>
-                    <div class="col-sm-4">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   role="switch"
-                                   @bind="model.Current" />
-                        </div>
-                    </div>
-
-                </div>
-
-              
             </div>
-
-            <div class="col-lg-4">
-                <ImageUploader Model="model" @key="imageKey" />
-
+            <div class="row mb-0 align-items-center">
+                <label class="col-sm-1 form-label-custom required-label">MFR Part No</label>
+                <div class="col-sm-2">
+                    <input class="form-control"
+                           tabindex="2"
+                           maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.MfrPartNumber)))"
+                           style="text-transform:uppercase"
+                           @bind="model.MfrPartNumber"
+                           @ref="mfrPartInput"
+                           @oninput="e => model.MfrPartNumber = RegexKeepCapsAlnum(e.Value?.ToString(), 50)" />
+                </div>
             </div>
         </div>
+        <ul class="nav nav-tabs mb-2 nav-tabs-custom" role="tablist" style="flex-wrap: wrap;">
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.ProductInfo)" role="tab" @onclick="() => SetActiveTab(ProductTabs.ProductInfo)">
+                    Product Info
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.MinMax)" role="tab" @onclick="() => SetActiveTab(ProductTabs.MinMax)">
+                    MIN/MAX
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.Description)" role="tab" @onclick="() => SetActiveTab(ProductTabs.Description)">
+                    Description
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.Images)" role="tab" @onclick="() => SetActiveTab(ProductTabs.Images)">
+                    Images
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.Ecommerce)" role="tab" @onclick="() => SetActiveTab(ProductTabs.Ecommerce)">
+                    e-Commerce
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.Specification)" role="tab" @onclick="() => SetActiveTab(ProductTabs.Specification)">
+                    Specification
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.Geometry)" role="tab" @onclick="() => SetActiveTab(ProductTabs.Geometry)">
+                    Geometry
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button type="button" class="@TabClass(ProductTabs.ProductNotes)" role="tab" @onclick="() => SetActiveTab(ProductTabs.ProductNotes)">
+                    Product Notes
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            @if (activeTab == ProductTabs.ProductInfo)
+            {
+            <div class="tab-pane fade show active">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-2 form-label-custom">Type</label>
+                            <div class="col-md-4">
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="itemType" id="goods" checked>
+                                    <label class="form-check-label" for="goods">Goods</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="itemType" id="service">
+                                    <label class="form-check-label" for="service">Service</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-2 form-label-custom">Major</label>
+                            <div class="col-sm-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           role="switch"
+                                           @bind="model.Major" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3 align-items-center">
+                            <label class="col-sm-2 form-label-custom">Current</label>
+                            <div class="col-sm-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           role="switch"
+                                           @bind="model.Current" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-sm-2 form-label-custom">Barcode</label>
+                            <div class="col-sm-4">
+                                <input class="form-control"
+                                       @bind="model.Barcode"
+                                       maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Barcode)))" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
         <div class="section-divider"></div>
         <div class="row">
             <div class="col-md-6">
                 <div class="row mb-3">
                     <label class="col-sm-2 form-label-custom required-label">Brand</label>
-                    <div id="brandField" class="col-sm-4 @(GetFieldCss(nameof(ProductDto.Make)))">
+                    <div class="col-sm-4">
                         <BrandSelector @bind-Value="model.Make" />
-                        @if (TryGetFieldError(nameof(ProductDto.Make), out var brandError))
-                        {
-                            <div class="validation-message">@brandError</div>
-                        }
                     </div>
-                    <label class="col-sm-2 form-label-custom">Gender</label>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Gender</label>
                     <div class="col-sm-4">
                         <select class="form-select" @bind="model.Gender">
                             @foreach (ProductDto.Genders g in Enum.GetValues(typeof(ProductDto.Genders)))
@@ -247,7 +193,7 @@
 
 
                     </div>
-                    <label class="col-sm-2 form-label-custom">Season</label>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Season</label>
                     <div class="col-sm-4">
                         <select class="form-select" @bind="model.Season">
                             @foreach (ProductDto.Seasons a in Enum.GetValues(typeof(ProductDto.Seasons)))
@@ -262,35 +208,22 @@
 
                 </div>
                 <div class="row mb-3">
-                    <label class="col-sm-2 form-label-custom">Weight</label>
-                    <div class="col-sm-4">
-                        <input type="number" step="0.01" class="form-control" @bind="model.Weight" />
-                    </div>
                     <label class="col-sm-2 form-label-custom required-label">Supplier</label>
-                    <div id="supplierField" class="col-sm-4 @(GetFieldCss(nameof(ProductDto.Supplier1Code)))">
+                    <div class="col-sm-4">
                         <SupplierSelector @bind-Value="model.Supplier1Code" />
-                        @if (TryGetFieldError(nameof(ProductDto.Supplier1Code), out var supplierError))
-                        {
-                            <div class="validation-message">@supplierError</div>
-                        }
                     </div>
-
                 </div>
                 <div class="row mb-3">
                     <label class="col-sm-2 form-label-custom required-label">Search 1</label>
-                    <div id="search1Field" class="col-sm-4 @(GetFieldCss(nameof(ProductDto.Search1)))">
+                    <div class="col-sm-4">
                         <div class="input-group">
                             <input class="form-control"
                                    @bind="model.Search1"
                                    maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Search1)))" />
                             @*  <span class="input-group-text bg-light"></span> *@
                         </div>
-                        @if (TryGetFieldError(nameof(ProductDto.Search1), out var search1Error))
-                        {
-                            <div class="validation-message">@search1Error</div>
-                        }
                     </div>
-                    <label class="col-sm-2 form-label-custom">Search 2</label>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Search 2</label>
                     <div class="col-sm-4">
                         <div class="input-group">
                             <input class="form-control"
@@ -304,41 +237,35 @@
                 </div>
                 <div class="row mb-3">
                     <label class="col-sm-2 form-label-custom required-label">Details</label>
-                    <div id="detailsField" class="col-sm-10 @(GetFieldCss(nameof(ProductDto.Details)))">
+                    <div class="col-sm-10">
                         <div class="input-group">
                             <input class="form-control"
                                    @bind="model.Details"
                                    maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Details)))" />
                             @*  <span class="input-group-text bg-light"></span> *@
                         </div>
-                        @if (TryGetFieldError(nameof(ProductDto.Details), out var detailsError))
-                        {
-                            <div class="validation-message">@detailsError</div>
-                        }
                     </div>
 
                 </div>
-                <div class="row mb-3">
+                <div class="row mb-3 align-items-center">
+                    <label class="col-sm-2 form-label-custom">Weight</label>
+                    <div class="col-sm-2">
+                        <input type="number" step="0.01" class="form-control" @bind="model.Weight" />
+                    </div>
+                    <label class="col-sm-2 offset-sm-2 form-label-custom form-label-custom--indent">Size</label>
+                    <div class="col-sm-2">
+                        <input class="form-control"
+                               @bind="model.Size"
+                               maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Size)))" />
+                    </div>
+                </div>
+                <div class="row mb-3 align-items-center">
                     <label class="col-sm-2 form-label-custom">Color</label>
                     <div class="col-sm-4">
-                        <div class="input-group">
-                            <input class="form-control"
-                                   @bind="model.Color"
-                                   maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Color)))" />
-                            @*  <span class="input-group-text bg-light"></span> *@
-                        </div>
+                        <input class="form-control"
+                               @bind="model.Color"
+                               maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Color)))" />
                     </div>
-                    <label class="col-sm-2 form-label-custom">Size</label>
-                    <div class="col-sm-4">
-                        <div class="input-group">
-                            <input class="form-control"
-                                   @bind="model.Size"
-                                   maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.Size)))" />
-                            @* <span class="input-group-text bg-light"></span> *@
-                        </div>
-                    </div>
-
-
                 </div>
             </div>
 
@@ -350,8 +277,7 @@
                 </label>
             </div>
 
-            <ProductVariants @ref="variantsEditor"
-                             Enabled="isGroupItem"
+            <ProductVariants Enabled="isGroupItem"
                              Group="group"
                              Header="model" />
 
@@ -366,16 +292,12 @@
             <div class="col-md-6">
                 <div class="row align-items-center">
                     <label class="col-sm-2 form-label-custom required-label">Category A</label>
-                    <div id="categoryAField" class="col-sm-4 @(GetFieldCss(nameof(ProductDto.CatACode)))">
+                    <div class="col-sm-4">
                         <CategorySelector Level="A"
                                           @bind-Code="model.CatACode"
                                           @bind-Name="model.CatA" />
-                        @if (TryGetFieldError(nameof(ProductDto.CatACode), out var categoryError))
-                        {
-                            <div class="validation-message">@categoryError</div>
-                        }
                     </div>
-                    <label class="col-sm-2 form-label-custom">Category B</label>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Category B</label>
                     <div class="col-sm-4">
                         <CategorySelector Level="B"
                                           @bind-Code="model.CatBCode"
@@ -408,197 +330,269 @@
             </div>
         </div>
         <div class="section-divider"></div>
-
-        <!-- PRICING -->
-    <div class="row mb-3">
-     <div class="col-md-6">
-        <div class="row align-items-center">
-
-            <label class="col-sm-2 form-label-custom">Cost Price</label>
-            <div class="col-sm-4">
-                <div class="input-group">
-                    
-                    <span class="input-group-text">£</span>
-
-                    <input type="number"
-                            step="0.01"
-                            class="form-control"
-                            @bind="model.CostPrice" />
-                </div>
-            </div>
-
-            <label class="col-sm-2 form-label-custom">RRP</label>
-            <div class="col-sm-4">
-                <div class="input-group">
-                    <span class="input-group-text">£</span>
-
-                    <input type="number"
-                            step="0.01"
-                            class="form-control"
-                            @bind="model.SuggestedRRP" />
-                </div>
-
-            </div>
-
-        </div>
-    </div>
-</div>
-
         <div class="row mb-3">
             <div class="col-md-6">
-                <div class="row align-items-center">
-            <label class="col-sm-2 form-label-custom">Store Price</label>
-            <div class="col-sm-4">
-                <div class="input-group">
-                    <span class="input-group-text">£</span>
-
-                    <input type="number"
-                            step="0.01"
-                            class="form-control"
-                            @bind="model.StorePrice" />
-                </div>
-            </div>
-
-            <label class="col-sm-2 form-label-custom">Web Price</label>
-            <div class="col-sm-4">
-                <div class="input-group">
-                    <span class="input-group-text">£</span>
-
-                    <input type="number"
-                            step="0.01"
-                            class="form-control"
-                            @bind="model.WebPrice" />
-                </div>
-            </div>
-                </div>
-            </div>
-        </div>
-        <div class="section-divider"></div>
-
-        <!-- PROMO -->
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <div class="row align-items-center">
-            <label class="col-sm-2 form-label-custom">Promo Name</label>
-            <div class="col-sm-4">
-                <input class="form-control"
-                       @bind="model.PromoName"
-                       maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.PromoName)))" />
-            </div>
-
-            <label class="col-sm-2 form-label-custom">Promo Price</label>
-            <div class="col-sm-4">
-                <input type="number" step="0.01" class="form-control" @bind="model.PromoPrice" />
-            </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <div class="row align-items-center">
-            <label class="col-sm-2 form-label-custom">Promo Start</label>
-            <div class="col-sm-4">
-                <input type="date" class="form-control" @bind="model.PromoStart" />
-            </div>
-
-            <label class="col-sm-2 form-label-custom">Promo End</label>
-            <div class="col-sm-4">
-                <input type="date" class="form-control" @bind="model.PromoEnd" />
-            </div>
-                </div>
-            </div>
-        </div>
-        <div class="section-divider"></div>
-
-        <!-- DESCRIPTIONS -->
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <div class="row align-items-center">
-            <label class="col-sm-2 form-label-custom">Short Description</label>
-            <div class="col-sm-10">
-                <textarea class="form-control" rows="2" @bind="model.ShortDescription"></textarea>
-            </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <div class="row align-items-start">
-                    <label class="col-sm-2 form-label-custom">Full Description</label>
-                    <div class="col-sm-10">
-
-                        <RichTextEditor @ref="descEditor" @bind-Value="model.FullDescription" />
-
-
+                <div class="row mb-3 align-items-center">
+                    <label class="col-sm-2 form-label-custom">Cost Price</label>
+                    <div class="col-sm-4">
+                        <div class="input-group">
+                            <span class="input-group-text currency-pill">£</span>
+                            <input type="number"
+                                    step="0.01"
+                                    class="form-control"
+                                    @bind="model.CostPrice" />
+                        </div>
+                    </div>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Store Price</label>
+                    <div class="col-sm-4">
+                        <div class="input-group">
+                            <span class="input-group-text currency-pill">£</span>
+                            <input type="number"
+                                    step="0.01"
+                                    class="form-control"
+                                    @bind="model.StorePrice" />
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="section-divider"></div>
-
-        <!-- GEOMETRY & SPECIFICATION TOGGLES -->
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <div class="row align-items-center">
-
-                    <!-- Geometry Toggle -->
-                    <label class="col-sm-2 form-label-custom">Geometry</label>
+                <div class="row mb-3 align-items-center">
+                    <label class="col-sm-2 form-label-custom">RRP</label>
+                    <div class="col-sm-4">
+                        <div class="input-group">
+                            <span class="input-group-text currency-pill">£</span>
+                            <input type="number"
+                                    step="0.01"
+                                    class="form-control"
+                                    @bind="model.SuggestedRRP" />
+                        </div>
+                    </div>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Web Price</label>
+                    <div class="col-sm-4">
+                        <div class="input-group">
+                            <span class="input-group-text currency-pill">£</span>
+                            <input type="number"
+                                    step="0.01"
+                                    class="form-control"
+                                    @bind="model.WebPrice" />
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3 align-items-center">
+                    <label class="col-sm-2 form-label-custom">Website</label>
                     <div class="col-sm-4">
                         <div class="form-check form-switch">
                             <input class="form-check-input"
                                    type="checkbox"
                                    role="switch"
-                                   @bind="model.HasGeometry" />
+                                   @bind="model.Website" />
                         </div>
                     </div>
-
-                    <!-- Specification Toggle -->
-                    <label class="col-sm-2 form-label-custom">Specification</label>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Web Only</label>
                     <div class="col-sm-4">
                         <div class="form-check form-switch">
-
                             <input class="form-check-input"
                                    type="checkbox"
                                    role="switch"
-                                   @bind="model.HasSpecification" />
+                                   @bind="model.WebOnly" />
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
-        @if (model.HasGeometry)
-        {
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <div class="row align-items-start">
-                        <label class="col-sm-2 form-label-custom">Geometry Details</label>
-                        <div class="col-sm-10">
-                            <RichTextEditor  @bind-Value="model.Geometry" />
-                       
-                        </div>
+        <div class="section-divider"></div>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="row mb-3 align-items-center">
+                    <label class="col-sm-2 form-label-custom">Promo Name</label>
+                    <div class="col-sm-4">
+                        <input class="form-control"
+                               @bind="model.PromoName"
+                               maxlength="@(MaxLengthHelper.For<ProductDto>(nameof(ProductDto.PromoName)))" />
+                    </div>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Promo Price</label>
+                    <div class="col-sm-4">
+                        <input type="number" step="0.01" class="form-control" @bind="model.PromoPrice" />
+                    </div>
+                </div>
+                <div class="row mb-3 align-items-center">
+                    <label class="col-sm-2 form-label-custom">Promo Start</label>
+                    <div class="col-sm-4">
+                        <input type="date" class="form-control" @bind="model.PromoStart" />
+                    </div>
+                    <label class="col-sm-2 form-label-custom form-label-custom--indent">Promo End</label>
+                    <div class="col-sm-4">
+                        <input type="date" class="form-control" @bind="model.PromoEnd" />
                     </div>
                 </div>
             </div>
-        }
-        @if (model.HasSpecification)
-        {
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <div class="row align-items-start">
-                        <label class="col-sm-2 form-label-custom">Specification Details</label>
+        </div>
+                </div>
+            }
+            else if (activeTab == ProductTabs.MinMax)
+            {
+                <div class="tab-pane fade show active">
+                    @if (isLocationLoading)
+                    {
+                        <div class="text-center text-muted py-4">
+                            Loading location thresholds...
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(locationError))
+                    {
+                        <div class="alert alert-warning py-2 px-3">
+                            @locationError
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="minmax-column-header">
+                                    <span class="flex-grow-1">Location</span>
+                                    <span class="label-gap text-end">Min</span>
+                                    <span class="label-gap text-end">Max</span>
+                                    <span class="label-toggle text-end">Replenish</span>
+                                </div>
+                                @foreach (var location in locationThresholds.Take(15))
+                                {
+                                    <div class="minmax-location-row d-flex align-items-center gap-2 mt-2" @key="location.LocationCode">
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold">@location.LocationCode</div>
+                                            <div class="small text-muted">@location.LocationName</div>
+                                        </div>
+                                        <div class="label-gap">
+                                            <input type="number"
+                                                   class="form-control form-control-sm"
+                                                   step="1"
+                                                   min="0"
+                                                   @bind="location.Min" />
+                                        </div>
+                                        <div class="label-gap">
+                                            <input type="number"
+                                                   class="form-control form-control-sm"
+                                                   step="1"
+                                                   min="0"
+                                                   @bind="location.Max" />
+                                        </div>
+                                        <div class="label-toggle">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input"
+                                                       type="checkbox"
+                                                       role="switch"
+                                                       @bind="location.Replenish" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <div class="col-md-6">
+                                <div class="minmax-column-header">
+                                    <span class="flex-grow-1">Location</span>
+                                    <span class="label-gap text-end">Min</span>
+                                    <span class="label-gap text-end">Max</span>
+                                    <span class="label-toggle text-end">Replenish</span>
+                                </div>
+                                @foreach (var location in locationThresholds.Skip(15).Take(15))
+                                {
+                                    <div class="minmax-location-row d-flex align-items-center gap-2 mt-2" @key="location.LocationCode">
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold">@location.LocationCode</div>
+                                            <div class="small text-muted">@location.LocationName</div>
+                                        </div>
+                                        <div class="label-gap">
+                                            <input type="number"
+                                                   class="form-control form-control-sm"
+                                                   step="1"
+                                                   min="0"
+                                                   @bind="location.Min" />
+                                        </div>
+                                        <div class="label-gap">
+                                            <input type="number"
+                                                   class="form-control form-control-sm"
+                                                   step="1"
+                                                   min="0"
+                                                   @bind="location.Max" />
+                                        </div>
+                                        <div class="label-toggle">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input"
+                                                       type="checkbox"
+                                                       role="switch"
+                                                       @bind="location.Replenish" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else if (activeTab == ProductTabs.Description)
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row mb-3 align-items-start">
+                        <label class="col-sm-2 form-label-custom">Short Description</label>
                         <div class="col-sm-10">
-                            <RichTextEditor  @bind-Value="model.Specifications" />
+                            <textarea class="form-control" rows="2" @bind="model.ShortDescription"></textarea>
+                        </div>
+                    </div>
+                    <div class="row mb-3 align-items-start">
+                        <label class="col-sm-2 form-label-custom">Full Description</label>
+                        <div class="col-sm-10">
+                            <RichTextEditor @ref="descEditor" @bind-Value="model.FullDescription" />
                         </div>
                     </div>
                 </div>
-            </div>
-        }
-
-       
+            }
+            else if (activeTab == ProductTabs.Images)
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row">
+                        <div class="col-12">
+                            <ImageUploader Model="model" @key="imageKey" />
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (activeTab == ProductTabs.Ecommerce)
+            {
+                <div class="tab-pane fade show active">
+                    <div class="alert alert-info mb-0">
+                        Use the Product Info tab for pricing, e-commerce visibility, and promotional controls.
+                    </div>
+                </div>
+            }
+            else if (activeTab == ProductTabs.Specification)
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <RichTextEditor @bind-Value="model.Specifications" />
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (activeTab == ProductTabs.Geometry)
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <RichTextEditor @bind-Value="model.Geometry" />
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (activeTab == ProductTabs.ProductNotes)
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <textarea class="form-control" rows="5" @bind="model.Notes"></textarea>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
     </div>
 
     <div class="card-footer d-flex justify-content-start gap-2 bg-light py-3 px-4">
@@ -647,6 +641,10 @@
     GroupProductDto group = new();
     ProductDto model = new();
     Guid imageKey = Guid.NewGuid();
+    private string activeTab = ProductTabs.ProductInfo;
+    private List<LocationMinMax> locationThresholds = new();
+    private bool isLocationLoading = true;
+    private string? locationError;
     private RichTextEditor? descEditor;
     InputFile? fileInput;
     [Parameter]
@@ -654,11 +652,10 @@
     DotNetObjectReference<Products>? dotNetRef;
     ElementReference partNumberInput;
     ElementReference mfrPartInput;
-    ProductVariants? variantsEditor;
     string? shortcutRegistrationId;
     bool showNewItemMessage;
     bool isPartNumberDisabled;
-    Dictionary<string, string> validationErrors = new(StringComparer.Ordinal);
+    List<string> hardErrors = new();
     List<string> warnings = new();
     bool showWarningModal;
     [Parameter]
@@ -669,49 +666,108 @@
         ? "Add New Product"
         : "Product Maintenance";
 
-    static readonly Dictionary<string, string> ValidationFieldIds = new()
+    private void SetActiveTab(string tab)
     {
-        [nameof(ProductDto.Make)] = "brandField",
-        [nameof(ProductDto.MfrPartNumber)] = "mfrPartField",
-        [nameof(ProductDto.Supplier1Code)] = "supplierField",
-        [nameof(ProductDto.CatACode)] = "categoryAField",
-        [nameof(ProductDto.Search1)] = "search1Field",
-        [nameof(ProductDto.Details)] = "detailsField"
-    };
+        activeTab = tab;
+    }
 
+    private string TabClass(string tab)
+        => $"nav-link{(activeTab == tab ? " active fw-semibold" : " text-muted")}";
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrWhiteSpace(PartNumber))
+        await base.OnInitializedAsync();
+        await LoadLocationThresholdsAsync();
+    }
+
+    private async Task LoadLocationThresholdsAsync()
+    {
+        try
         {
-            isPartNumberDisabled = true;
-            showNewItemMessage = false;
-            await LoadProductAsync(PartNumber, "Product loaded for edit");
+            var locations = (await LocationService.GetAllAsync())
+                .OrderBy(l => l.Code)
+                .Take(30)
+                .Select((location, index) => new LocationMinMax
+                {
+                    LocationCode = string.IsNullOrWhiteSpace(location.Code)
+                        ? (index + 1).ToString("D2")
+                        : location.Code,
+                    LocationName = string.IsNullOrWhiteSpace(location.Name)
+                        ? $"Location {(index + 1).ToString("D2")}"
+                        : location.Name
+                })
+                .ToList();
+
+            for (int i = locations.Count; i < 30; i++)
+            {
+                var code = (i + 1).ToString("D2");
+                locations.Add(new LocationMinMax
+                {
+                    LocationCode = code,
+                    LocationName = $"Location {code}"
+                });
+            }
+
+            locationThresholds = locations;
+        }
+        catch (Exception)
+        {
+            locationError = "Unable to load location names from settings.";
+        }
+        finally
+        {
+            isLocationLoading = false;
         }
     }
 
 
-    async Task<bool> ValidateHardAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        // Route-based edit
+        if (!string.IsNullOrWhiteSpace(PartNumber))
+        {
+            model.PartNumber = PartNumber;
+            isPartNumberDisabled = true;
+            showNewItemMessage = false;
+
+            var res = await ProductApi.GetProduct(PartNumber);
+
+            if (res?.Success == true && res.Data != null)
+            {
+                model = res.Data;
+                await AppSnackbar.Show("Product loaded for edit", SnackbarType.Success);
+            }
+            else
+            {
+                await AppSnackbar.Show("Product not found", SnackbarType.Error);
+                await Reset();
+            }
+        }
+    }
+
+
+    bool ValidateHard()
+    {
+        hardErrors.Clear();
+
         if (string.IsNullOrWhiteSpace(model.Make))
-            return await ShowValidationErrorAsync(nameof(ProductDto.Make), "Brand is required");
+            hardErrors.Add("Brand is required");
         if (string.IsNullOrWhiteSpace(model.MfrPartNumber))
-            return await ShowValidationErrorAsync(nameof(ProductDto.MfrPartNumber), "MFR Part No is required");
+            hardErrors.Add("MFR Part no is required");
 
         if (string.IsNullOrWhiteSpace(model.Supplier1Code))
-            return await ShowValidationErrorAsync(nameof(ProductDto.Supplier1Code), "Supplier is required");
+            hardErrors.Add("Supplier is required");
 
         if (string.IsNullOrWhiteSpace(model.CatACode))
-            return await ShowValidationErrorAsync(nameof(ProductDto.CatACode), "Category A is required");
+            hardErrors.Add("Category A is required");
 
         if (string.IsNullOrWhiteSpace(model.Search1))
-            return await ShowValidationErrorAsync(nameof(ProductDto.Search1), "Search1 is required");
+            hardErrors.Add("Search1 is required");
 
         if (string.IsNullOrWhiteSpace(model.Details))
-            return await ShowValidationErrorAsync(nameof(ProductDto.Details), "Details is required");
+            hardErrors.Add("Details is required");
 
-        validationErrors.Clear();
-        return true;
+        return hardErrors.Count == 0;
     }
     bool ValidateWarnings()
     {
@@ -738,15 +794,11 @@
     }
     async Task OnSaveClicked()
     {
-        if (!await ValidateHardAsync())
+        if (!ValidateHard())
         {
-            return;
-        }
+            foreach (var err in hardErrors)
+                await AppSnackbar.Show(err, SnackbarType.Error);               
 
-        if (isGroupItem && variantsEditor != null && !variantsEditor.IsValid())
-        {
-            await AppSnackbar.Show(variantsEditor.GetFirstErrorMessage() ?? "Variant validation failed", SnackbarType.Error);
-            await variantsEditor.FocusFirstInvalidAsync(JS);
             return;
         }
 
@@ -766,24 +818,6 @@
     {
         showWarningModal = false;
         await Save();
-    }
-
-    string GetFieldCss(string fieldName)
-        => validationErrors.ContainsKey(fieldName) ? "validation-field-error" : string.Empty;
-
-    bool TryGetFieldError(string fieldName, out string message)
-        => validationErrors.TryGetValue(fieldName, out message!);
-
-    async Task<bool> ShowValidationErrorAsync(string fieldName, string message)
-    {
-        validationErrors.Clear();
-        validationErrors[fieldName] = message;
-        await AppSnackbar.Show(message, SnackbarType.Error);
-
-        if (ValidationFieldIds.TryGetValue(fieldName, out var fieldId))
-            await JS.InvokeVoidAsync("blazorForms.focusById", fieldId);
-
-        return false;
     }
 
     void OnPartNumberBlur()
@@ -828,19 +862,26 @@
     }
     async Task Reset()
     {
+        // Reset main product
         model = new ProductDto();
+
+        // Reset variants
         group = new GroupProductDto();
         isGroupItem = false;
+
+        // Reset images
         imageKey = Guid.NewGuid();
+
+        // Reset UI flags
         showNewItemMessage = false;
         isPartNumberDisabled = false;
-        validationErrors.Clear();
-        warnings.Clear();
-        showWarningModal = false;
+       
 
+        // Clear rich text editors
         if (descEditor != null)
             await descEditor.Clear();
 
+        // Force child components to rebind
         await InvokeAsync(StateHasChanged);
         await partNumberInput.FocusAsync();
     }
@@ -879,30 +920,52 @@
         await partNumberInput.FocusAsync();
     }
 
+    private static class ProductTabs
+    {
+        public const string ProductInfo = "product-info";
+        public const string MinMax = "min-max";
+        public const string Description = "description";
+        public const string Images = "images";
+        public const string Ecommerce = "ecommerce";
+        public const string Specification = "specification";
+        public const string Geometry = "geometry";
+        public const string ProductNotes = "product-notes";
+    }
+
     class ProductImage
     {
         public string Url { get; set; } = "";
         public bool IsPrimary { get; set; }
     }
 
+    class LocationMinMax
+    {
+        public string LocationCode { get; set; } = "";
+        public string LocationName { get; set; } = "";
+        public int? Min { get; set; }
+        public int? Max { get; set; }
+        public bool Replenish { get; set; }
+    }
+
     
     async Task Save()
     {
-        validationErrors.Clear();
-        var isNewMainProduct = string.IsNullOrWhiteSpace(model.PartNumber);
-
+        // =====================================================
+        // SINGLE PRODUCT MODE (EXACT OLD BEHAVIOR)
+        // =====================================================
         if (!isGroupItem)
         {
             var res = await ProductApi.SaveProduct(model);
 
             if (res?.Success == true && res.Data != null)
             {
-                await AppSnackbar.Show(res.Message ?? "Product saved successfully", SnackbarType.Success);
+                await AppSnackbar.Show("Product saved successfully", SnackbarType.Success);
                 await Reset();
             }
             else
             {
-                await AppSnackbar.Show(res?.Message ?? "Product save failed", SnackbarType.Error);
+                await AppSnackbar.Show(res?.Message ?? "New product mode activated", SnackbarType.Error);
+                
             }
 
             return;
@@ -912,7 +975,6 @@
         if (string.IsNullOrWhiteSpace(group.GroupName))
         {
             await AppSnackbar.Show("Group Name is required", SnackbarType.Error);
-            await JS.InvokeVoidAsync("blazorForms.focusById", "variant-group-name");
             return;
         }
 
@@ -922,63 +984,60 @@
             return;
         }
 
+
+        // 1) Save the MAIN item first
         model.GroupName = group.GroupName;
-        model.GroupCode = model.PartNumber;
         model.IsVariant = false;
 
         var mainRes = await ProductApi.SaveProduct(model);
 
         if (mainRes?.Success != true || mainRes.Data == null)
         {
-            await AppSnackbar.Show(mainRes?.Message ?? "Failed to save main product", SnackbarType.Error);
+           await AppSnackbar.Show("Failed to save main product", SnackbarType.Error);
+           
             return;
         }
 
 
         var main = mainRes.Data;
 
+        // 2) Use main.PartNumber as GroupCode
         group.GroupCode = main.PartNumber;
-        group.GroupName = string.IsNullOrWhiteSpace(group.GroupName) ? main.GroupName ?? string.Empty : group.GroupName;
 
+        // 3) Copy header data to each variant
         foreach (var v in group.Variants)
         {
             v.GroupCode = group.GroupCode;
-            v.GroupName = group.GroupName;
             v.IsVariant = true;
 
             v.Make = main.Make;
-            v.Supplier1Code = main.Supplier1Code;
             v.Details = main.Details;
             v.CatACode = main.CatACode;
-            v.CatA = main.CatA;
             v.CatBCode = main.CatBCode;
-            v.CatB = main.CatB;
             v.CatCCode = main.CatCCode;
-            v.CatC = main.CatC;
-            v.Search1 = main.Search1;
-            v.Search2 = main.Search2;
             v.CostPrice = main.CostPrice;
             v.StorePrice = main.StorePrice;
             v.WebPrice = main.WebPrice;
-            v.SuggestedRRP = main.SuggestedRRP;
             v.ImageMain = main.ImageMain;
         }
 
+        // 4) Save variants
         var groupRes = await ProductApi.SaveGroupProduct(group);
 
         if (groupRes?.Success == true)
         {
-            var successMessage = isNewMainProduct
-                ? $"Product group saved successfully. Generated PartNumber: {main.PartNumber}"
-                : "Product group saved successfully";
-
-            await AppSnackbar.Show(successMessage, SnackbarType.Success);
+            await AppSnackbar.Show("Group saved successfully", SnackbarType.Success);
+         
             await Reset();
         }
         else
         {
             await AppSnackbar.Show(groupRes?.Message ?? "Group save failed", SnackbarType.Error);
+            
         }
+
+
+
     }
 
 
@@ -1016,54 +1075,31 @@
     async Task Search()
     {
         showNewItemMessage = false;
-        validationErrors.Clear();
 
         if (string.IsNullOrWhiteSpace(model.PartNumber))
         {
+           // AppSnackbar.Show("New item mode. Enter details and press Save.", SnackbarType.Info);
+           
             return;
         }
 
-        await LoadProductAsync(model.PartNumber, "Product loaded");
-    }
+        var res = await ProductApi.GetProduct(model.PartNumber);
 
-    async Task LoadProductAsync(string partNumber, string successMessage)
-    {
-        var res = await ProductApi.GetProduct(partNumber);
-
-        if (res?.Success != true || res.Data == null)
+        if (res?.Success == true && res.Data != null)
         {
-            group = new GroupProductDto();
-            isGroupItem = false;
-            await AppSnackbar.Show("Product not found. New item will be created.", SnackbarType.Warning);
-            return;
-        }
-
-        model = res.Data;
-        model.PartNumber = model.PartNumber?.Trim();
-        isPartNumberDisabled = !string.IsNullOrWhiteSpace(PartNumber);
-
-        var groupRes = await ProductApi.GetProductGroup(model.PartNumber ?? string.Empty);
-        if (groupRes?.Success == true && groupRes.Data != null)
-        {
-            group = groupRes.Data;
-            isGroupItem = group.Variants.Any() || !string.IsNullOrWhiteSpace(group.GroupName);
+            model = res.Data;
+            await AppSnackbar.Show("Product loaded", SnackbarType.Success);
+           
         }
         else
         {
-            group = new GroupProductDto();
-            isGroupItem = false;
+            await AppSnackbar.Show("Product not found. New item will be created.", SnackbarType.Warning);
+            
         }
-
-        validationErrors.Clear();
-        await AppSnackbar.Show(successMessage, SnackbarType.Success);
     }
-
     void Cancel()
     {
         model = new ProductDto();
-        group = new GroupProductDto();
-        isGroupItem = false;
-        validationErrors.Clear();
         AppSnackbar.Show("Entry cancelled", SnackbarType.Info);
         
     }

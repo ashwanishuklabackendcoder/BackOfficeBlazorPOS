@@ -20,6 +20,9 @@ namespace BackOfficeBlazor.Admin.Entities
         public int Count { get; set; }
 
         public string PartNumber { get; set; } = "";
+        public string Description { get; set; } = "";
+        public int? ComboId { get; set; }
+        public bool? IsCombo { get; set; }
 
         public decimal Cost { get; set; }
         public decimal Sell { get; set; }
@@ -48,6 +51,9 @@ namespace BackOfficeBlazor.Admin.Entities
 
         public string StockNo { get; set; } = "";
         public string OrderNo { get; set; } = "";
+        public string ComboGroupId { get; set; } = "";
+        public bool? IsComboReturnPolicyApplied { get; set; }
+        public int? OriginalSaleLineId { get; set; }
 
         public string AI { get; set; } = "";
         public bool? BikmoYes { get; set; }

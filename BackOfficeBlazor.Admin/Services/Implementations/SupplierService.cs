@@ -1,5 +1,6 @@
 ﻿using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Repository.Interfaces;
+using BackOfficeBlazor.Admin.Services;
 using BackOfficeBlazor.Admin.Services.Interfaces;
 using BackOfficeBlazor.Shared.DTOs;
 using System;
@@ -22,11 +23,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         {
             var suppliers = await _repo.GetAllSupplier();
 
-            return suppliers.Select(x => new SupplierDto
-            {
-                AccountNo = x.AccountNo,
-                Name = x.Name
-            }).ToList();
+            return suppliers.Select(ToDto).ToList();
         }
 
         public async Task<ApiResponse<SupplierDto>> GetAsync(string accountNo)
@@ -50,6 +47,14 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(dto.AccountNo))
+                {
+                    var last = await _repo.GetLastAccountNumberAsync();
+                    dto.AccountNo = SequenceHelper.GenerateNextFiveDigitCode(last);
+                }
+
+                dto.AccountNo = dto.AccountNo?.Trim().ToUpperInvariant();
+
                 var entity = await _repo.GetByAccountNoAsync(dto.AccountNo);
 
                 if (entity == null)

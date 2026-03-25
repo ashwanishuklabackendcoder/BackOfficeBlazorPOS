@@ -41,19 +41,24 @@
 
                 @if (maintenanceMenuExpanded)
                 {
-                    @if (AuthService.HasAccess(PermissionKeys.ProductList))
+            @*         @if (AuthService.HasAccess(PermissionKeys.ProductList))
                     {
                         <div class="nav-item px-4 submenu-item">
                             <NavLink class="nav-link" href="products">
                                 <span class="bi bi-box-seam me-2" aria-hidden="true"></span> Product Search
                             </NavLink>
                         </div>
-                    }
+                    } *@
                     @if (AuthService.HasAccess(PermissionKeys.ProductAdd))
                     {
                         <div class="nav-item px-4 submenu-item">
                             <NavLink class="nav-link" href="product">
                                 <span class="bi bi-box-seam me-2" aria-hidden="true"></span> Products
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="combo">
+                                <span class="bi bi-collection me-2" aria-hidden="true"></span> Combo Builder
                             </NavLink>
                         </div>
                     }

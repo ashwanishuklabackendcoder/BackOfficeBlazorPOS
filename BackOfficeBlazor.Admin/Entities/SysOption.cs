@@ -155,5 +155,12 @@ namespace BackOfficeBlazor.Admin.Entities
 
         [StringLength(500)]
         public string? BaseCurrency { get; set; }
+        public bool? AllowSeparateComboItemReturn { get; set; }
+        [StringLength(30)]
+        public string? ComboPartialReturnRefundMode { get; set; }
+        [StringLength(10)]
+        public string? DiscountPartNumber { get; set; }
+        [StringLength(40)]
+        public string? ReturnStockMode { get; set; }
     }
 }

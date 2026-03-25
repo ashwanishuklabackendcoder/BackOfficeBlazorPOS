@@ -31,6 +31,8 @@ namespace BackOfficeBlazor.Admin.Context
         public DbSet<ProductLevel> ProductLevels { get; set; }
         public DbSet<ComboMaster> ComboMasters { get; set; }
         public DbSet<ComboDetail> ComboDetails { get; set; }
+        public DbSet<PurchaseOrderHeader> _PurchaseOrderHeaders { get; set; }
+        public DbSet<PurchaseOrderItem> _PurchaseOrderItems { get; set; }
 
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<ProductGroupItem> ProductGroupItems { get; set; }
@@ -119,6 +121,13 @@ namespace BackOfficeBlazor.Admin.Context
                 .WithMany(x => x.Details)
                 .HasForeignKey(x => x.ComboId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PurchaseOrderHeader>()
+                .HasIndex(x => x.OrderNumber)
+                .IsUnique();
+
+            modelBuilder.Entity<PurchaseOrderItem>()
+                .HasIndex(x => new { x.OrderNumber, x.SequenceId });
         }
 
     }

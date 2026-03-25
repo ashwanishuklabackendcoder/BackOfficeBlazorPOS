@@ -23,6 +23,7 @@
                 <label class="col-sm-2 col-lg-1 form-label-custom">Account No</label>
                 <div class="col-sm-3 col-lg-2">
                     <input id="AccNo"
+                           @ref="accInput"
                            class="form-control"
                            @bind="model.AccNo"
                            maxlength="5"
@@ -493,6 +494,7 @@
         await Reset();
         await AppSnackbar.Show("Enter Account Number to search customer", SnackbarType.Info);
     }
+
     async Task Search()
     {
         // 🔹 Case 1: Blank → New Customer Mode
@@ -675,6 +677,7 @@
                 // Ignore JS disconnection during teardown.
             }
         }
+
     }
 }
 

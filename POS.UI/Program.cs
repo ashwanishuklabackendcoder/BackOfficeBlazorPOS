@@ -39,6 +39,7 @@ builder.Services.AddScoped<IProductEnquiryService, ProductEnquiryService>();
 
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IProductApiService, ProductApiService>();
+builder.Services.AddScoped<IPurchaseOrderApiService, PurchaseOrderApiService>();
 builder.Services.AddScoped<IComboApiService, ComboApiService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IReturnService, ReturnService>();

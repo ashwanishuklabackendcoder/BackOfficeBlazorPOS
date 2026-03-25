@@ -20,5 +20,14 @@ window.reportExport = {
         win.focus();
         win.print();
         win.close();
+    },
+    openHtmlPreview: function (title, html) {
+        var win = window.open("", "_blank");
+        if (!win) return;
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+        win.document.title = title || "Preview";
+        win.focus();
     }
 };

@@ -331,6 +331,7 @@
     int DraftQty = 1;
     bool DraftIsMajor;
     decimal DraftUnitPrice;
+    ProductDto? DraftLoadedProduct;
     List<StockNumberDto> DraftAvailableStockNumbers = new();
     string? DraftSelectedStockNumber;
     List<PosCartItemState> DraftCart = new();
@@ -568,24 +569,27 @@
         SelectedStockNumber = null;
     }
 
-    async Task AddToDraftCart()
+    async Task<bool> LoadDraftProductPreviewAsync()
     {
         if (string.IsNullOrWhiteSpace(DraftPartNumber))
         {
             AppSnackbar.Show("Part number required", SnackbarType.Warning);
-            return;
+            return false;
         }
 
         var res = await ProductApi.GetProduct(DraftPartNumber);
         if (res == null || !res.Success || res.Data == null)
         {
             AppSnackbar.Show("Product not found", SnackbarType.Error);
-            return;
+            return false;
         }
 
         var product = res.Data;
+        DraftLoadedProduct = product;
         DraftIsMajor = product.Major;
         DraftUnitPrice = product.CostPrice;
+        DraftAvailableStockNumbers.Clear();
+        DraftSelectedStockNumber = null;
 
         if (DraftIsMajor)
         {
@@ -595,9 +599,22 @@
             if (!DraftAvailableStockNumbers.Any())
             {
                 AppSnackbar.Show("No serialized stock available at this location", SnackbarType.Warning);
-                return;
+                return false;
             }
+        }
 
+        return true;
+    }
+
+    async Task AddToDraftCart()
+    {
+        if (!await LoadDraftProductPreviewAsync())
+        {
+            return;
+        }
+
+        if (DraftIsMajor)
+        {
             if (string.IsNullOrWhiteSpace(DraftSelectedStockNumber))
             {
                 AppSnackbar.Show("Select stock number then click Add", SnackbarType.Warning);
@@ -616,8 +633,8 @@
 
         var line = new PosCartItemState
         {
-            PartNumber = product.PartNumber ?? "",
-            Description = product.Details ?? "",
+            PartNumber = DraftLoadedProduct?.PartNumber ?? DraftPartNumber ?? "",
+            Description = DraftLoadedProduct?.Details ?? "",
             Qty = qty,
             UnitPrice = DraftUnitPrice,
             OriginalPrice = DraftUnitPrice,
@@ -803,6 +820,7 @@
         DraftQty = 1;
         DraftIsMajor = false;
         DraftUnitPrice = 0;
+        DraftLoadedProduct = null;
         DraftAvailableStockNumbers.Clear();
         DraftSelectedStockNumber = null;
     }
@@ -836,5 +854,6 @@
         var row = levels.FirstOrDefault(x => x.LocationCode == locationCode);
         return row?.Quantity ?? 0;
     }
+
 }
 

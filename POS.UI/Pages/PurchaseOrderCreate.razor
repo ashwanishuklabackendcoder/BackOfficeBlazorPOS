@@ -9,6 +9,7 @@
 @inject IProductEnquiryService ProductEnquiryService
 @inject AppSnackbarService AppSnackbar
 @inject IAuthService AuthService
+@inject IStaffUserService StaffUserApi
 @inject ISupplierService SupplierService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -57,7 +58,7 @@
                     <div class="col-md-4 fw-semibold text-uppercase">Supplier</div>
                     <div class="col-md-8">
                         <div class="d-flex align-items-center gap-2">
-                            <span class="text-danger fw-bold small">F5</span>
+                           
                             <div class="flex-grow-1">
                                 <SupplierSelector Value="@SupplierCode" ValueChanged="OnSupplierChanged" />
                             </div>
@@ -76,12 +77,18 @@
 
                     <div class="col-md-4 fw-semibold text-uppercase">Cost Price</div>
                     <div class="col-md-8">
-                        <input type="number" step="0.01" class="form-control" @bind="CostPrice" />
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" class="form-control" @bind="CostPrice" />
+                        </div>
                     </div>
 
                     <div class="col-md-4 fw-semibold text-uppercase">Retail Price</div>
                     <div class="col-md-8">
-                        <input type="number" step="0.01" class="form-control" @bind="RetailPrice" />
+                        <div class="input-group">
+                            <span class="input-group-text">£</span>
+                            <input type="number" step="0.01" class="form-control" @bind="RetailPrice" />
+                        </div>
                     </div>
 
                     <div class="col-md-4 fw-semibold text-uppercase">Qty Required</div>
@@ -97,7 +104,8 @@
 
                     <div class="col-md-4 fw-semibold text-uppercase">Sales Code</div>
                     <div class="col-md-8">
-                        <input class="form-control w-25" @bind="SalesCode" />
+                        <input class="form-control w-25" @bind="SalesCode" @bind:event="oninput" />
+                        <div class="small text-primary fw-semibold mt-1">@SalesStaffNameOrFallback</div>
                     </div>
 
                     <div class="col-md-4 fw-semibold text-uppercase">Notes</div>
@@ -134,7 +142,7 @@
 
                     <div class="border rounded p-3 bg-white text-center">
                         <div class="small text-muted">Order Total</div>
-                        <div class="display-6 fw-bold text-primary">@OrderTotal.ToString("0.00")</div>
+                        <div class="display-6 fw-bold text-primary">@OrderTotal.ToString("£0.00")</div>
                     </div>
                 </div>
             </div>
@@ -176,8 +184,8 @@
                                     <td>@line.MfrPartNumber</td>
                                     <td>@line.Description</td>
                                     <td>@line.QtyRequired</td>
-                                    <td>@line.CostPrice.ToString("0.00")</td>
-                                    <td>@line.LineTotal.ToString("0.00")</td>
+                                    <td>@line.CostPrice.ToString("£0.00")</td>
+                                    <td>@line.LineTotal.ToString("£0.00")</td>
                                     <td>
                                         <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLine(line)">X</button>
                                     </td>
@@ -201,7 +209,9 @@
                     <button class="btn-close" @onclick="CloseProductSearch"></button>
                 </div>
                 <div class="modal-body">
-                    <ProductSearchGrid OnSelected="OnProductSelected" />
+                    <ProductList SelectionMode="true"
+                                 InitialSearchText="@ProductSearchTerm"
+                                 OnProductSelected="OnProductSelected" />
                 </div>
             </div>
         </div>
@@ -218,7 +228,7 @@
     string SupplierName = string.Empty;
     string CustomerAccNo = string.Empty;
     string CustomerName = string.Empty;
-    string SalesCode = string.Empty;
+    string _salesCode = string.Empty;
     string PartNumber = string.Empty;
     string MfrPartNumber = string.Empty;
     string Description = string.Empty;
@@ -232,17 +242,30 @@
     bool SendSms;
     bool XmasClub;
     bool ShowProductSearch;
+    string? ProductSearchTerm;
     int CurrentStockLevel;
     int OnOrderQty;
     int TotalSold;
 
     List<PurchaseOrderLineDto> Lines = new();
     ProductDto? CurrentProduct;
+    List<StaffUserDto> StaffUsers = new();
+    string SalesStaffName = string.Empty;
 
     string DraftRefDisplay => DraftRef?.ToString() ?? "-";
     string CurrentProductDisplay => string.IsNullOrWhiteSpace(Description) ? "-" : Description;
     string SupplierNameOrFallback => string.IsNullOrWhiteSpace(SupplierName) ? "ALL SUPPLIERS" : SupplierName;
     string CustomerNameOrFallback => string.IsNullOrWhiteSpace(CustomerName) ? "-" : CustomerName;
+    string SalesCode
+    {
+        get => _salesCode;
+        set
+        {
+            _salesCode = value?.Trim() ?? string.Empty;
+            UpdateSalesStaffName();
+        }
+    }
+    string SalesStaffNameOrFallback => string.IsNullOrWhiteSpace(SalesStaffName) ? "-" : SalesStaffName;
     string MarginText
     {
         get
@@ -258,6 +281,12 @@
         ? (int)(Math.Ceiling(Math.Max(QtyRequired, 1) / (decimal)BoxQty) * BoxQty)
         : Math.Max(QtyRequired, 1);
     decimal OrderTotal => Lines.Sum(x => x.LineTotal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStaffUsersAsync();
+        UpdateSalesStaffName();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -303,6 +332,7 @@
     [JSInvokable]
     public Task OnF5()
     {
+        ProductSearchTerm = GetProductSearchTerm();
         ShowProductSearch = true;
         return InvokeAsync(StateHasChanged);
     }
@@ -316,21 +346,46 @@
 
     async Task LoadProductAsync()
     {
-        var part = PartNumber?.Trim();
-        if (string.IsNullOrWhiteSpace(part))
+        var searchTerm = GetProductSearchTerm();
+        if (string.IsNullOrWhiteSpace(searchTerm))
         {
-            await AppSnackbar.Show("Enter part number", SnackbarType.Warning);
+            await AppSnackbar.Show("Enter part number or MFR code", SnackbarType.Warning);
             return;
         }
 
-        var result = await ProductApi.GetProduct(part);
+        var result = await ProductApi.GetProduct(searchTerm);
         if (!result.Success || result.Data == null)
         {
+            var filter = new ProductFilterDto
+            {
+                Search1 = searchTerm,
+                Details = searchTerm,
+                MfrPartNumber = searchTerm,
+                Website = null,
+                Gender = null
+            };
+
+            var matches = await ProductApi.GetProductsAsync(filter);
+            if (matches.Success && matches.Data != null && matches.Data.Any())
+            {
+                if (matches.Data.Count == 1)
+                {
+                    await ApplyProductAsync(matches.Data[0]);
+                    await RefreshProductStatsAsync();
+                    return;
+                }
+
+                ProductSearchTerm = searchTerm;
+                ShowProductSearch = true;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
             await AppSnackbar.Show("Product not found", SnackbarType.Error);
             return;
         }
 
-        ApplyProduct(result.Data);
+        await ApplyProductAsync(result.Data);
         await RefreshProductStatsAsync();
     }
 
@@ -340,11 +395,11 @@
         if (product == null)
             return;
 
-        ApplyProduct(product);
+        await ApplyProductAsync(product);
         await RefreshProductStatsAsync();
     }
 
-    void ApplyProduct(ProductDto product)
+    async Task ApplyProductAsync(ProductDto product)
     {
         CurrentProduct = product;
         PartNumber = product.PartNumber ?? string.Empty;
@@ -354,8 +409,8 @@
         CostPrice = product.CostPrice;
         RetailPrice = product.SuggestedRRP ?? product.StorePrice ?? product.TradePrice ?? 0m;
         QtyRequired = Math.Max(QtyRequired, 1);
-        if (string.IsNullOrWhiteSpace(SupplierCode) && !string.IsNullOrWhiteSpace(product.Supplier1Code))
-            SupplierCode = product.Supplier1Code ?? string.Empty;
+        SupplierCode = product.Supplier1Code ?? string.Empty;
+        await LoadSupplierNameAsync(SupplierCode);
     }
 
     async Task RefreshProductStatsAsync()
@@ -446,7 +501,7 @@
         if (result.Data.Lines.Any())
             Lines = result.Data.Lines.ToList();
 
-        ClearCurrentLine(keepSupplier: true);
+        ClearCurrentLine(keepSupplier: false);
         await AppSnackbar.Show("Order line saved", SnackbarType.Success);
     }
 
@@ -534,8 +589,11 @@
         CustomerAccNo = string.Empty;
         SalesCode = string.Empty;
         StockLocationCode = "01";
+        ProductSearchTerm = null;
+        SalesStaffName = string.Empty;
 
         SupplierCode = keepSupplier ? supplier : string.Empty;
+        SupplierName = keepSupplier ? SupplierName : string.Empty;
     }
 
     void CancelCurrentLine() => ClearCurrentLine(keepSupplier: true);
@@ -543,6 +601,53 @@
     void CloseProductSearch()
     {
         ShowProductSearch = false;
+        ProductSearchTerm = null;
+    }
+
+    string GetProductSearchTerm()
+    {
+        var part = PartNumber?.Trim();
+        if (!string.IsNullOrWhiteSpace(part))
+            return part;
+
+        return MfrPartNumber?.Trim() ?? string.Empty;
+    }
+
+    async Task LoadStaffUsersAsync()
+    {
+        var response = await StaffUserApi.GetAllAsync();
+        StaffUsers = response.Success && response.Data != null
+            ? response.Data
+            : new List<StaffUserDto>();
+    }
+
+    async Task LoadSupplierNameAsync(string? supplierCode)
+    {
+        var code = supplierCode?.Trim() ?? string.Empty;
+        SupplierName = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(code))
+            return;
+
+        var supplier = await SupplierService.GetSupplier(code);
+        SupplierName = supplier.Success && supplier.Data != null
+            ? supplier.Data.Name ?? string.Empty
+            : string.Empty;
+    }
+
+    void UpdateSalesStaffName()
+    {
+        var code = SalesCode?.Trim();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            SalesStaffName = string.Empty;
+            return;
+        }
+
+        var match = StaffUsers.FirstOrDefault(x =>
+            string.Equals(x.StaffCode?.Trim(), code, StringComparison.OrdinalIgnoreCase));
+
+        SalesStaffName = match?.FullName ?? match?.Username ?? string.Empty;
     }
 
     void Exit()

@@ -643,7 +643,7 @@
                         <td>@p.CatB</td>
                         <td>@p.CatC</td>
                         <td>@p.Supplier1Code</td>
-                        <td>@p.CostPrice</td>
+                        <td>@p.CostPrice.ToString("£0.00")</td>
                         <td>
                             @if (SelectionMode || IsReturnSelectionActive)
                             {
@@ -685,7 +685,11 @@
     [Parameter]
     public EventCallback<ProductDto> OnProductSelected { get; set; }
 
+    [Parameter]
+    public string? InitialSearchText { get; set; }
+
     string supplier1Display = "";
+    string? appliedInitialSearchText;
     List<string> makeSuggestions = new();
     Dictionary<string, List<CategoryDto>> suggestions = new()
     {
@@ -704,6 +708,19 @@
     string _sortColumn = nameof(ProductDto.PartNumber);
     bool _sortAsc = true;
     bool _loading = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var searchText = InitialSearchText?.Trim();
+        if (!SelectionMode || string.IsNullOrWhiteSpace(searchText) || string.Equals(appliedInitialSearchText, searchText, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        appliedInitialSearchText = searchText;
+        filter.Search1 = searchText;
+        filter.Details = searchText;
+        filter.MfrPartNumber = searchText;
+        await SearchProducts();
+    }
 
     // ================= API SEARCH =================
     class StockRow

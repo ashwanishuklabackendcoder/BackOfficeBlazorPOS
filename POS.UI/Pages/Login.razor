@@ -45,7 +45,7 @@
     {
         if (AuthService.IsAuthenticated)
         {
-            Nav.NavigateTo("/", true);
+            Nav.NavigateTo("/dashboard", true);
         }
     }
 
@@ -89,7 +89,7 @@
             }
 
             await AppSnackbar.Show("Login successful", SnackbarType.Success);
-            Nav.NavigateTo("/", true);
+            Nav.NavigateTo("/dashboard", true);
         }
         catch
         {

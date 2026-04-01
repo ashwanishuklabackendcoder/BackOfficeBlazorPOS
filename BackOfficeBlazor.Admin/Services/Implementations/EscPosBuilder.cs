@@ -1,6 +1,7 @@
 using System.Text;
 using BackOfficeBlazor.Admin.Services.Interfaces;
 using BackOfficeBlazor.Shared.DTOs;
+using System.Net;
 
 namespace BackOfficeBlazor.Admin.Services.Implementations
 {
@@ -92,8 +93,143 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             return Convert.ToBase64String(bytes.ToArray());
         }
 
+        public string BuildSaleInvoiceHtml(string invoiceNo, PosSaleRequestDto sale, SysOptionsDto? sysOptions)
+        {
+            var companyName = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(sysOptions?.CompanyName) ? "CLOUD POS" : sysOptions!.CompanyName);
+            var logoUrl = WebUtility.HtmlEncode(sysOptions?.CompanyLogoUrl ?? string.Empty);
+            var customer = WebUtility.HtmlEncode(sale.Customer ?? string.Empty);
+            var terminal = WebUtility.HtmlEncode(sale.Terminal ?? string.Empty);
+            var location = WebUtility.HtmlEncode(sale.Location ?? string.Empty);
+            var salesPerson = WebUtility.HtmlEncode(sale.SalesPerson ?? string.Empty);
+
+            var sb = new StringBuilder();
+            sb.Append("<html><head><meta charset=\"utf-8\" />");
+            sb.Append("<style>");
+            sb.Append("@page{size:A4 portrait;margin:10mm;}");
+            sb.Append("body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10px;line-height:1.35;}");
+            sb.Append(".page{padding:0 2mm;}");
+            sb.Append(".brand-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;margin-bottom:12px;border-bottom:2px solid #d9e1ec;}");
+            sb.Append(".brand-block{display:flex;align-items:center;gap:10px;min-width:0;}");
+            sb.Append(".brand-logo{width:54px;height:54px;object-fit:contain;border-radius:8px;}");
+            sb.Append(".brand-name{font-size:18px;font-weight:700;line-height:1.1;}");
+            sb.Append(".doc-block{flex:1;text-align:center;}");
+            sb.Append(".doc-title{font-size:18px;font-weight:800;letter-spacing:.08em;}");
+            sb.Append(".doc-subtitle{font-size:10px;color:#667085;margin-top:2px;}");
+            sb.Append(".info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin-bottom:12px;}");
+            sb.Append(".info-card{border:1px solid #e2e8f0;border-radius:8px;background:#f9fbfd;padding:10px 12px;}");
+            sb.Append(".info-label{color:#667085;font-size:9px;text-transform:uppercase;letter-spacing:.06em;}");
+            sb.Append(".info-value{margin-top:2px;font-size:11px;font-weight:600;}");
+            sb.Append(".line-table{width:100%;border-collapse:collapse;table-layout:fixed;}");
+            sb.Append(".line-table th,.line-table td{border:1px solid #d5dbe5;padding:6px 7px;vertical-align:top;}");
+            sb.Append(".line-table th{background:#f5f7fa;font-size:9px;text-transform:uppercase;letter-spacing:.04em;}");
+            sb.Append(".num{text-align:right;white-space:nowrap;}");
+            sb.Append(".item-code{font-weight:600;white-space:pre-wrap;}");
+            sb.Append(".muted{color:#667085;}");
+            sb.Append(".small{font-size:9px;}");
+            sb.Append(".totals{width:min(340px,100%);margin-left:auto;margin-top:14px;border:1px solid #d5dbe5;border-radius:8px;overflow:hidden;}");
+            sb.Append(".totals-row{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #edf1f6;}");
+            sb.Append(".totals-row:last-child{border-bottom:0;}");
+            sb.Append(".totals-row.total{background:#f5f7fa;font-weight:700;}");
+            sb.Append(".footer-note{margin-top:16px;padding-top:10px;border-top:1px solid #d9e1ec;text-align:center;}");
+            sb.Append("</style></head><body><div class=\"page\">");
+            sb.Append("<div class=\"brand-header\">");
+            sb.Append("<div class=\"brand-block\">");
+            if (!string.IsNullOrWhiteSpace(logoUrl))
+                sb.Append($"<img src=\"{logoUrl}\" alt=\"Company logo\" class=\"brand-logo\" />");
+            sb.Append($"<div class=\"brand-name\">{companyName}</div>");
+            sb.Append("</div>");
+            sb.Append("<div class=\"doc-block\">");
+            sb.Append("<div class=\"doc-title\">INVOICE</div>");
+            sb.Append($"<div class=\"doc-subtitle\">Invoice {WebUtility.HtmlEncode(invoiceNo)}</div>");
+            sb.Append("</div>");
+            sb.Append("<div style=\"width:54px;\"></div>");
+            sb.Append("</div>");
+            sb.Append("<div class=\"info-grid\">");
+            AddInfoCard(sb, "Invoice No", invoiceNo);
+            AddInfoCard(sb, "Date", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            AddInfoCard(sb, "Location", location);
+            AddInfoCard(sb, "Terminal", terminal);
+            AddInfoCard(sb, "Customer", customer);
+            AddInfoCard(sb, "Sales Person", string.IsNullOrWhiteSpace(salesPerson) ? "-" : salesPerson);
+            sb.Append("</div>");
+
+            sb.Append("<table class=\"line-table\"><thead><tr>");
+            sb.Append("<th style=\"width:44%;\">Item</th><th style=\"width:12%;\" class=\"num\">Qty</th><th style=\"width:22%;\" class=\"num\">Unit</th><th style=\"width:22%;\" class=\"num\">Line Total</th>");
+            sb.Append("</tr></thead><tbody>");
+
+            foreach (var line in sale.Lines)
+            {
+                var itemCode = string.IsNullOrWhiteSpace(line.PartNumber) ? line.StockNo : line.PartNumber;
+                itemCode = itemCode.Trim();
+                sb.Append("<tr>");
+                sb.Append("<td>");
+                sb.Append($"<div class=\"item-code\">{WebUtility.HtmlEncode(itemCode)}</div>");
+                if (!string.IsNullOrWhiteSpace(line.Description))
+                    sb.Append($"<div class=\"muted small\">{WebUtility.HtmlEncode(line.Description)}</div>");
+                if (line.IsCombo && line.ComboItems.Any())
+                {
+                    sb.Append("<div class=\"muted small\">");
+                    foreach (var child in line.ComboItems)
+                    {
+                        sb.Append($"<div>{WebUtility.HtmlEncode(child.ProductName)} x {child.Qty}</div>");
+                        if (child.IsMajor && child.StockNumbers.Any())
+                            sb.Append($"<div>Stock: {WebUtility.HtmlEncode(string.Join(", ", child.StockNumbers))}</div>");
+                    }
+                    sb.Append("</div>");
+                }
+                sb.Append("</td>");
+                sb.Append($"<td class=\"num\">{line.Quantity}</td>");
+                sb.Append($"<td class=\"num\">{line.Sell:0.00}</td>");
+                sb.Append($"<td class=\"num\">{line.Net:0.00}</td>");
+                sb.Append("</tr>");
+            }
+
+            sb.Append("</tbody></table>");
+            sb.Append("<div class=\"totals\">");
+            AppendTotalRow(sb, "SubTotal", sale.SubTotal.ToString("0.00"));
+            var totalDiscount = sale.Lines.Sum(x =>
+            {
+                var gross = x.Sell * x.Quantity;
+                var discount = gross - x.Net;
+                return discount > 0 ? discount : 0m;
+            });
+            if (totalDiscount > 0)
+                AppendTotalRow(sb, "Discount", totalDiscount.ToString("0.00"));
+            AppendTotalRow(sb, "VAT", sale.VatAmount.ToString("0.00"));
+            AppendTotalRow(sb, "Net Total", sale.NetTotal.ToString("0.00"), true);
+            AppendTotalRow(sb, "Total Paid", sale.Payment.TotalTendered.ToString("0.00"));
+            var change = sale.Payment.Cash > sale.NetTotal ? sale.Payment.Cash - sale.NetTotal : 0m;
+            AppendTotalRow(sb, "Change", change.ToString("0.00"), true);
+            sb.Append("</div>");
+            sb.Append("<div class=\"footer-note\">");
+            if (!string.IsNullOrWhiteSpace(sysOptions?.TillMsg))
+                sb.Append($"<div>{WebUtility.HtmlEncode(sysOptions.TillMsg)}</div>");
+            sb.Append("<div class=\"mt-2 fw-semibold\">THANK YOU</div>");
+            if (!string.IsNullOrWhiteSpace(sysOptions?.InvoiceMsg))
+                sb.Append($"<div class=\"mt-1\">{WebUtility.HtmlEncode(sysOptions.InvoiceMsg)}</div>");
+            sb.Append("</div>");
+            sb.Append("</div></body></html>");
+
+            return sb.ToString();
+        }
+
         private static void AddText(List<byte> bytes, string text)
             => bytes.AddRange(Encoding.ASCII.GetBytes(text + "\r\n"));
+
+        private static void AddInfoCard(StringBuilder sb, string label, string value)
+        {
+            sb.Append("<div class=\"info-card\">");
+            sb.Append($"<div class=\"info-label\">{WebUtility.HtmlEncode(label)}</div>");
+            sb.Append($"<div class=\"info-value\">{WebUtility.HtmlEncode(value)}</div>");
+            sb.Append("</div>");
+        }
+
+        private static void AppendTotalRow(StringBuilder sb, string label, string value, bool total = false)
+        {
+            sb.Append(total ? "<div class=\"totals-row total\">" : "<div class=\"totals-row\">");
+            sb.Append($"<span>{WebUtility.HtmlEncode(label)}</span><span>{WebUtility.HtmlEncode(value)}</span>");
+            sb.Append("</div>");
+        }
 
         private static void AddCenter(List<byte> bytes, string text)
         {

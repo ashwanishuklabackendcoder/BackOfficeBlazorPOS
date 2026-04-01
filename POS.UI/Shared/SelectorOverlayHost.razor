@@ -1,0 +1,39 @@
+@using Microsoft.AspNetCore.Components
+@using POS.UI.Services
+@implements IDisposable
+@inject SelectorOverlayService OverlayService
+
+@if (OverlayService.Current is { } current)
+{
+    <div class="selector-overlay-host">
+        <div class="selector-overlay-backdrop" @onclick="CloseAsync"></div>
+        <div class="selector-overlay-frame"
+             style="@GetFrameStyle(current.Placement)">
+            <DynamicComponent Type="@current.ComponentType"
+                              Parameters="@current.Parameters"
+                              @key="current.OwnerKey" />
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        OverlayService.OnChange += HandleChange;
+    }
+
+    private void HandleChange()
+        => InvokeAsync(StateHasChanged);
+
+    private Task CloseAsync()
+        => OverlayService.RequestCloseAsync();
+
+    private static string GetFrameStyle(SelectorOverlayPlacement placement)
+        => System.FormattableString.Invariant(
+            $"top:{placement.Top:0.##}px; left:{placement.Left:0.##}px; width:{placement.Width:0.##}px; max-width:calc(100vw - 1rem);");
+
+    public void Dispose()
+    {
+        OverlayService.OnChange -= HandleChange;
+    }
+}

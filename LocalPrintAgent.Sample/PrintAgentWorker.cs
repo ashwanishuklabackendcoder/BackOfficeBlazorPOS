@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Net.Mail;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using BackOfficeBlazor.Shared.DTOs;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Hosting;
@@ -172,11 +173,10 @@ public sealed class PrintAgentWorker : BackgroundService
         await client.ConnectAsync(printer.IpAddress, printer.TcpPort);
         using var stream = client.GetStream();
 
-        byte[] bytes;
-        if (job.JobType.Equals("Receipt", StringComparison.OrdinalIgnoreCase))
-            bytes = Convert.FromBase64String(job.Payload);
-        else
-            bytes = Encoding.ASCII.GetBytes(job.Payload);
+        var payloadText = NormalizePayload(job);
+        byte[] bytes = job.JobType.Equals("Receipt", StringComparison.OrdinalIgnoreCase)
+            ? Convert.FromBase64String(job.Payload)
+            : Encoding.UTF8.GetBytes(payloadText);
 
         await stream.WriteAsync(bytes);
         await stream.FlushAsync();
@@ -224,7 +224,26 @@ public sealed class PrintAgentWorker : BackgroundService
         if (job.JobType.Equals("Receipt", StringComparison.OrdinalIgnoreCase))
             return DecodeEscPosToPrintableText(job.Payload);
 
+        if (job.JobType.Equals("A4Invoice", StringComparison.OrdinalIgnoreCase))
+            return StripHtmlTags(job.Payload);
+
         return job.Payload;
+    }
+
+    private static string StripHtmlTags(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var text = Regex.Replace(html, "<script\\b[^>]*>.*?</script>", string.Empty, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        text = Regex.Replace(text, "<style\\b[^>]*>.*?</style>", string.Empty, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        text = Regex.Replace(text, "<br\\s*/?>", Environment.NewLine, RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, "</div>", Environment.NewLine, RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, "</tr>", Environment.NewLine, RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, "</p>", Environment.NewLine, RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, "<[^>]+>", string.Empty, RegexOptions.Singleline);
+        text = WebUtility.HtmlDecode(text);
+        return Regex.Replace(text, @"\n\s*\n+", Environment.NewLine + Environment.NewLine).Trim();
     }
 
     private static string DecodeEscPosToPrintableText(string payload)

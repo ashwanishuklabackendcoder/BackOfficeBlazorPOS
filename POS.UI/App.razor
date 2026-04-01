@@ -53,6 +53,8 @@
         if (AuthService.IsAuthenticated && !isLogin)
         {
             var path = Nav.ToBaseRelativePath(Nav.Uri).Trim('/').ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
             if (!HasRouteAccess(path))
                 return false;
         }
@@ -73,15 +75,15 @@
             return Task.CompletedTask;
         }
 
-        if (AuthService.IsAuthenticated && isLogin)
+        if (AuthService.IsAuthenticated && (isLogin || string.IsNullOrWhiteSpace(path)))
         {
-            Nav.NavigateTo("/", true);
+            Nav.NavigateTo("/dashboard", true);
             return Task.CompletedTask;
         }
 
         if (AuthService.IsAuthenticated && !isLogin && !HasRouteAccess(path))
         {
-            Nav.NavigateTo("/", true);
+            Nav.NavigateTo("/dashboard", true);
             return Task.CompletedTask;
         }
 
@@ -91,7 +93,7 @@
     private void RecoverFromRouteError()
     {
         _routeErrorBoundary?.Recover();
-        Nav.NavigateTo("/", true);
+        Nav.NavigateTo("/dashboard", true);
     }
 
     private bool HasRouteAccess(string path)
@@ -100,6 +102,8 @@
             return true;
 
         if (RouteIs(path, "staff-users") || RouteIs(path, "user-permissions"))
+            return AuthService.CurrentUser?.IsAdmin == true;
+        if (RouteIs(path, "dashboard"))
             return AuthService.CurrentUser?.IsAdmin == true;
         if (RouteIs(path, "branch-location-setup"))
             return AuthService.CurrentUser?.IsAdmin == true;
@@ -134,8 +138,19 @@
             return AuthService.HasAccess(PermissionKeys.Till);
         if (RouteIs(path, "pos-layaway"))
             return AuthService.HasAccess(PermissionKeys.Layaway);
+        if (RouteIs(path, "layaway-report"))
+            return AuthService.HasAccess(PermissionKeys.Layaway);
         if (RouteIs(path, "customer-sales-returns-report") || RouteIs(path, "pos-returns"))
             return AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+        if (RouteIs(path, "overstock-report"))
+            return AuthService.HasAccess(PermissionKeys.StockInput)
+                || AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+        if (RouteIs(path, "major-item-sales-report"))
+            return AuthService.HasAccess(PermissionKeys.StockInput)
+                || AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+        if (RouteIs(path, "stock-transfer-report"))
+            return AuthService.HasAccess(PermissionKeys.StockInput)
+                || AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
 
         return true;
     }

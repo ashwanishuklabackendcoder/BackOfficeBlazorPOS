@@ -129,6 +129,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 LabelPrintPromoPrice = false,
                 CompanyNo = string.Empty,
                 CompanyName = string.Empty,
+                CompanyLogoUrl = string.Empty,
                 QuoteMessage = string.Empty,
                 AutoPrintServiceInv = false,
                 NxtPartNo = string.Empty,
@@ -229,6 +230,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 LabelPrintPromoPrice = x.LabelPrintPromoPrice ?? false,
                 CompanyNo = x.CompanyNo ?? string.Empty,
                 CompanyName = x.CompanyName ?? string.Empty,
+                CompanyLogoUrl = x.CompanyLogoUrl ?? string.Empty,
                 QuoteMessage = x.QuoteMessage ?? string.Empty,
                 AutoPrintServiceInv = x.AutoPrintServiceInv ?? false,
                 NxtPartNo = x.NxtPartNo ?? string.Empty,
@@ -328,6 +330,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             entity.LabelPrintPromoPrice = dto.LabelPrintPromoPrice;
             entity.CompanyNo = dto.CompanyNo?.Trim() ?? string.Empty;
             entity.CompanyName = dto.CompanyName?.Trim() ?? string.Empty;
+            entity.CompanyLogoUrl = dto.CompanyLogoUrl?.Trim() ?? string.Empty;
             entity.QuoteMessage = dto.QuoteMessage?.Trim() ?? string.Empty;
             entity.AutoPrintServiceInv = dto.AutoPrintServiceInv;
             entity.NxtPartNo = dto.NxtPartNo?.Trim() ?? string.Empty;

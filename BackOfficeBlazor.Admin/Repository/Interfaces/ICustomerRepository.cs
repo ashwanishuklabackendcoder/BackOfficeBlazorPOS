@@ -11,6 +11,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
     {
         Task<Customer?> GetByAccNoAsync(string accNo);
         Task<List<Customer>> GetAllAsync();
+        Task<List<Customer>> SearchAsync(BackOfficeBlazor.Shared.DTOs.CustomerSearchRequestDto request);
         Task AddAsync(Customer entity);
         Task UpdateAsync(Customer entity);
         Task SaveChangesAsync();

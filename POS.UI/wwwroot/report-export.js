@@ -17,9 +17,17 @@ window.reportExport = {
         win.document.open();
         win.document.write(html);
         win.document.close();
-        win.focus();
-        win.print();
-        win.close();
+        win.document.title = title || "Print";
+        win.onload = function () {
+            try {
+                win.focus();
+                win.print();
+            } finally {
+                setTimeout(function () {
+                    win.close();
+                }, 150);
+            }
+        };
     },
     openHtmlPreview: function (title, html) {
         var win = window.open("", "_blank");

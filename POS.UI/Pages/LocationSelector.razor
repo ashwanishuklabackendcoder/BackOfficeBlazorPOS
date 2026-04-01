@@ -3,11 +3,12 @@
 @using POS.UI.Services
 @inject ILocationService LocationService
 @inject IJSRuntime JS
+@inject SelectorOverlayService OverlayService
 
 <div class="position-relative" @ref="root">
     <div class="form-control d-flex justify-content-between align-items-center"
          style="cursor:pointer"
-         @onclick="Toggle">
+         @onclick="ToggleAsync">
         <span class="text-truncate">@(string.IsNullOrEmpty(Display) ? " " : Display)</span>
         <span class="d-inline-flex align-items-center gap-2 ms-2">
             @if (!string.IsNullOrWhiteSpace(Value))
@@ -18,45 +19,12 @@
                         style="width:18px; height:18px; border:none; border-radius:50%; background:#dc3545; color:#ffffff; display:inline-flex; align-items:center; justify-content:center; font-size:0.85rem; line-height:1; padding:0;"
                         @onclick="ClearSelection"
                         @onclick:stopPropagation="true">
-                    ×
+                    &times;
                 </button>
             }
             <i class="bi bi-chevron-down"></i>
         </span>
     </div>
-
-    @if (open)
-    {
-        <div class="border bg-white shadow p-2"
-             style="position:absolute; top:100%; left:0; z-index:1055; width:clamp(300px, 150%, 560px); max-width:calc(100vw - 1rem); height:260px; min-height:230px; max-height:80vh; display:flex; flex-direction:column; resize:both; overflow:hidden;">
-
-            <div class="p-2 border-bottom">
-                <input class="form-control"
-                       placeholder="Search..."
-                       @bind="search"
-                       @bind:event="oninput" />
-            </div>
-
-            <div style="flex:1 1 auto; min-height:80px; overflow:auto">
-                @foreach (var l in Filtered)
-                {
-                    <button class="list-group-item list-group-item-action"
-                            @onclick="() => Select(l)">
-                        @l.Code - @(string.IsNullOrEmpty(l.Name) ? "NA" : l.Name)
-                    </button>
-                }
-            </div>
-
-            <div class="border-top p-2 bg-light">
-                <button type="button"
-                        class="btn text-primary p-0"
-                        @onclick="OpenManage"
-                        @onclick:stopPropagation="true">
-                    <i class="bi bi-gear me-1"></i>Manage
-                </button>
-            </div>
-        </div>
-    }
 </div>
 
 @if (showManage)
@@ -90,11 +58,11 @@
     bool open, showManage;
     string search = "";
     string Display = "";
+    SelectorOverlayPlacement? overlayPlacement;
+    const string OverlayKey = nameof(LocationSelector);
 
     ElementReference root;
-    IJSObjectReference? module;
-    IJSObjectReference? outsideHandler;
-    DotNetObjectReference<LocationSelector>? dotNetRef;
+    IJSObjectReference? selectorModule;
 
     protected override async Task OnInitializedAsync()
     {
@@ -110,42 +78,33 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
-        {
-            dotNetRef = DotNetObjectReference.Create(this);
-
-            module = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./clickOutside.js");
-
-            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
-                "registerClickOutside", root, dotNetRef);
-        }
-    }
-
-    [JSInvokable]
-    public void OnClickOutside()
-    {
-        if (open)
-        {
-            open = false;
-            InvokeAsync(StateHasChanged);
-        }
+            selectorModule = await JS.InvokeAsync<IJSObjectReference>("import", "./selectorOverlay.js");
     }
 
     IEnumerable<LocationDto> Filtered =>
         string.IsNullOrEmpty(search)
             ? locations
             : locations.Where(x =>
-                x.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                x.Code.Contains(search, StringComparison.OrdinalIgnoreCase));
+                (x.Name ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (x.Code ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase));
 
-    void Toggle() => open = !open;
+    async Task ToggleAsync()
+    {
+        if (open)
+        {
+            await CloseOverlayAsync();
+            return;
+        }
+
+        await OpenOverlayAsync();
+    }
 
     async Task Select(LocationDto l)
     {
         Value = l.Code;
         Display = FormatDisplay(l);
         await ValueChanged.InvokeAsync(Value);
-        open = false;
+        await CloseOverlayAsync();
     }
 
     async Task ClearSelection()
@@ -154,12 +113,12 @@
         Display = "";
         search = "";
         await ValueChanged.InvokeAsync(Value);
-        open = false;
+        await CloseOverlayAsync();
     }
 
-    void OpenManage()
+    async Task OpenManage()
     {
-        open = false;
+        await CloseOverlayAsync();
         showManage = true;
     }
 
@@ -191,11 +150,72 @@
         return string.IsNullOrWhiteSpace(location.Name) ? "NA" : location.Name;
     }
 
-    public async ValueTask DisposeAsync()
+    async Task OpenOverlayAsync()
     {
-        if (outsideHandler != null)
-            await outsideHandler.InvokeVoidAsync("dispose");
+        open = true;
+        overlayPlacement = selectorModule != null
+            ? await selectorModule.InvokeAsync<SelectorOverlayPlacement>("measureAnchor", root)
+            : null;
+        await OverlayService.ShowAsync(
+            OverlayKey,
+            typeof(SelectorDropdownPanel<LocationDto>),
+            BuildOverlayParameters(),
+            overlayPlacement,
+            HandleOverlayDismissedAsync);
+        await InvokeAsync(StateHasChanged);
+    }
 
-        dotNetRef?.Dispose();
+    async Task CloseOverlayAsync()
+    {
+        if (!open && OverlayService.Current is null)
+            return;
+
+        await OverlayService.RequestCloseAsync();
+        open = false;
+        overlayPlacement = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task HandleOverlayDismissedAsync()
+    {
+        open = false;
+        overlayPlacement = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    IDictionary<string, object> BuildOverlayParameters()
+    {
+        return new Dictionary<string, object>
+        {
+            ["Items"] = Filtered.ToList(),
+            ["ItemText"] = (Func<LocationDto, string>)(l => $"{l.Code} - {(string.IsNullOrEmpty(l.Name) ? "NA" : l.Name)}"),
+            ["IsSelected"] = (Func<LocationDto, bool>)(l => string.Equals(Value, l.Code, StringComparison.OrdinalIgnoreCase)),
+            ["ItemSelected"] = EventCallback.Factory.Create<LocationDto>(this, Select),
+            ["SearchChanged"] = EventCallback.Factory.Create<string>(this, OnSearchChanged),
+            ["OnManage"] = EventCallback.Factory.Create(this, OpenManage),
+            ["InitialSearch"] = search,
+            ["SearchPlaceholder"] = "Search...",
+            ["ManageLabel"] = "Manage"
+        };
+    }
+
+    async Task OnSearchChanged(string value)
+    {
+        search = value;
+        if (open)
+            await RefreshOverlayAsync();
+    }
+
+    async Task RefreshOverlayAsync()
+    {
+        if (!open || overlayPlacement is null)
+            return;
+
+        await OverlayService.ShowAsync(
+            OverlayKey,
+            typeof(SelectorDropdownPanel<LocationDto>),
+            BuildOverlayParameters(),
+            overlayPlacement,
+            HandleOverlayDismissedAsync);
     }
 }

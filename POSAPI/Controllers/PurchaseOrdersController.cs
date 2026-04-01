@@ -29,6 +29,10 @@ namespace POSAPI.Controllers
         public async Task<IActionResult> Search([FromQuery] string? query, [FromQuery] string? supplierCode, [FromQuery] int? status)
             => Ok(await _service.SearchAsync(query, supplierCode, status));
 
+        [HttpGet("suppliers")]
+        public async Task<IActionResult> Suppliers([FromQuery] int? status)
+            => Ok(await _service.GetSupplierOptionsAsync(status));
+
         [HttpPost("draft")]
         public async Task<IActionResult> SaveDraft([FromBody] PurchaseOrderUpsertRequestDto request)
             => Ok(await _service.SaveDraftAsync(request));
@@ -44,6 +48,10 @@ namespace POSAPI.Controllers
         [HttpPost("receive")]
         public async Task<IActionResult> Receive([FromBody] PurchaseOrderReceiveRequestDto request)
             => Ok(await _service.ReceiveAsync(request));
+
+        [HttpPost("amend")]
+        public async Task<IActionResult> Amend([FromBody] PurchaseOrderAmendRequestDto request)
+            => Ok(await _service.AmendAsync(request));
 
         [HttpPost("cancel")]
         public async Task<IActionResult> Cancel([FromBody] PurchaseOrderCancelRequestDto request)

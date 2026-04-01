@@ -10,21 +10,24 @@ using POS.UI.Services;
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<AppSnackbarService>();
+builder.Services.AddSingleton<SelectorOverlayService>();
 
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5101/";
 
-//builder.Services.AddScoped(sp =>
-//    new HttpClient
-//    {
-//        BaseAddress = new Uri("https://pos-api.runasp.net/")
-//    });
 builder.Services.AddScoped(sp =>
     new HttpClient
     {
         BaseAddress = new Uri(apiBaseUrl)
     });
+//builder.Services.AddScoped(sp =>
+//{
+//    return new HttpClient
+//    {
+//        BaseAddress = new Uri("https://pos-api.runasp.net/")
+//    };
+//});
 
 
 // ===== REGISTER UI SERVICES =====
@@ -49,7 +52,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IStaffUserService, StaffUserService>();
 builder.Services.AddScoped<IPrinterApiService, PrinterApiService>();
 builder.Services.AddScoped<ISysOptionsService, SysOptionsService>();
+builder.Services.AddScoped<ICompanyBrandingService, CompanyBrandingService>();
 builder.Services.AddScoped<IQuickShortcutService, QuickShortcutService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<GridStateStorageService>();
 
 // 🔥 THIS WAS MISSING

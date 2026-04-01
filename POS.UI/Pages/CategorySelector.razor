@@ -1,13 +1,13 @@
-﻿@using BackOfficeBlazor.Shared.DTOs
+@using BackOfficeBlazor.Shared.DTOs
 @using POS.UI.Services
 @inject ICategoryService CategoryService
 @inject IJSRuntime JS
-@implements IAsyncDisposable
+@inject SelectorOverlayService OverlayService
 
 <div class="position-relative" @ref="root" tabindex="0">
     <div class="form-control d-flex justify-content-between align-items-center"
          style="cursor:pointer; min-height: calc(1.5em + 0.75rem + 2px);"
-         @onclick="Toggle">
+         @onclick="ToggleAsync">
         <span class="text-truncate">@Display</span>
         <span class="d-inline-flex align-items-center gap-2 ms-2">
             @if (!string.IsNullOrWhiteSpace(Code) || !string.IsNullOrWhiteSpace(Name))
@@ -18,45 +18,12 @@
                         style="width:18px; height:18px; border:none; border-radius:50%; background:gray; color:white; display:inline-flex; align-items:center; justify-content:center; font-size:0.85rem; line-height:1; padding:0;"
                         @onclick="ClearSelection"
                         @onclick:stopPropagation="true">
-                    ×
+                    &times;
                 </button>
             }
             <i class="bi bi-chevron-down"></i>
         </span>
     </div>
-
-    @if (open)
-    {
-        <div class="border bg-white shadow p-2"
-             style="position:absolute; top:100%; left:0; z-index:1055; width:clamp(300px, 150%, 560px); max-width:calc(100vw - 1rem); height:260px; min-height:230px; max-height:80vh; display:flex; flex-direction:column; resize:both; overflow:hidden;">
-            <div class="p-2 border-bottom">
-                <input class="form-control border"
-                       @ref="searchInput"
-                       @oninput="OnInput" />
-
-            </div>
-           
-
-            <div style="flex:1 1 auto; min-height:80px; overflow:auto">
-                @foreach (var c in filtered)
-                {
-                    <button class="list-group-item list-group-item-action"
-                            @onclick="() => Select(c)">
-                        @c.Code - @c.Name
-                    </button>
-                }
-            </div>
-
-            <div class="border-top p-2 bg-light">
-                <button type="button"
-                        class="btn text-primary p-0"
-                        @onclick="OpenManage"
-                        @onclick:stopPropagation="true">
-                    <i class="bi bi-gear me-1"></i>Manage
-                </button>
-            </div>
-        </div>
-    }
 </div>
 
 @if (showManage)
@@ -72,9 +39,7 @@
                 </div>
 
                 <div class="modal-body">
-                 @*    <CategoryEditor OnSaved="OnCategorySaved"
-                                    OnCancel="CloseManage" /> *@
-                    <Categories  />
+                    <Categories />
                 </div>
 
             </div>
@@ -94,64 +59,30 @@
     bool open, showManage;
     string search = "";
     List<CategoryDto> list = new();
+    SelectorOverlayPlacement? overlayPlacement;
+    const string OverlayKey = nameof(CategorySelector);
+
     ElementReference root;
-    ElementReference searchInput;
-    IJSObjectReference? module;
-    IJSObjectReference? outsideHandler;
-    DotNetObjectReference<CategorySelector>? dotNetRef;
+    IJSObjectReference? selectorModule;
+
     string Display =>
-     !string.IsNullOrEmpty(Name)
-         ? Name
-         : !string.IsNullOrEmpty(Code)
-             ? Code
-             : " ";
+        !string.IsNullOrEmpty(Name)
+            ? Name
+            : !string.IsNullOrEmpty(Code)
+                ? Code
+                : " ";
 
-
-    IEnumerable<CategoryDto> filtered => list;
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            dotNetRef = DotNetObjectReference.Create(this);
-            module = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./clickOutside.js");
-
-            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
-                "registerClickOutside", root, dotNetRef);
-
-        }
-    }
-
-    [JSInvokable]
-    public void OnClickOutside()
-    {
-        if (open)
-        {
-            open = false;
-            InvokeAsync(StateHasChanged);
-        }
-    }
-    void Toggle() => open = !open;
-
-    [JSInvokable]
-    public async Task OnF5()
-    {
-        open = true;
-        showManage = false;
-        await InvokeAsync(StateHasChanged);
-        await Task.Yield();
-        await searchInput.FocusAsync();
-    }
+    IEnumerable<CategoryDto> Filtered =>
+        list;
 
     protected override async Task OnInitializedAsync()
     {
         list = await CategoryService.GetAllCategory(Level);
 
-        // Default binding (Code → Name)
         if (!string.IsNullOrWhiteSpace(Code))
         {
             var match = list.FirstOrDefault(x =>
-                x.Code.Equals(Code, StringComparison.OrdinalIgnoreCase));
+                string.Equals(x.Code, Code, StringComparison.OrdinalIgnoreCase));
 
             if (match != null)
             {
@@ -161,18 +92,45 @@
         }
     }
 
-    async Task OnInput(ChangeEventArgs e)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        search = e.Value?.ToString() ?? "";
+        if (firstRender)
+            selectorModule = await JS.InvokeAsync<IJSObjectReference>("import", "./selectorOverlay.js");
+    }
+
+    async Task ToggleAsync()
+    {
+        if (open)
+        {
+            await CloseOverlayAsync();
+            return;
+        }
+
+        await OpenOverlayAsync();
+    }
+
+    [JSInvokable]
+    public async Task OnF5()
+    {
+        await OpenOverlayAsync();
+    }
+
+    async Task OnSearchChanged(string value)
+    {
+        search = value;
 
         if (search.Length < 3)
         {
             list = await CategoryService.GetAllCategory(Level);
-            return;
+        }
+        else
+        {
+            list = await CategoryService.Suggest(Level, search)
+                   ?? new List<CategoryDto>();
         }
 
-        list = await CategoryService.Suggest(Level, search)
-               ?? new List<CategoryDto>();
+        if (open)
+            await RefreshOverlayAsync();
     }
 
     async Task Select(CategoryDto c)
@@ -183,9 +141,7 @@
         await CodeChanged.InvokeAsync(Code);
         await NameChanged.InvokeAsync(Name);
 
-        open = false;
-        await InvokeAsync(StateHasChanged);
-        await Task.Yield();
+        await CloseOverlayAsync();
         await root.FocusAsync();
     }
 
@@ -196,15 +152,13 @@
         search = "";
         await CodeChanged.InvokeAsync(Code);
         await NameChanged.InvokeAsync(Name);
-        open = false;
-        await InvokeAsync(StateHasChanged);
-        await Task.Yield();
+        await CloseOverlayAsync();
         await root.FocusAsync();
     }
 
-    void OpenManage()
+    async Task OpenManage()
     {
-        open = false;
+        await CloseOverlayAsync();
         showManage = true;
     }
 
@@ -221,11 +175,66 @@
 
     void CloseManage() => showManage = false;
 
-    public async ValueTask DisposeAsync()
+    async Task OpenOverlayAsync()
     {
-        if (outsideHandler != null)
-            await outsideHandler.InvokeVoidAsync("dispose");
+        open = true;
+        showManage = false;
+        overlayPlacement = selectorModule != null
+            ? await selectorModule.InvokeAsync<SelectorOverlayPlacement>("measureAnchor", root)
+            : null;
+        await OverlayService.ShowAsync(
+            OverlayKey,
+            typeof(SelectorDropdownPanel<CategoryDto>),
+            BuildOverlayParameters(),
+            overlayPlacement,
+            HandleOverlayDismissedAsync);
+        await InvokeAsync(StateHasChanged);
+    }
 
-        dotNetRef?.Dispose();
+    async Task CloseOverlayAsync()
+    {
+        if (!open && OverlayService.Current is null)
+            return;
+
+        await OverlayService.RequestCloseAsync();
+        open = false;
+        overlayPlacement = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task HandleOverlayDismissedAsync()
+    {
+        open = false;
+        overlayPlacement = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    IDictionary<string, object> BuildOverlayParameters()
+    {
+        return new Dictionary<string, object>
+        {
+            ["Items"] = Filtered.ToList(),
+            ["ItemText"] = (Func<CategoryDto, string>)(c => $"{c.Code} - {c.Name}"),
+            ["IsSelected"] = (Func<CategoryDto, bool>)(c => string.Equals(Code, c.Code, StringComparison.OrdinalIgnoreCase)),
+            ["ItemSelected"] = EventCallback.Factory.Create<CategoryDto>(this, Select),
+            ["SearchChanged"] = EventCallback.Factory.Create<string>(this, OnSearchChanged),
+            ["OnManage"] = EventCallback.Factory.Create(this, OpenManage),
+            ["InitialSearch"] = search,
+            ["SearchPlaceholder"] = "Search...",
+            ["ManageLabel"] = "Manage"
+        };
+    }
+
+    async Task RefreshOverlayAsync()
+    {
+        if (!open || overlayPlacement is null)
+            return;
+
+        await OverlayService.ShowAsync(
+            OverlayKey,
+            typeof(SelectorDropdownPanel<CategoryDto>),
+            BuildOverlayParameters(),
+            overlayPlacement,
+            HandleOverlayDismissedAsync);
     }
 }

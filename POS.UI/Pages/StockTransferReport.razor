@@ -1,0 +1,644 @@
+@page "/stock-transfer-report"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.Shared
+@using System.Globalization
+@using System.Net
+
+@inject IReportService ReportService
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+@inject ILocationService LocationService
+@inject ICompanyBrandingService CompanyBrandingService
+
+@implements IAsyncDisposable
+
+<PageTitle>Stock Transfer Report</PageTitle>
+
+<FormGlassLayout Title="Stock Transfer Report"
+                 Subtitle="Audit stock transfers by date, location, type, and category"
+                 Id="stock-transfer-report-form"
+                 ScopeId="stock-transfer-report-form"
+                 class="stock-transfer-report-shell"
+                 BodyClass="card-body form-shell-body p-3 p-lg-4 stock-transfer-report-body"
+                 HeaderActions="@HeaderActions">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3 mb-3 stock-transfer-filter-panel">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Date</label>
+                    <div class="d-flex flex-wrap gap-2 toggle-button-group">
+                        <button type="button"
+                                class="@GetModeButtonClass(IsTodayMode)"
+                                @onclick="SetTodayModeAsync">
+                            Today
+                        </button>
+                        <button type="button"
+                                class="@GetModeButtonClass(IsAllMode)"
+                                @onclick="SetAllModeAsync">
+                            All
+                        </button>
+                        <button type="button"
+                                class="@GetModeButtonClass(IsDateRangeMode)"
+                                @onclick="SetDateRangeModeAsync">
+                            Date Range
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">From Location</label>
+                    <LocationSelector Value="@FromLocation"
+                                      ValueChanged="OnFromLocationChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">To Location</label>
+                    <LocationSelector Value="@ToLocation"
+                                      ValueChanged="OnToLocationChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-3">
+                    <label class="form-label-custom">Type</label>
+                    <div class="d-flex flex-wrap gap-2 toggle-button-group">
+                        <button type="button"
+                                class="@GetModeButtonClass(IsBothTypeMode)"
+                                @onclick="SetBothTypeAsync">
+                            Both
+                        </button>
+                        <button type="button"
+                                class="@GetModeButtonClass(IsMinorTypeMode)"
+                                @onclick="SetMinorTypeAsync">
+                            Minor
+                        </button>
+                        <button type="button"
+                                class="@GetModeButtonClass(IsMajorTypeMode)"
+                                @onclick="SetMajorTypeAsync">
+                            Major
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">From</label>
+                    <input class="form-control"
+                           type="date"
+                           value="@FromDateText"
+                           disabled="@(!IsDateRangeMode)"
+                           @onchange="OnFromDateChanged" />
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">To</label>
+                    <input class="form-control"
+                           type="date"
+                           value="@ToDateText"
+                           disabled="@(!IsDateRangeMode)"
+                           @onchange="OnToDateChanged" />
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                    <label class="form-label-custom">CAT A</label>
+                    <CategorySelector Level="A"
+                                      Code="@CategoryACode"
+                                      CodeChanged="OnCategoryACodeChanged"
+                                      Name="@CategoryAName"
+                                      NameChanged="OnCategoryANameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">CAT B</label>
+                    <CategorySelector Level="B"
+                                      Code="@CategoryBCode"
+                                      CodeChanged="OnCategoryBCodeChanged"
+                                      Name="@CategoryBName"
+                                      NameChanged="OnCategoryBNameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">CAT C</label>
+                    <CategorySelector Level="C"
+                                      Code="@CategoryCCode"
+                                      CodeChanged="OnCategoryCCodeChanged"
+                                      Name="@CategoryCName"
+                                      NameChanged="OnCategoryCNameChanged" />
+                </div>
+
+                <div class="col-md-3 d-flex justify-content-md-end gap-2 align-items-end">
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            disabled="@(!HasRows || IsLoading)"
+                            @onclick="ExportCsv">
+                        Export CSV
+                    </button>
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            disabled="@(!HasRows || IsLoading)"
+                            @onclick="ExportPdf">
+                        Export PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel border rounded-3 overflow-hidden stock-transfer-table-panel">
+            <div class="table-responsive stock-transfer-table-wrap">
+                <table class="table table-sm table-bordered align-middle mb-0 transfer-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>DATE</th>
+                            <th>PART NO.</th>
+                            <th>MFR NO.</th>
+                            <th>LOC FROM</th>
+                            <th>LOC TO</th>
+                            <th class="text-end">COST</th>
+                            <th class="text-end">QTY</th>
+                            <th class="text-end">RRP</th>
+                            <th>STOCK NO.</th>
+                            <th>SERIAL NO.</th>
+                            <th>MAKE</th>
+                            <th>SEARCH1</th>
+                            <th>SEARCH2</th>
+                            <th>DETAILS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (IsLoading && Rows == null)
+                        {
+                            <tr>
+                                <td colspan="14" class="text-muted py-4 text-center">
+                                    Loading stock transfer report...
+                                </td>
+                            </tr>
+                        }
+                        else if (Rows == null)
+                        {
+                            <tr>
+                                <td colspan="14" class="text-muted py-4 text-center">
+                                    Change a filter to load the report.
+                                </td>
+                            </tr>
+                        }
+                        else if (Rows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="14" class="text-muted py-4 text-center">
+                                    No records match the selected filters.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in Rows)
+                            {
+                                <tr>
+                                    <td>@row.DateAndTime.ToLocalTime().ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)</td>
+                                    <td class="fw-semibold">@row.PartNo</td>
+                                    <td>@row.MfrNo</td>
+                                    <td>@GetLocationDisplay(row.LocFrom)</td>
+                                    <td>@GetLocationDisplay(row.LocTo)</td>
+                                    <td class="text-end">@FormatMoney(row.Cost)</td>
+                                    <td class="text-end">@row.Qty</td>
+                                    <td class="text-end">@row.Rrp.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td>@row.StockNo</td>
+                                    <td>@row.SerialNo</td>
+                                    <td>@row.Make</td>
+                                    <td>@row.Search1</td>
+                                    <td>@row.Search2</td>
+                                    <td>@row.Details</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </ChildContent>
+</FormGlassLayout>
+
+@code {
+    private List<StockTransferReportLineDto>? Rows;
+    private bool IsLoading;
+    private int _requestVersion;
+    private CancellationTokenSource? _reloadCts;
+    private bool _disposed;
+    private CompanyBrandingDto? _branding;
+    private IReadOnlyDictionary<string, LocationDto> _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
+
+    private string DateMode { get; set; } = "Today";
+    private string? FromLocation { get; set; } = "01";
+    private string? ToLocation { get; set; } = "30";
+    private string? FromDateText { get; set; }
+    private string? ToDateText { get; set; }
+    private string TypeMode { get; set; } = "Both";
+    private string? CategoryACode { get; set; }
+    private string? CategoryAName { get; set; }
+    private string? CategoryBCode { get; set; }
+    private string? CategoryBName { get; set; }
+    private string? CategoryCCode { get; set; }
+    private string? CategoryCName { get; set; }
+
+    private bool HasRows => Rows is { Count: > 0 };
+    private bool IsTodayMode => string.Equals(DateMode, "Today", StringComparison.OrdinalIgnoreCase);
+    private bool IsAllMode => string.Equals(DateMode, "All", StringComparison.OrdinalIgnoreCase);
+    private bool IsDateRangeMode => string.Equals(DateMode, "DateRange", StringComparison.OrdinalIgnoreCase);
+    private bool IsBothTypeMode => string.Equals(TypeMode, "Both", StringComparison.OrdinalIgnoreCase);
+    private bool IsMinorTypeMode => string.Equals(TypeMode, "Minor", StringComparison.OrdinalIgnoreCase);
+    private bool IsMajorTypeMode => string.Equals(TypeMode, "Major", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        ApplyDateMode("Today");
+        await LoadLocationLookupAsync();
+        _branding = await CompanyBrandingService.GetAsync();
+        await LoadReportAsync(showWarning: true);
+    }
+
+    private RenderFragment HeaderActions => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "d-flex align-items-center gap-2 flex-wrap justify-content-end");
+
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "form-shell-meta");
+        builder.AddContent(seq++, IsLoading ? "Refreshing..." : HasRows ? $"{Rows!.Count} rows" : "Ready");
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "button");
+        builder.AddAttribute(seq++, "type", "button");
+        builder.AddAttribute(seq++, "class", "btn btn-outline-secondary btn-sm");
+        builder.AddAttribute(seq++, "disabled", IsLoading);
+        builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, RefreshNow));
+        builder.AddContent(seq++, "Refresh");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private async Task RefreshNow()
+        => await LoadReportAsync(showWarning: true);
+
+    private async Task QueueReloadAsync()
+    {
+        if (_disposed)
+            return;
+
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+        _reloadCts = new CancellationTokenSource();
+
+        var token = _reloadCts.Token;
+
+        try
+        {
+            await Task.Delay(250, token);
+            await LoadReportAsync(showWarning: false);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadReportAsync(bool showWarning)
+    {
+        var requestVersion = Interlocked.Increment(ref _requestVersion);
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var request = new StockTransferReportRequestDto
+            {
+                DateMode = DateMode,
+                FromDate = IsTodayMode ? DateTime.Today : IsDateRangeMode ? ParseDate(FromDateText) : null,
+                ToDate = IsTodayMode ? DateTime.Today : IsDateRangeMode ? ParseDate(ToDateText) : null,
+                FromLocation = NormalizeLocation(FromLocation),
+                ToLocation = NormalizeLocation(ToLocation),
+                Type = string.IsNullOrWhiteSpace(TypeMode) ? "Both" : TypeMode.Trim(),
+                CategoryA = string.IsNullOrWhiteSpace(CategoryACode) ? null : CategoryACode.Trim(),
+                CategoryB = string.IsNullOrWhiteSpace(CategoryBCode) ? null : CategoryBCode.Trim(),
+                CategoryC = string.IsNullOrWhiteSpace(CategoryCCode) ? null : CategoryCCode.Trim()
+            };
+
+            var res = await ReportService.GetStockTransferReportAsync(request);
+
+            if (requestVersion != _requestVersion)
+                return;
+
+            if (!res.Success)
+            {
+                if (showWarning)
+                    await AppSnackbar.Show(res.Message ?? "Unable to load report.", SnackbarType.Error);
+
+                Rows = new();
+                return;
+            }
+
+            Rows = res.Data ?? new();
+        }
+        catch (Exception ex) when (!(_disposed || ex is TaskCanceledException))
+        {
+            if (requestVersion == _requestVersion && showWarning)
+                await AppSnackbar.Show("Unable to load report.", SnackbarType.Error);
+
+            if (requestVersion == _requestVersion)
+                Rows = new();
+        }
+        finally
+        {
+            if (requestVersion == _requestVersion)
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private static string? NormalizeLocation(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        return int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var slot)
+            ? slot.ToString("D2", CultureInfo.InvariantCulture)
+            : trimmed.ToUpperInvariant();
+    }
+
+    private async Task LoadLocationLookupAsync()
+    {
+        try
+        {
+            var locations = await LocationService.GetAllAsync();
+            _locationLookup = locations
+                .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+                .GroupBy(x => DisplayLabelFormatter.NormalizeLocationCode(x.Code), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private string GetLocationDisplay(string? code)
+        => DisplayLabelFormatter.FormatLocation(code, _locationLookup);
+
+    private static DateTime? ParseDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return DateTime.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date.Date
+            : null;
+    }
+
+    private async Task SetDateModeAsync(string mode)
+    {
+        ApplyDateMode(mode);
+        await QueueReloadAsync();
+    }
+
+    private Task SetTodayModeAsync()
+        => SetDateModeAsync("Today");
+
+    private Task SetAllModeAsync()
+        => SetDateModeAsync("All");
+
+    private Task SetDateRangeModeAsync()
+        => SetDateModeAsync("DateRange");
+
+    private void ApplyDateMode(string mode)
+    {
+        DateMode = string.IsNullOrWhiteSpace(mode) ? "Today" : mode.Trim();
+
+        if (IsTodayMode)
+        {
+            var today = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            FromDateText = today;
+            ToDateText = today;
+        }
+        else if (IsAllMode)
+        {
+            FromDateText = null;
+            ToDateText = null;
+        }
+        else if (IsDateRangeMode)
+        {
+            var today = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            FromDateText ??= today;
+            ToDateText ??= today;
+        }
+    }
+
+    private async Task SetTypeModeAsync(string mode)
+    {
+        TypeMode = string.IsNullOrWhiteSpace(mode) ? "Both" : mode.Trim();
+        await QueueReloadAsync();
+    }
+
+    private Task SetBothTypeAsync()
+        => SetTypeModeAsync("Both");
+
+    private Task SetMinorTypeAsync()
+        => SetTypeModeAsync("Minor");
+
+    private Task SetMajorTypeAsync()
+        => SetTypeModeAsync("Major");
+
+    private async Task OnFromLocationChanged(string? value)
+    {
+        FromLocation = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnToLocationChanged(string? value)
+    {
+        ToLocation = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnFromDateChanged(ChangeEventArgs e)
+    {
+        FromDateText = e.Value?.ToString();
+        await QueueReloadAsync();
+    }
+
+    private async Task OnToDateChanged(ChangeEventArgs e)
+    {
+        ToDateText = e.Value?.ToString();
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryACodeChanged(string? value)
+    {
+        CategoryACode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryANameChanged(string? value)
+    {
+        CategoryAName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryBCodeChanged(string? value)
+    {
+        CategoryBCode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryBNameChanged(string? value)
+    {
+        CategoryBName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryCCodeChanged(string? value)
+    {
+        CategoryCCode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryCNameChanged(string? value)
+    {
+        CategoryCName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        if (!HasRows)
+            return;
+
+        var filename = $"stock-transfer-report-{DateTime.Now:yyyyMMddHHmmss}.csv";
+        var csv = BuildCsv(Rows ?? new());
+        await JS.InvokeVoidAsync("reportExport.downloadCsv", filename, csv);
+    }
+
+    private async Task ExportPdf()
+    {
+        if (!HasRows)
+            return;
+
+        var title = "Stock Transfer Report";
+        _branding = await CompanyBrandingService.GetAsync();
+        var html = BuildPrintHtml(title, Rows ?? new());
+        await JS.InvokeVoidAsync("reportExport.printHtml", title, html);
+    }
+
+    private static string BuildCsv(List<StockTransferReportLineDto> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("DATE,PART NO.,MFR NO.,LOC FROM,LOC TO,COST,QTY,RRP,STOCK NO.,SERIAL NO.,MAKE,SEARCH1,SEARCH2,DETAILS");
+
+        foreach (var row in rows)
+        {
+            sb.AppendLine(string.Join(",",
+                Csv(row.DateAndTime.ToLocalTime().ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)),
+                Csv(row.PartNo),
+                Csv(row.MfrNo),
+                Csv(row.LocFrom),
+                Csv(row.LocTo),
+                Csv(row.Cost.HasValue ? row.Cost.Value.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty),
+                Csv(row.Qty.ToString(CultureInfo.InvariantCulture)),
+                Csv(row.Rrp.ToString("0.00", CultureInfo.InvariantCulture)),
+                Csv(row.StockNo),
+                Csv(row.SerialNo),
+                Csv(row.Make),
+                Csv(row.Search1),
+                Csv(row.Search2),
+                Csv(row.Details)
+            ));
+        }
+
+        return sb.ToString();
+    }
+
+    private string BuildPrintHtml(string title, List<StockTransferReportLineDto> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        var dateModeLabel = WebUtility.HtmlEncode(DateMode);
+        var dateLabel = IsAllMode
+            ? "All"
+            : IsTodayMode
+                ? "Today"
+                : $"{WebUtility.HtmlEncode(FromDateText ?? "All")} to {WebUtility.HtmlEncode(ToDateText ?? "All")}";
+        var locationFrom = WebUtility.HtmlEncode(GetLocationDisplay(FromLocation));
+        var locationTo = WebUtility.HtmlEncode(GetLocationDisplay(ToLocation));
+        var type = WebUtility.HtmlEncode(TypeMode);
+        var categoryA = WebUtility.HtmlEncode(CategoryAName ?? CategoryACode ?? "All");
+        var categoryB = WebUtility.HtmlEncode(CategoryBName ?? CategoryBCode ?? "All");
+        var categoryC = WebUtility.HtmlEncode(CategoryCName ?? CategoryCCode ?? "All");
+
+        sb.Append(PrintTheme.BuildDocumentStart(title, true, "table{width:100%;border-collapse:collapse;table-layout:fixed;}th,td{border:1px solid #cfcfcf;padding:2px 3px;vertical-align:top;font-size:6.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}th{background:#f3f3f3;font-weight:bold;}.num{text-align:right;}th:nth-child(1),td:nth-child(1){width:7%;}th:nth-child(2),td:nth-child(2){width:7%;}th:nth-child(3),td:nth-child(3){width:8%;}th:nth-child(4),td:nth-child(4){width:6%;}th:nth-child(5),td:nth-child(5){width:6%;}th:nth-child(6),td:nth-child(6){width:6%;}th:nth-child(7),td:nth-child(7){width:5%;}th:nth-child(8),td:nth-child(8){width:6%;}th:nth-child(9),td:nth-child(9){width:8%;}th:nth-child(10),td:nth-child(10){width:8%;}th:nth-child(11),td:nth-child(11){width:7%;}th:nth-child(12),td:nth-child(12){width:8%;}th:nth-child(13),td:nth-child(13){width:8%;}th:nth-child(14),td:nth-child(14){width:15%;white-space:normal;}"));
+        sb.Append("<div class=\"page\">");
+        sb.Append(PrintTheme.BuildHeader(title, _branding, "Stock transfer audit"));
+        sb.Append("<div class=\"meta section\">");
+        sb.Append($"Date Mode: {dateModeLabel}<br/>");
+        sb.Append($"Date: {dateLabel}<br/>");
+        sb.Append($"Locations: {locationFrom} to {locationTo}<br/>");
+        sb.Append($"Type: {type}<br/>");
+        sb.Append($"Categories: A={categoryA}, B={categoryB}, C={categoryC}");
+        sb.Append("</div>");
+        sb.Append("<table><thead><tr>");
+        sb.Append("<th>DATE</th><th>PART NO.</th><th>MFR NO.</th><th>LOC FROM</th><th>LOC TO</th><th class=\"num\">COST</th><th class=\"num\">QTY</th><th class=\"num\">RRP</th><th>STOCK NO.</th><th>SERIAL NO.</th><th>MAKE</th><th>SEARCH1</th><th>SEARCH2</th><th>DETAILS</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        foreach (var row in rows)
+        {
+            sb.Append("<tr>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.DateAndTime.ToLocalTime().ToString("dd/MM/yyyy", CultureInfo.InvariantCulture))}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.PartNo)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.MfrNo)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(GetLocationDisplay(row.LocFrom))}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(GetLocationDisplay(row.LocTo))}</td>");
+            sb.Append($"<td class=\"num\">{(row.Cost.HasValue ? row.Cost.Value.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty)}</td>");
+            sb.Append($"<td class=\"num\">{row.Qty}</td>");
+            sb.Append($"<td class=\"num\">{row.Rrp:0.00}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.StockNo)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.SerialNo)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Make)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Search1)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Search2)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Details)}</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody></table></div>");
+        sb.Append(PrintTheme.BuildDocumentEnd());
+        return sb.ToString();
+    }
+
+    private static string Csv(string? value)
+    {
+        value ??= string.Empty;
+
+        if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
+        {
+            value = value.Replace("\"", "\"\"");
+            return $"\"{value}\"";
+        }
+
+        return value;
+    }
+
+    private static string FormatMoney(decimal? value)
+        => value.HasValue ? value.Value.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty;
+
+    private static string GetModeButtonClass(bool active)
+        => active ? "btn btn-sm btn-primary mode-button" : "btn btn-sm btn-outline-secondary mode-button";
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+        await Task.CompletedTask;
+    }
+}

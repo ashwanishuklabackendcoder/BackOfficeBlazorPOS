@@ -2,221 +2,331 @@
 
 @using BackOfficeBlazor.Shared.DTOs
 @using POS.UI.Services
+@using POS.UI.Shared
 @using System.Globalization
 @using System.Net
 
 @inject IReportService ReportService
 @inject ILocationService LocationService
+@inject ICustomerService CustomerService
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
+@inject ICompanyBrandingService CompanyBrandingService
+
+@implements IAsyncDisposable
 
 <PageTitle>Customer Sales/Returns Report</PageTitle>
 
-<div class="card shadow-sm">
-    <div class="card-header fw-bold">
-        Customer Sales / Returns
-    </div>
-
-    <div class="card-body">
-        <div class="row g-3 align-items-end mb-3">
-            <div class="col-md-3">
-                <label class="form-label">Customer Account (optional)</label>
-                <input class="form-control"
-                       @bind="CustomerAccNo"
-                       maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.AccNo)))" />
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">From Date</label>
-                <input type="date" class="form-control" @bind="FromDate" />
-            </div>
-
-            <div class="col-md-3">
-                <label class="form-label">To Date</label>
-                <input type="date" class="form-control" @bind="ToDate" />
-            </div>
-
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100"
-                        disabled="@(!HasTransactionSelection)"
-                        @onclick="() => LoadReport()">
-                    LOAD
-                </button>
-            </div>
-        </div>
-        <div class="row g-3 align-items-center mb-3">
-            <div class="col-md-4">
-                <div class="form-check form-switch">
-                    <input class="form-check-input"
-                           type="checkbox"
-                           id="toggleSales"
-                           checked="@ShowSales"
-                           @onchange="OnSalesToggle" />
-                    <label class="form-check-label" for="toggleSales">
-                        Include Sales
-                    </label>
+<FormGlassLayout Title="Customer Sales / Returns"
+                 Subtitle="Sales and returns activity by customer, location, and date range"
+                 Id="customer-sales-returns-report-form"
+                 ScopeId="customer-sales-returns-report-form"
+                 class="customer-sales-report-shell"
+                 BodyClass="card-body form-shell-body p-3 p-lg-4 customer-sales-report-body"
+                 HeaderActions="@HeaderActions">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3 mb-3 customer-sales-filter-panel">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Customer Account</label>
+                    <input class="form-control"
+                           @bind="CustomerAccNo"
+                           placeholder="Optional"
+                           maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.AccNo)))" />
                 </div>
-                <div class="form-check form-switch">
-                    <input class="form-check-input"
-                           type="checkbox"
-                           id="toggleReturns"
-                           checked="@ShowReturns"
-                           @onchange="OnReturnsToggle" />
-                    <label class="form-check-label" for="toggleReturns">
-                        Include Returns
-                    </label>
-                </div>
-                @if (!HasTransactionSelection)
-                {
-                    <small class="text-danger">
-                        Select at least one transaction type.
-                    </small>
-                }
-            </div>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Locations</label>
-            <div>
-                <button class="btn btn-outline-secondary"
-                        @onclick="ToggleLocationDropdown">
-                    @LocationSummary
-                </button>
-            </div>
-            @if (ShowLocationDropdown)
-            {
-                <div class="border rounded p-2 mt-2" style="max-width:420px;">
-                    <div class="form-check mb-2">
-                        <input class="form-check-input"
-                               type="checkbox"
-                               id="loc_all"
-                               checked="@(SelectedLocationCodes.Count == 0)"
-                               @onchange="ToggleAllLocations" />
-                        <label class="form-check-label" for="loc_all">
-                            All Locations
-                        </label>
-                    </div>
 
-                    @foreach (var loc in Locations)
-                    {
-                        var isChecked = SelectedLocationCodes.Contains(loc.Code);
-                        <div class="form-check">
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">From Date</label>
+                    <input type="date"
+                           class="form-control"
+                           @bind="FromDate" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">To Date</label>
+                    <input type="date"
+                           class="form-control"
+                           @bind="ToDate" />
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">&nbsp;</label>
+                    <button class="btn btn-primary w-100"
+                            disabled="@(!HasTransactionSelection || IsLoading)"
+                            @onclick="() => LoadReport()">
+                        Load Report
+                    </button>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-lg-4">
+                    <label class="form-label-custom">Transaction Type</label>
+                    <div class="customer-sales-toggle-stack">
+                        <div class="form-check form-switch">
                             <input class="form-check-input"
                                    type="checkbox"
-                                   id="@($"loc_{loc.Code}")"
-                                   checked="@isChecked"
-                                   @onchange="e => ToggleLocation(loc.Code, e)" />
-                            <label class="form-check-label" for="@($"loc_{loc.Code}")">
-                                @loc.Code - @loc.Name
+                                   id="toggleSales"
+                                   checked="@ShowSales"
+                                   @onchange="OnSalesToggle" />
+                            <label class="form-check-label" for="toggleSales">
+                                Include Sales
                             </label>
                         </div>
-                    }
+                        <div class="form-check form-switch">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   id="toggleReturns"
+                                   checked="@ShowReturns"
+                                   @onchange="OnReturnsToggle" />
+                            <label class="form-check-label" for="toggleReturns">
+                                Include Returns
+                            </label>
+                        </div>
+                        @if (!HasTransactionSelection)
+                        {
+                            <small class="text-danger">
+                                Select at least one transaction type.
+                            </small>
+                        }
+                    </div>
                 </div>
-            }
-        </div>
-        <div class="d-flex gap-2 mb-3">
-            <button class="btn btn-outline-secondary"
-                    disabled="@(Lines == null || !Lines.Any())"
-                    @onclick="ExportCsv">
-                Export CSV
-            </button>
-            <button class="btn btn-outline-secondary"
-                    disabled="@(Lines == null || !Lines.Any())"
-                    @onclick="ExportPdf">
-                Export PDF
-            </button>
+
+                <div class="col-lg-4">
+                    <label class="form-label-custom">Locations</label>
+                    <div class="customer-sales-location-picker">
+                        <button type="button"
+                                class="form-control d-flex justify-content-between align-items-center customer-sales-location-button"
+                                style="cursor:pointer"
+                                @onclick="ToggleLocationDropdown">
+                            <span class="text-truncate">@LocationSummary</span>
+                            <i class="bi bi-chevron-down ms-2"></i>
+                        </button>
+
+                        @if (ShowLocationDropdown)
+                        {
+                            <div class="customer-sales-location-dropdown glass-panel border rounded-3">
+                                <div class="customer-sales-location-dropdown-header d-flex align-items-center justify-content-between gap-2">
+                                    <div class="small text-muted">
+                                        @(SelectedLocationCodes.Count == 0 ? "All locations are included." : $"{SelectedLocationCodes.Count} location(s) selected.")
+                                    </div>
+                                    <button type="button"
+                                            class="btn btn-link p-0 customer-sales-location-clear"
+                                            disabled="@(SelectedLocationCodes.Count == 0)"
+                                            @onclick="ClearLocations">
+                                        Clear
+                                    </button>
+                                </div>
+
+                                <div class="customer-sales-location-list">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               id="loc_all"
+                                               checked="@(SelectedLocationCodes.Count == 0)"
+                                               @onchange="ToggleAllLocations" />
+                                        <label class="form-check-label" for="loc_all">
+                                            All Locations
+                                        </label>
+                                    </div>
+
+                                    @foreach (var loc in Locations)
+                                    {
+                                        var isChecked = SelectedLocationCodes.Contains(loc.Code);
+
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   id="@($"loc_{loc.Code}")"
+                                                   checked="@isChecked"
+                                                   @onchange="e => ToggleLocation(loc.Code, e)" />
+                                            <label class="form-check-label" for="@($"loc_{loc.Code}")">
+                                                @loc.Code - @loc.Name
+                                            </label>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <label class="form-label-custom">Export</label>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-secondary"
+                                disabled="@(Lines == null || !Lines.Any())"
+                                @onclick="ExportCsv">
+                            Export CSV
+                        </button>
+                        <button class="btn btn-outline-secondary"
+                                disabled="@(Lines == null || !Lines.Any())"
+                                @onclick="ExportPdf">
+                            Export PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <table class="table table-sm table-bordered">
-            <thead class="table-light">
-                <tr>
-                    <th>Date</th>
-                    
-                    <th>Part</th>
-                    <th>Description</th>
-                    <th>Manufacturer</th>
-                    <th>Brand</th>
-                    <th>Type</th>
-                    <th>Invoice</th>
-                    <th>StockNo</th>
-                    <th>Qty</th>
-                    <th>Sell</th>
-                    <th>Net</th>
-                    <th>Location</th>
-                    <th>Terminal</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (Lines == null)
-                {
-                    <tr><td colspan="13">Load a report</td></tr>
-                }
-                else if (!Lines.Any())
-                {
-                    <tr><td colspan="13">No records</td></tr>
-                }
-                else
-                {
-                    @foreach (var line in Lines)
-                    {
-                        <tr class="@(line.InOut == "R" ? "table-warning" : "")">
-                            <td>@line.DateAndTime.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)</td>
-                          
-                            <td>@line.PartNumber</td>
-                            <td>@line.Description</td>
-                            <td>@line.Manufacturer</td>
-                            <td>@line.Brand</td>
-                            <td>@(line.InOut == "R" ? "Return" : "Sale")</td>
-                            <td>@line.InvoiceNumber</td>
-                            <td>@line.StockNo</td>
-                            <td>@line.Quantity</td>
-                            <td>@line.Sell</td>
-                            <td>@line.Net</td>
-                            <td>@line.Location</td>
-                            <td>@line.Terminal</td>
+        <div class="glass-panel border rounded-3 overflow-hidden customer-sales-table-panel">
+            <div class="table-responsive customer-sales-table-wrap">
+                <table class="table table-sm table-bordered align-middle mb-0 customer-sales-table table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Part</th>
+                            <th>Description</th>
+                            <th>Manufacturer</th>
+                            <th>Brand</th>
+                            <th>Type</th>
+                            <th>Invoice</th>
+                            <th>StockNo</th>
+                            <th>Qty</th>
+                            <th>Sell</th>
+                            <th>Net</th>
+                            <th>Location</th>
+                            <th>Terminal</th>
                         </tr>
-                    }
-                }
-            </tbody>
-        </table>
+                    </thead>
+                    <tbody>
+                        @if (IsLoading && Lines == null)
+                        {
+                            <tr>
+                                <td colspan="13" class="text-muted py-4 text-center">
+                                    Loading customer sales/returns report...
+                                </td>
+                            </tr>
+                        }
+                        else if (Lines == null)
+                        {
+                            <tr>
+                                <td colspan="13" class="text-muted py-4 text-center">
+                                    Load the report to see results.
+                                </td>
+                            </tr>
+                        }
+                        else if (Lines.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="13" class="text-muted py-4 text-center">
+                                    No records match the selected filters.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var line in Lines)
+                            {
+                                <tr class="@(line.InOut == "R" ? "table-warning" : "")">
+                                    <td>@line.DateAndTime.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)</td>
+                                    <td>@line.PartNumber</td>
+                                    <td>@line.Description</td>
+                                    <td>@line.Manufacturer</td>
+                                    <td>@line.Brand</td>
+                                    <td>@(line.InOut == "R" ? "Return" : "Sale")</td>
+                                    <td>@line.InvoiceNumber</td>
+                                    <td>@line.StockNo</td>
+                                    <td>@line.Quantity</td>
+                                    <td>@line.Sell</td>
+                                    <td>@line.Net</td>
+                                    <td>@GetLocationDisplay(line.Location)</td>
+                                    <td>@line.Terminal</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
         @if (Lines != null && Lines.Any())
         {
-            <div class="d-flex justify-content-end gap-4 mt-3">
+            <div class="customer-sales-summary-strip glass-panel border rounded-3 px-3 py-2 d-flex justify-content-end gap-4 flex-wrap">
                 <div>
                     <span class="text-muted">Total Sales:</span>
-                    <b>@TotalSales.ToString("0.00")</b>
+                    <b>@TotalSales.ToString("0.00", CultureInfo.InvariantCulture)</b>
                 </div>
                 <div>
                     <span class="text-muted">Total Returns:</span>
-                    <b>@TotalReturns.ToString("0.00")</b>
+                    <b>@TotalReturns.ToString("0.00", CultureInfo.InvariantCulture)</b>
                 </div>
             </div>
         }
-    </div>
-</div>
+    </ChildContent>
+</FormGlassLayout>
 
 @code {
-    string? CustomerAccNo;
-    DateTime FromDate = DateTime.Today;
-    DateTime ToDate = DateTime.Today;
-    List<LocationDto> Locations = new();
-    HashSet<string> SelectedLocationCodes = new();
-    bool ShowLocationDropdown;
+    private List<LocationDto> Locations = new();
+    private HashSet<string> SelectedLocationCodes = new();
+    private List<CustomerSalesReturnLineDto>? Lines;
+    private bool ShowSales = true;
+    private bool ShowReturns = true;
+    private bool ShowLocationDropdown;
+    private bool IsLoading;
+    private CompanyBrandingDto? _branding;
+    private string _customerDisplayText = "All Customers";
+    private IReadOnlyDictionary<string, LocationDto> _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
 
-    List<CustomerSalesReturnLineDto>? Lines;
-    bool ShowSales = true;
-    bool ShowReturns = true;
+    private string? CustomerAccNo;
+    private DateTime FromDate = DateTime.Today;
+    private DateTime ToDate = DateTime.Today;
 
-    bool HasTransactionSelection => ShowSales || ShowReturns;
+    private bool HasTransactionSelection => ShowSales || ShowReturns;
 
-    decimal TotalSales =>
+    private decimal TotalSales =>
         Lines?.Where(x => x.InOut == "O").Sum(x => x.Net) ?? 0m;
 
-    decimal TotalReturns =>
+    private decimal TotalReturns =>
         Lines?.Where(x => x.InOut == "R").Sum(x => Math.Abs(x.Net)) ?? 0m;
 
-    async Task LoadReport(bool showWarning = true)
+    protected override async Task OnInitializedAsync()
     {
+        Locations = await LocationService.GetAllAsync();
+        _locationLookup = Locations
+            .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+            .GroupBy(x => DisplayLabelFormatter.NormalizeLocationCode(x.Code), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        _branding = await CompanyBrandingService.GetAsync();
+    }
+
+    private RenderFragment HeaderActions => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "d-flex align-items-center gap-2 flex-wrap justify-content-end");
+
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "form-shell-meta");
+        builder.AddContent(seq++, GetHeaderStatusText());
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "button");
+        builder.AddAttribute(seq++, "type", "button");
+        builder.AddAttribute(seq++, "class", "btn btn-outline-secondary btn-sm");
+        builder.AddAttribute(seq++, "disabled", IsLoading);
+        builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, RefreshNow));
+        builder.AddContent(seq++, "Refresh");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private async Task RefreshNow()
+        => await LoadReport(showWarning: true);
+
+    private string GetHeaderStatusText()
+        => IsLoading
+            ? "Refreshing..."
+            : Lines is { Count: > 0 }
+                ? $"{Lines.Count} rows"
+                : "Ready";
+
+    private async Task LoadReport(bool showWarning = true)
+    {
+        if (IsLoading)
+            return;
+
         if (!HasTransactionSelection)
         {
             if (showWarning)
@@ -224,50 +334,74 @@
                 await AppSnackbar.Show("Select at least one transaction type before loading the report.",
                     SnackbarType.Warning);
             }
+
             return;
         }
 
-        var request = new CustomerSalesReturnReportRequestDto
-        {
-            CustomerAccNo = string.IsNullOrWhiteSpace(CustomerAccNo) ? null : CustomerAccNo.Trim(),
-            From = FromDate.Date,
-            To = ToDate.Date.AddDays(1).AddTicks(-1),
-            Locations = SelectedLocationCodes.ToList(),
-            TransactionTypes = GetSelectedTransactionTypes()
-        };
+        ShowLocationDropdown = false;
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
 
-        var res = await ReportService.GetCustomerSalesReturnsAsync(request);
-
-        if (!res.Success)
+        try
         {
-            await AppSnackbar.Show(res.Message, SnackbarType.Error);
-            return;
+            var request = new CustomerSalesReturnReportRequestDto
+            {
+                CustomerAccNo = string.IsNullOrWhiteSpace(CustomerAccNo) ? null : CustomerAccNo.Trim(),
+                From = FromDate.Date,
+                To = ToDate.Date.AddDays(1).AddTicks(-1),
+                Locations = SelectedLocationCodes.ToList(),
+                TransactionTypes = GetSelectedTransactionTypes()
+            };
+
+            await ResolveCustomerDisplayAsync(request.CustomerAccNo);
+            var res = await ReportService.GetCustomerSalesReturnsAsync(request);
+
+            if (!res.Success)
+            {
+                if (showWarning)
+                    await AppSnackbar.Show(res.Message, SnackbarType.Error);
+
+                Lines = new();
+                return;
+            }
+
+            Lines = res.Data ?? new();
         }
+        catch (Exception ex)
+        {
+            if (showWarning)
+                await AppSnackbar.Show(ex.Message, SnackbarType.Error);
 
-        Lines = res.Data;
+            Lines = new();
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
-    protected override async Task OnInitializedAsync()
-    {
-        Locations = await LocationService.GetAllAsync();
-    }
-
-    string LocationSummary =>
+    private string LocationSummary =>
         SelectedLocationCodes.Count == 0
             ? "All Locations"
             : $"{SelectedLocationCodes.Count} selected";
 
-    void ToggleLocationDropdown()
+    private void ToggleLocationDropdown()
     {
         ShowLocationDropdown = !ShowLocationDropdown;
     }
 
-    void ToggleAllLocations(ChangeEventArgs e)
+    private void ClearLocations()
     {
         SelectedLocationCodes.Clear();
     }
 
-    void ToggleLocation(string code, ChangeEventArgs e)
+    private void ToggleAllLocations(ChangeEventArgs e)
+    {
+        SelectedLocationCodes.Clear();
+    }
+
+    private void ToggleLocation(string code, ChangeEventArgs e)
     {
         var isChecked = e.Value is bool b && b;
         if (isChecked)
@@ -276,7 +410,7 @@
             SelectedLocationCodes.Remove(code);
     }
 
-    List<string> GetSelectedTransactionTypes()
+    private List<string> GetSelectedTransactionTypes()
     {
         var types = new List<string>();
         if (ShowSales)
@@ -286,24 +420,19 @@
         return types;
     }
 
-    async Task OnTransactionSelectionChanged()
+    private async Task OnSalesToggle(ChangeEventArgs e)
     {
+        ShowSales = e.Value is bool b && b;
         await LoadReport(false);
     }
 
-    async Task OnSalesToggle(ChangeEventArgs e)
-    {
-        ShowSales = e.Value is bool b && b;
-        await OnTransactionSelectionChanged();
-    }
-
-    async Task OnReturnsToggle(ChangeEventArgs e)
+    private async Task OnReturnsToggle(ChangeEventArgs e)
     {
         ShowReturns = e.Value is bool b && b;
-        await OnTransactionSelectionChanged();
+        await LoadReport(false);
     }
 
-    async Task ExportCsv()
+    private async Task ExportCsv()
     {
         if (Lines == null || !Lines.Any())
             return;
@@ -315,18 +444,19 @@
         await JS.InvokeVoidAsync("reportExport.downloadCsv", filename, csv);
     }
 
-    async Task ExportPdf()
+    private async Task ExportPdf()
     {
         if (Lines == null || !Lines.Any())
             return;
 
-        var title = $"Customer Sales/Returns - {(string.IsNullOrWhiteSpace(CustomerAccNo) ? "All Customers" : CustomerAccNo)}";
+        var title = $"Customer Sales/Returns - {_customerDisplayText}";
+        _branding = await CompanyBrandingService.GetAsync();
         var html = BuildPrintHtml(title, Lines);
 
         await JS.InvokeVoidAsync("reportExport.printHtml", title, html);
     }
 
-    static string BuildCsv(List<CustomerSalesReturnLineDto> lines)
+    private static string BuildCsv(List<CustomerSalesReturnLineDto> lines)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("DateAndTime,Type,InvoiceNumber,PartNumber,Description,Manufacturer,Brand,StockNo,Qty,Sell,Net,Vat,Location,Terminal,Customer");
@@ -355,7 +485,7 @@
         return sb.ToString();
     }
 
-    static string Csv(string value)
+    private static string Csv(string value)
     {
         if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
         {
@@ -366,23 +496,18 @@
         return value;
     }
 
-    string BuildPrintHtml(string title, List<CustomerSalesReturnLineDto> lines)
+    private string BuildPrintHtml(string title, List<CustomerSalesReturnLineDto> lines)
     {
         var sb = new System.Text.StringBuilder();
-        sb.Append("<html><head><meta charset=\"utf-8\" />");
-        sb.Append("<style>");
-        sb.Append("body{font-family:Arial, sans-serif;font-size:12px;padding:16px;}");
-        sb.Append("h2{margin:0 0 8px 0;}table{width:100%;border-collapse:collapse;}");
-        sb.Append("th,td{border:1px solid #ddd;padding:6px;}th{background:#f2f2f2;}");
-        sb.Append(".totals{margin-top:12px;display:flex;gap:24px;justify-content:flex-end;}");
-        sb.Append("</style></head><body>");
-        sb.Append($"<h2>{WebUtility.HtmlEncode(title)}</h2>");
-        sb.Append("<div>");
-        sb.Append($"Customer: {WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(CustomerAccNo) ? "All Customers" : CustomerAccNo)}<br/>");
+        sb.Append(PrintTheme.BuildDocumentStart(title, true, "table{width:100%;border-collapse:collapse;table-layout:fixed;}th,td{border:1px solid #d5dbe5;padding:3px 4px;vertical-align:top;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}th{background:#f5f7fa;font-weight:700;}th:nth-child(1),td:nth-child(1){width:8%;}th:nth-child(2),td:nth-child(2){width:8%;}th:nth-child(3),td:nth-child(3){width:10%;}th:nth-child(4),td:nth-child(4){width:8%;}th:nth-child(5),td:nth-child(5){width:13%;}th:nth-child(6),td:nth-child(6){width:9%;}th:nth-child(7),td:nth-child(7){width:8%;}th:nth-child(8),td:nth-child(8){width:8%;}th:nth-child(9),td:nth-child(9){width:5%;}th:nth-child(10),td:nth-child(10){width:6%;}th:nth-child(11),td:nth-child(11){width:6%;}th:nth-child(12),td:nth-child(12){width:6%;}th:nth-child(13),td:nth-child(13){width:5%;}"));
+        sb.Append("<div class=\"page\">");
+        sb.Append(PrintTheme.BuildHeader(title, _branding, $"Customer Sales/Returns - {_customerDisplayText}"));
+        sb.Append("<div class=\"meta section\">");
+        sb.Append($"Customer: {WebUtility.HtmlEncode(_customerDisplayText)}<br/>");
         sb.Append($"From: {FromDate:yyyy-MM-dd} &nbsp;&nbsp; To: {ToDate:yyyy-MM-dd}");
         if (SelectedLocationCodes.Count > 0)
-            sb.Append($" &nbsp;&nbsp; Locations: {WebUtility.HtmlEncode(string.Join(", ", SelectedLocationCodes))}");
-        sb.Append("</div><br/>");
+            sb.Append($" &nbsp;&nbsp; Locations: {WebUtility.HtmlEncode(DisplayLabelFormatter.FormatLocationList(SelectedLocationCodes, _locationLookup))}");
+        sb.Append("</div>");
 
         sb.Append("<table><thead><tr>");
         sb.Append("<th>Date/Time</th><th>Type</th><th>Invoice</th><th>Part</th><th>Description</th><th>Manufacturer</th><th>Brand</th><th>StockNo</th>");
@@ -403,19 +528,48 @@
             sb.Append($"<td>{x.Quantity}</td>");
             sb.Append($"<td>{x.Sell:0.00}</td>");
             sb.Append($"<td>{x.Net:0.00}</td>");
-            sb.Append($"<td>{WebUtility.HtmlEncode(x.Location)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(GetLocationDisplay(x.Location))}</td>");
             sb.Append($"<td>{WebUtility.HtmlEncode(x.Terminal)}</td>");
             sb.Append("</tr>");
         }
 
         sb.Append("</tbody></table>");
-        sb.Append("<div class=\"totals\">");
+        sb.Append("<div class=\"section\" style=\"display:flex;gap:24px;justify-content:flex-end;\">");
         sb.Append($"<div>Total Sales: <b>{TotalSales:0.00}</b></div>");
         sb.Append($"<div>Total Returns: <b>{TotalReturns:0.00}</b></div>");
         sb.Append("</div>");
-        sb.Append("</body></html>");
+        sb.Append("</div>");
+        sb.Append(PrintTheme.BuildDocumentEnd());
 
         return sb.ToString();
     }
-}
 
+    private async Task ResolveCustomerDisplayAsync(string? customerAccNo)
+    {
+        if (string.IsNullOrWhiteSpace(customerAccNo))
+        {
+            _customerDisplayText = "All Customers";
+            return;
+        }
+
+        try
+        {
+            var res = await CustomerService.GetAsync(customerAccNo.Trim());
+            _customerDisplayText = res.Success && res.Data != null
+                ? DisplayLabelFormatter.FormatCustomer(res.Data, customerAccNo)
+                : customerAccNo.Trim();
+        }
+        catch
+        {
+            _customerDisplayText = customerAccNo.Trim();
+        }
+    }
+
+    private string GetLocationDisplay(string? code)
+        => DisplayLabelFormatter.FormatLocation(code, _locationLookup);
+
+    public async ValueTask DisposeAsync()
+    {
+        await Task.CompletedTask;
+    }
+}

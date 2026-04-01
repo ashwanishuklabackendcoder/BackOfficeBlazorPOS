@@ -1,0 +1,68 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@inject IStaffUserService StaffUserApi
+
+<div class="d-flex align-items-center gap-2 flex-wrap staff-code-lookup">
+    <input class="@InputClass"
+           value="@CurrentValue"
+           placeholder="@Placeholder"
+           maxlength="@MaxLength"
+           @oninput="HandleInput" />
+    <span class="@NameClass">@ResolvedName</span>
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string InputClass { get; set; } = "form-control";
+    [Parameter] public string NameClass { get; set; } = "small text-primary fw-semibold";
+    [Parameter] public string Placeholder { get; set; } = string.Empty;
+    [Parameter] public int? MaxLength { get; set; }
+
+    private readonly List<StaffUserDto> StaffUsers = new();
+    private string CurrentValue = string.Empty;
+    private string ResolvedName = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        CurrentValue = Value?.Trim() ?? string.Empty;
+        ResolveStaffName();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStaffUsersAsync();
+    }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        CurrentValue = e.Value?.ToString()?.Trim() ?? string.Empty;
+        ResolveStaffName();
+        await ValueChanged.InvokeAsync(CurrentValue);
+    }
+
+    private async Task LoadStaffUsersAsync()
+    {
+        var response = await StaffUserApi.GetAllAsync();
+        StaffUsers.Clear();
+        if (response.Success && response.Data != null)
+            StaffUsers.AddRange(response.Data);
+
+        ResolveStaffName();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ResolveStaffName()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentValue))
+        {
+            ResolvedName = string.Empty;
+            return;
+        }
+
+        var match = StaffUsers.FirstOrDefault(x =>
+            string.Equals(x.StaffCode?.Trim(), CurrentValue, StringComparison.OrdinalIgnoreCase));
+
+        ResolvedName = match?.FullName ?? match?.Username ?? "-";
+    }
+}

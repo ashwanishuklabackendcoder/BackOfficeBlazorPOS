@@ -12,6 +12,9 @@ namespace BackOfficeBlazor.Admin.Entities
         public DateTime DateAndTime { get; set; }
         public string PartNo { get; set; } = "";
         public int StockQty { get; set; }
+        public decimal? Cost { get; set; }
+        public string? StockNumber { get; set; }
+        public string? SerialNumber { get; set; }
         public string Notes { get; set; } = "";
         public string SalesCode { get; set; } = "";
         public string FromLocation { get; set; } = "";

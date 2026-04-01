@@ -1,7 +1,10 @@
 ﻿@page "/system-settings"
 @using BackOfficeBlazor.Shared.DTOs
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Json
 @using POS.UI.Services
 @inject IAuthService AuthService
+@inject IImageApiService ImageApi
 @inject ISysOptionsService SysOptionsService
 @inject AppSnackbarService AppSnackbar
 
@@ -48,17 +51,75 @@
                         <div class="card">
                             <div class="card-header fw-semibold">Company</div>
                             <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Company No</label>
-                                    <input class="form-control" @bind="model.CompanyNo" />
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Company Name</label>
-                                    <input class="form-control" @bind="model.CompanyName" />
-                                </div>
-                                <div>
-                                    <label class="form-label">Base Currency</label>
-                                    <input class="form-control" @bind="model.BaseCurrency" />
+                                <div class="row g-4">
+                                    <div class="col-lg-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Company No</label>
+                                            <input class="form-control" @bind="model.CompanyNo" />
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Company Name</label>
+                                            <input class="form-control" @bind="model.CompanyName" />
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Base Currency</label>
+                                            <input class="form-control" @bind="model.BaseCurrency" />
+                                        </div>
+                                    </div>
+
+                                    <div class="col-lg-6">
+                                        <div class="border rounded-3 p-3 h-100 bg-light">
+                                            <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                                                <div>
+                                                    <div class="fw-semibold">Company Logo</div>
+                                                    <div class="text-muted small">Stored in Cloudinary and shown in the top bar.</div>
+                                                </div>
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm"
+                                                        @onclick="ClearCompanyLogo"
+                                                        disabled="@string.IsNullOrWhiteSpace(model.CompanyLogoUrl)">
+                                                    Remove
+                                                </button>
+                                            </div>
+
+                                            <div class="company-logo-preview d-flex align-items-center justify-content-center rounded-3 bg-white border">
+                                                @if (!string.IsNullOrWhiteSpace(model.CompanyLogoUrl))
+                                                {
+                                                    <img src="@model.CompanyLogoUrl"
+                                                         alt="Company logo"
+                                                         class="img-fluid"
+                                                         style="max-height:140px;object-fit:contain;" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-center text-muted py-5 px-3">
+                                                        <div class="fw-semibold">No logo uploaded</div>
+                                                        <div class="small">Upload a logo to brand the top bar and documents.</div>
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                                                <InputFile id="company-logo-upload"
+                                                           class="d-none"
+                                                           accept="image/*"
+                                                           OnChange="OnCompanyLogoSelected" />
+                                                <label for="company-logo-upload" class="btn btn-primary btn-sm">
+                                                    Upload logo
+                                                </label>
+                                                @if (!string.IsNullOrWhiteSpace(model.CompanyLogoUrl))
+                                                {
+                                                    <a href="@model.CompanyLogoUrl" target="_blank" class="btn btn-outline-primary btn-sm">
+                                                        Open current
+                                                    </a>
+                                                }
+                                            </div>
+
+                                            <div class="form-text mt-2">
+                                                PNG, JPG, GIF, or WebP. The logo is saved as a Cloudinary URL.
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                             </div>
@@ -456,6 +517,66 @@
     }
 
     private void SwitchTab(string tab) => activeTab = tab;
+
+    private async Task OnCompanyLogoSelected(InputFileChangeEventArgs e)
+    {
+        if (model == null)
+            return;
+
+        var file = e.File;
+        if (file == null)
+            return;
+
+        const long maxSize = 5 * 1024 * 1024;
+        if (file.Size > maxSize)
+        {
+            await AppSnackbar.Show("Logo must be 5MB or smaller.", SnackbarType.Warning);
+            return;
+        }
+
+        try
+        {
+            var content = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream(maxSize);
+            var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+
+            content.Add(fileContent, "files", file.Name);
+            content.Add(new StringContent("company-logos"), "folder");
+
+            var response = await ImageApi.UploadImage(content);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                await AppSnackbar.Show(string.IsNullOrWhiteSpace(error) ? "Logo upload failed." : error, SnackbarType.Error);
+                return;
+            }
+
+            var paths = await response.Content.ReadFromJsonAsync<List<string>>();
+            var uploadedLogo = paths?.FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(uploadedLogo))
+            {
+                await AppSnackbar.Show("Logo upload returned no file URL.", SnackbarType.Error);
+                return;
+            }
+
+            model.CompanyLogoUrl = uploadedLogo;
+            await AppSnackbar.Show("Logo uploaded. Save settings to keep it.", SnackbarType.Success);
+        }
+        catch (Exception ex)
+        {
+            await AppSnackbar.Show($"Logo upload failed: {ex.Message}", SnackbarType.Error);
+        }
+    }
+
+    private void ClearCompanyLogo()
+    {
+        if (model == null)
+            return;
+
+        model.CompanyLogoUrl = string.Empty;
+    }
 
 
 }

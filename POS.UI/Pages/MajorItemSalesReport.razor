@@ -1,0 +1,572 @@
+@page "/major-item-sales-report"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.Shared
+@using System.Globalization
+@using System.Net
+
+@inject IReportService ReportService
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+@inject ILocationService LocationService
+@inject ICompanyBrandingService CompanyBrandingService
+
+@implements IAsyncDisposable
+
+<PageTitle>Major Item Sales Report</PageTitle>
+
+<FormGlassLayout Title="Major Item Sales Report"
+                 Subtitle="Group-level sales, stock value, and margin analysis for major items"
+                 Id="major-item-sales-report-form"
+                 ScopeId="major-item-sales-report-form"
+                 class="major-sales-report-shell"
+                 BodyClass="card-body form-shell-body p-3 p-lg-4 major-sales-report-body"
+                 HeaderActions="@HeaderActions">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3 mb-3 major-sales-filter-panel">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Make</label>
+                    <BrandSelector Value="@Make"
+                                   ValueChanged="OnMakeChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">From Location</label>
+                    <LocationSelector Value="@FromLocation"
+                                      ValueChanged="OnFromLocationChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">To Location</label>
+                    <LocationSelector Value="@ToLocation"
+                                      ValueChanged="OnToLocationChanged" />
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">From Date</label>
+                    <input class="form-control"
+                           type="date"
+                           value="@FromDateText"
+                           @onchange="OnFromDateChanged" />
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">To Date</label>
+                    <input class="form-control"
+                           type="date"
+                           value="@ToDateText"
+                           @onchange="OnToDateChanged" />
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                    <label class="form-label-custom">CAT A</label>
+                    <CategorySelector Level="A"
+                                      Code="@CategoryACode"
+                                      CodeChanged="OnCategoryACodeChanged"
+                                      Name="@CategoryAName"
+                                      NameChanged="OnCategoryANameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">CAT B</label>
+                    <CategorySelector Level="B"
+                                      Code="@CategoryBCode"
+                                      CodeChanged="OnCategoryBCodeChanged"
+                                      Name="@CategoryBName"
+                                      NameChanged="OnCategoryBNameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">CAT C</label>
+                    <CategorySelector Level="C"
+                                      Code="@CategoryCCode"
+                                      CodeChanged="OnCategoryCCodeChanged"
+                                      Name="@CategoryCName"
+                                      NameChanged="OnCategoryCNameChanged" />
+                </div>
+
+                <div class="col-md-3 d-flex justify-content-md-end gap-2 align-items-end">
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            disabled="@(!HasRows || IsLoading)"
+                            @onclick="ExportCsv">
+                        Export CSV
+                    </button>
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            disabled="@(!HasRows || IsLoading)"
+                            @onclick="ExportPdf">
+                        Export PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel border rounded-3 overflow-hidden major-sales-table-panel">
+            <div class="table-responsive major-sales-table-wrap">
+                <table class="table table-sm table-bordered align-middle mb-0 sales-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Group</th>
+                            <th class="text-end">In Stock</th>
+                            <th class="text-end">In Stock value</th>
+                            <th class="text-end">Sold</th>
+                            <th class="text-end">Sold value</th>
+                            <th class="text-end">Profit</th>
+                            <th class="text-end">Margin%</th>
+                            <th class="text-end">Turn over</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (IsLoading && Rows == null)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-muted py-4 text-center">
+                                    Loading major item sales report...
+                                </td>
+                            </tr>
+                        }
+                        else if (Rows == null)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-muted py-4 text-center">
+                                    Change a filter to load the report.
+                                </td>
+                            </tr>
+                        }
+                        else if (Rows.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-muted py-4 text-center">
+                                    No records match the selected filters.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in Rows)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@row.Group</td>
+                                    <td class="text-end">@row.InStock</td>
+                                    <td class="text-end">@row.InStockValue.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.Sold</td>
+                                    <td class="text-end">@row.SoldValue.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.Profit.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.MarginPercent.ToString("0.00", CultureInfo.InvariantCulture)%</td>
+                                    <td class="text-end">@row.Turnover.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    @if (HasRows)
+                    {
+                        <tfoot class="table-light fw-semibold">
+                            <tr>
+                                <td>Total</td>
+                                <td class="text-end">@Totals.InStock</td>
+                                <td class="text-end">@Totals.InStockValue.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                <td class="text-end">@Totals.Sold</td>
+                                <td class="text-end">@Totals.SoldValue.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                <td class="text-end">@Totals.Profit.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                <td class="text-end">@Totals.MarginPercent.ToString("0.00", CultureInfo.InvariantCulture)%</td>
+                                <td class="text-end">@Totals.Turnover.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </ChildContent>
+</FormGlassLayout>
+
+@code {
+    private List<MajorItemSalesReportLineDto>? Rows;
+    private bool IsLoading;
+    private CompanyBrandingDto? _branding;
+    private IReadOnlyDictionary<string, LocationDto> _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
+    private int _requestVersion;
+    private CancellationTokenSource? _reloadCts;
+    private bool _disposed;
+
+    private string? Make { get; set; }
+    private string? FromLocation { get; set; } = "01";
+    private string? ToLocation { get; set; } = "30";
+    private string? FromDateText { get; set; }
+    private string? ToDateText { get; set; }
+    private string? CategoryACode { get; set; }
+    private string? CategoryAName { get; set; }
+    private string? CategoryBCode { get; set; }
+    private string? CategoryBName { get; set; }
+    private string? CategoryCCode { get; set; }
+    private string? CategoryCName { get; set; }
+
+    private bool HasRows => Rows is { Count: > 0 };
+
+    private ReportTotals Totals => CalculateTotals(Rows ?? new());
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLocationLookupAsync();
+        _branding = await CompanyBrandingService.GetAsync();
+        await LoadReportAsync(showWarning: true);
+    }
+
+    private RenderFragment HeaderActions => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "d-flex align-items-center gap-2 flex-wrap justify-content-end");
+
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "form-shell-meta");
+        builder.AddContent(seq++, IsLoading ? "Refreshing..." : HasRows ? $"{Rows!.Count} rows" : "Ready");
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "button");
+        builder.AddAttribute(seq++, "type", "button");
+        builder.AddAttribute(seq++, "class", "btn btn-outline-secondary btn-sm");
+        builder.AddAttribute(seq++, "disabled", IsLoading);
+        builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, RefreshNow));
+        builder.AddContent(seq++, "Refresh");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private async Task RefreshNow()
+        => await LoadReportAsync(showWarning: true);
+
+    private async Task QueueReloadAsync()
+    {
+        if (_disposed)
+            return;
+
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+        _reloadCts = new CancellationTokenSource();
+
+        var token = _reloadCts.Token;
+
+        try
+        {
+            await Task.Delay(250, token);
+            await LoadReportAsync(showWarning: false);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadReportAsync(bool showWarning)
+    {
+        var requestVersion = Interlocked.Increment(ref _requestVersion);
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var request = new MajorItemSalesReportRequestDto
+            {
+                Make = string.IsNullOrWhiteSpace(Make) ? null : Make.Trim(),
+                FromLocation = NormalizeLocation(FromLocation),
+                ToLocation = NormalizeLocation(ToLocation),
+                FromDate = ParseDate(FromDateText),
+                ToDate = ParseDate(ToDateText),
+                CategoryA = string.IsNullOrWhiteSpace(CategoryACode) ? null : CategoryACode.Trim(),
+                CategoryB = string.IsNullOrWhiteSpace(CategoryBCode) ? null : CategoryBCode.Trim(),
+                CategoryC = string.IsNullOrWhiteSpace(CategoryCCode) ? null : CategoryCCode.Trim()
+            };
+
+            var res = await ReportService.GetMajorItemSalesAsync(request);
+
+            if (requestVersion != _requestVersion)
+                return;
+
+            if (!res.Success)
+            {
+                if (showWarning)
+                    await AppSnackbar.Show(res.Message ?? "Unable to load report.", SnackbarType.Error);
+
+                Rows = new();
+                return;
+            }
+
+            Rows = res.Data ?? new();
+        }
+        catch (Exception ex) when (!(_disposed || ex is TaskCanceledException))
+        {
+            if (requestVersion == _requestVersion && showWarning)
+                await AppSnackbar.Show("Unable to load report.", SnackbarType.Error);
+
+            if (requestVersion == _requestVersion)
+                Rows = new();
+        }
+        finally
+        {
+            if (requestVersion == _requestVersion)
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private static string? NormalizeLocation(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        return int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var slot)
+            ? slot.ToString("D2", CultureInfo.InvariantCulture)
+            : trimmed.ToUpperInvariant();
+    }
+
+    private static DateTime? ParseDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return DateTime.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date.Date
+            : null;
+    }
+
+    private async Task OnMakeChanged(string? value)
+    {
+        Make = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnFromLocationChanged(string? value)
+    {
+        FromLocation = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnToLocationChanged(string? value)
+    {
+        ToLocation = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnFromDateChanged(ChangeEventArgs e)
+    {
+        FromDateText = e.Value?.ToString();
+        await QueueReloadAsync();
+    }
+
+    private async Task OnToDateChanged(ChangeEventArgs e)
+    {
+        ToDateText = e.Value?.ToString();
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryACodeChanged(string? value)
+    {
+        CategoryACode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryANameChanged(string? value)
+    {
+        CategoryAName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryBCodeChanged(string? value)
+    {
+        CategoryBCode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryBNameChanged(string? value)
+    {
+        CategoryBName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryCCodeChanged(string? value)
+    {
+        CategoryCCode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryCNameChanged(string? value)
+    {
+        CategoryCName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        if (!HasRows)
+            return;
+
+        var filename = $"major-item-sales-report-{DateTime.Now:yyyyMMddHHmmss}.csv";
+        var csv = BuildCsv(Rows ?? new());
+        await JS.InvokeVoidAsync("reportExport.downloadCsv", filename, csv);
+    }
+
+    private async Task ExportPdf()
+    {
+        if (!HasRows)
+            return;
+
+        var title = "Major Item Sales Report";
+        _branding = await CompanyBrandingService.GetAsync();
+        var html = BuildPrintHtml(title, Rows ?? new());
+        await JS.InvokeVoidAsync("reportExport.printHtml", title, html);
+    }
+
+    private static string BuildCsv(List<MajorItemSalesReportLineDto> rows)
+    {
+        var totals = CalculateTotals(rows);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Group,In Stock,In Stock value,Sold,Sold value,Profit,Margin%,Turn over");
+
+        foreach (var row in rows)
+        {
+            sb.AppendLine(string.Join(",",
+                Csv(row.Group),
+                Csv(row.InStock.ToString(CultureInfo.InvariantCulture)),
+                Csv(row.InStockValue.ToString(CultureInfo.InvariantCulture)),
+                Csv(row.Sold.ToString(CultureInfo.InvariantCulture)),
+                Csv(row.SoldValue.ToString(CultureInfo.InvariantCulture)),
+                Csv(row.Profit.ToString(CultureInfo.InvariantCulture)),
+                Csv(row.MarginPercent.ToString("0.00", CultureInfo.InvariantCulture)),
+                Csv(row.Turnover.ToString(CultureInfo.InvariantCulture))
+            ));
+        }
+
+        sb.AppendLine(string.Join(",",
+            Csv("Total"),
+            Csv(totals.InStock.ToString(CultureInfo.InvariantCulture)),
+            Csv(totals.InStockValue.ToString(CultureInfo.InvariantCulture)),
+            Csv(totals.Sold.ToString(CultureInfo.InvariantCulture)),
+            Csv(totals.SoldValue.ToString(CultureInfo.InvariantCulture)),
+            Csv(totals.Profit.ToString(CultureInfo.InvariantCulture)),
+            Csv(totals.MarginPercent.ToString("0.00", CultureInfo.InvariantCulture)),
+            Csv(totals.Turnover.ToString(CultureInfo.InvariantCulture))
+        ));
+
+        return sb.ToString();
+    }
+
+    private string BuildPrintHtml(string title, List<MajorItemSalesReportLineDto> rows)
+    {
+        var totals = CalculateTotals(rows);
+        var sb = new System.Text.StringBuilder();
+
+        var make = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(Make) ? "All" : Make);
+        var locations = WebUtility.HtmlEncode($"{GetLocationDisplay(FromLocation)} to {GetLocationDisplay(ToLocation)}");
+        var fromDate = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(FromDateText) ? "All" : FromDateText);
+        var toDate = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(ToDateText) ? "All" : ToDateText);
+        var categoryA = WebUtility.HtmlEncode(CategoryAName ?? CategoryACode ?? "All");
+        var categoryB = WebUtility.HtmlEncode(CategoryBName ?? CategoryBCode ?? "All");
+        var categoryC = WebUtility.HtmlEncode(CategoryCName ?? CategoryCCode ?? "All");
+
+        sb.Append(PrintTheme.BuildDocumentStart(title, false, "table{width:100%;border-collapse:collapse;table-layout:fixed;}th,td{border:1px solid #cfcfcf;padding:2px 3px;vertical-align:top;font-size:7px;white-space:nowrap;}th{background:#f3f3f3;font-weight:bold;}tfoot td{background:#f9fbfd;font-weight:bold;}.num{text-align:right;}th:nth-child(1),td:nth-child(1){width:21%;white-space:normal;}th:nth-child(2),td:nth-child(2){width:10%;}th:nth-child(3),td:nth-child(3){width:12%;}th:nth-child(4),td:nth-child(4){width:8%;}th:nth-child(5),td:nth-child(5){width:12%;}th:nth-child(6),td:nth-child(6){width:11%;}th:nth-child(7),td:nth-child(7){width:8%;}th:nth-child(8),td:nth-child(8){width:10%;}"));
+        sb.Append("<div class=\"page\">");
+        sb.Append(PrintTheme.BuildHeader(title, _branding, "Major item sales analysis"));
+        sb.Append("<div class=\"meta section\">");
+        sb.Append($"Make: {make}<br/>");
+        sb.Append($"Locations: {locations}<br/>");
+        sb.Append($"Date: {fromDate} to {toDate}<br/>");
+        sb.Append($"Categories: A={categoryA}, B={categoryB}, C={categoryC}");
+        sb.Append("</div>");
+        sb.Append("<table><thead><tr>");
+        sb.Append("<th>Group</th><th class=\"num\">In Stock</th><th class=\"num\">In Stock value</th><th class=\"num\">Sold</th><th class=\"num\">Sold value</th><th class=\"num\">Profit</th><th class=\"num\">Margin%</th><th class=\"num\">Turn over</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        foreach (var row in rows)
+        {
+            sb.Append("<tr>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Group)}</td>");
+            sb.Append($"<td class=\"num\">{row.InStock}</td>");
+            sb.Append($"<td class=\"num\">{row.InStockValue:0.00}</td>");
+            sb.Append($"<td class=\"num\">{row.Sold}</td>");
+            sb.Append($"<td class=\"num\">{row.SoldValue:0.00}</td>");
+            sb.Append($"<td class=\"num\">{row.Profit:0.00}</td>");
+            sb.Append($"<td class=\"num\">{row.MarginPercent:0.00}%</td>");
+            sb.Append($"<td class=\"num\">{row.Turnover:0.00}</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody><tfoot><tr>");
+        sb.Append("<td>Total</td>");
+        sb.Append($"<td class=\"num\">{totals.InStock}</td>");
+        sb.Append($"<td class=\"num\">{totals.InStockValue:0.00}</td>");
+        sb.Append($"<td class=\"num\">{totals.Sold}</td>");
+        sb.Append($"<td class=\"num\">{totals.SoldValue:0.00}</td>");
+        sb.Append($"<td class=\"num\">{totals.Profit:0.00}</td>");
+        sb.Append($"<td class=\"num\">{totals.MarginPercent:0.00}%</td>");
+        sb.Append($"<td class=\"num\">{totals.Turnover:0.00}</td>");
+        sb.Append("</tr></tfoot></table></div>");
+        sb.Append(PrintTheme.BuildDocumentEnd());
+
+        return sb.ToString();
+    }
+
+    private async Task LoadLocationLookupAsync()
+    {
+        try
+        {
+            var locations = await LocationService.GetAllAsync();
+            _locationLookup = locations
+                .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+                .GroupBy(x => DisplayLabelFormatter.NormalizeLocationCode(x.Code), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private string GetLocationDisplay(string? code)
+        => DisplayLabelFormatter.FormatLocation(code, _locationLookup);
+
+    private static string Csv(string? value)
+    {
+        value ??= string.Empty;
+
+        if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
+        {
+            value = value.Replace("\"", "\"\"");
+            return $"\"{value}\"";
+        }
+
+        return value;
+    }
+
+    private static ReportTotals CalculateTotals(IEnumerable<MajorItemSalesReportLineDto> rows)
+    {
+        var list = rows as IList<MajorItemSalesReportLineDto> ?? rows.ToList();
+        var inStock = list.Sum(x => x.InStock);
+        var inStockValue = list.Sum(x => x.InStockValue);
+        var sold = list.Sum(x => x.Sold);
+        var soldValue = list.Sum(x => x.SoldValue);
+        var profit = list.Sum(x => x.Profit);
+        var turnover = list.Sum(x => x.Turnover);
+        var margin = turnover > 0m ? (profit / turnover) * 100m : 0m;
+
+        return new ReportTotals(inStock, inStockValue, sold, soldValue, profit, margin, turnover);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+        await Task.CompletedTask;
+    }
+
+    private sealed record ReportTotals(int InStock, decimal InStockValue, int Sold, decimal SoldValue, decimal Profit, decimal MarginPercent, decimal Turnover);
+}

@@ -54,6 +54,23 @@ namespace POSAPI.Controllers
             return Ok(await _service.GetAllAsync());
         }
 
+        [HttpPost("SearchCustomers")]
+        public async Task<IActionResult> Search([FromBody] CustomerSearchRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.Customer, PermissionKeys.Till, PermissionKeys.Layaway))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<CustomerDto>>.Fail("You do not have permission to search customers."));
+            }
+
+            if (request == null)
+                return BadRequest(ApiResponse<List<CustomerDto>>.Fail("Search criteria are required."));
+
+            var result = await _service.SearchAsync(request);
+            return Ok(result);
+        }
+
         [HttpPost("SaveCustomer")]
         public async Task<ActionResult<ApiResponse<CustomerDto>>> Save([FromBody] CustomerDto dto)
         {

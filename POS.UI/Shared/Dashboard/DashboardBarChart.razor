@@ -1,0 +1,62 @@
+@if (IsLoading)
+{
+    <div class="dashboard-chart-card dashboard-skeleton">
+        <div class="dashboard-skeleton-line w-40"></div>
+        <div class="dashboard-skeleton-line w-25 mt-2"></div>
+        <div class="dashboard-skeleton-bars mt-4"></div>
+    </div>
+}
+else
+{
+    <div class="dashboard-chart-card">
+        <div class="dashboard-chart-head">
+            <div>
+                <div class="dashboard-chart-title">@Title</div>
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <div class="dashboard-chart-subtitle">@Subtitle</div>
+                }
+            </div>
+        </div>
+
+        @if (HasData)
+        {
+            <div class="dashboard-bar-list">
+                @foreach (var item in Items ?? Array.Empty<DashboardBarItemDto>())
+                {
+                    <div class="dashboard-bar-row">
+                        <div class="dashboard-bar-meta">
+                            <div class="dashboard-bar-label">@item.Label</div>
+                            <div class="dashboard-bar-value">@FormatPound(item.Value)</div>
+                        </div>
+                        <div class="dashboard-bar-track">
+                            <div class="dashboard-bar-fill" style="@($"width:{item.Percentage:0.##}%; background: linear-gradient(90deg, {FillColor}, #60a5fa);")"></div>
+                        </div>
+                        <div class="dashboard-bar-percent">@item.Percentage.ToString("0.##")%</div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="dashboard-empty-state">
+                <div class="dashboard-empty-icon"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></div>
+                <div class="dashboard-empty-title">No category data available.</div>
+                <div class="dashboard-empty-subtitle">The current filters returned no qualifying sales.</div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public IReadOnlyList<DashboardBarItemDto>? Items { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string FillColor { get; set; } = "#2563eb";
+
+    private bool HasData => Items != null && Items.Any(x => x.Value > 0m);
+
+    private static string FormatPound(decimal value)
+        => $"£{value:N2}";
+}

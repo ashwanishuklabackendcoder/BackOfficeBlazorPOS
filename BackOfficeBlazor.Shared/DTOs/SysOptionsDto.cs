@@ -109,6 +109,9 @@ namespace BackOfficeBlazor.Shared.DTOs
         public string CompanyName { get; set; } = string.Empty;
 
         [StringLength(500)]
+        public string CompanyLogoUrl { get; set; } = string.Empty;
+
+        [StringLength(500)]
         public string QuoteMessage { get; set; } = string.Empty;
         public bool AutoPrintServiceInv { get; set; }
         [StringLength(10)]

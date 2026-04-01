@@ -30,6 +30,7 @@ packages/
 # App artifacts and local data
 **/wwwroot/uploads/
 **/uploads/
+POS.UI.zip
 *.db
 *.sqlite
 *.mdf

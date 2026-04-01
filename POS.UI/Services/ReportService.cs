@@ -24,5 +24,57 @@ namespace POS.UI.Services
             return await res.Content.ReadFromJsonAsync<ApiResponse<List<CustomerSalesReturnLineDto>>>()
                    ?? ApiResponse<List<CustomerSalesReturnLineDto>>.Fail("Null response");
         }
+
+        public async Task<ApiResponse<List<StockPositionLineDto>>> GetStockPositionAsync(
+            StockPositionReportRequestDto request)
+        {
+            var res = await _http.PostAsJsonAsync("api/reports/stock-position", request);
+
+            if (!res.IsSuccessStatusCode)
+                return ApiResponse<List<StockPositionLineDto>>.Fail(
+                    await res.Content.ReadAsStringAsync());
+
+            return await res.Content.ReadFromJsonAsync<ApiResponse<List<StockPositionLineDto>>>()
+                   ?? ApiResponse<List<StockPositionLineDto>>.Fail("Null response");
+        }
+
+        public async Task<ApiResponse<List<MajorItemSalesReportLineDto>>> GetMajorItemSalesAsync(
+            MajorItemSalesReportRequestDto request)
+        {
+            var res = await _http.PostAsJsonAsync("api/reports/major-item-sales", request);
+
+            if (!res.IsSuccessStatusCode)
+                return ApiResponse<List<MajorItemSalesReportLineDto>>.Fail(
+                    await res.Content.ReadAsStringAsync());
+
+            return await res.Content.ReadFromJsonAsync<ApiResponse<List<MajorItemSalesReportLineDto>>>()
+                   ?? ApiResponse<List<MajorItemSalesReportLineDto>>.Fail("Null response");
+        }
+
+        public async Task<ApiResponse<List<StockTransferReportLineDto>>> GetStockTransferReportAsync(
+            StockTransferReportRequestDto request)
+        {
+            var res = await _http.PostAsJsonAsync("api/reports/stock-transfer", request);
+
+            if (!res.IsSuccessStatusCode)
+                return ApiResponse<List<StockTransferReportLineDto>>.Fail(
+                    await res.Content.ReadAsStringAsync());
+
+            return await res.Content.ReadFromJsonAsync<ApiResponse<List<StockTransferReportLineDto>>>()
+                   ?? ApiResponse<List<StockTransferReportLineDto>>.Fail("Null response");
+        }
+
+        public async Task<ApiResponse<List<LayawayReportLineDto>>> GetLayawayReportAsync(
+            LayawayReportRequestDto request)
+        {
+            var res = await _http.PostAsJsonAsync("api/reports/layaway-report", request);
+
+            if (!res.IsSuccessStatusCode)
+                return ApiResponse<List<LayawayReportLineDto>>.Fail(
+                    await res.Content.ReadAsStringAsync());
+
+            return await res.Content.ReadFromJsonAsync<ApiResponse<List<LayawayReportLineDto>>>()
+                   ?? ApiResponse<List<LayawayReportLineDto>>.Fail("Null response");
+        }
     }
 }

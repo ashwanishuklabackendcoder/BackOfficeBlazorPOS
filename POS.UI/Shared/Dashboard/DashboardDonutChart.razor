@@ -1,0 +1,116 @@
+@if (IsLoading)
+{
+    <div class="dashboard-chart-card dashboard-skeleton">
+        <div class="dashboard-skeleton-line w-40"></div>
+        <div class="dashboard-skeleton-line w-25 mt-2"></div>
+        <div class="dashboard-skeleton-donut mt-4"></div>
+    </div>
+}
+else
+{
+    <div class="dashboard-chart-card">
+        <div class="dashboard-chart-head">
+            <div>
+                <div class="dashboard-chart-title">@Title</div>
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <div class="dashboard-chart-subtitle">@Subtitle</div>
+                }
+            </div>
+        </div>
+
+        @if (HasData)
+        {
+            <div class="dashboard-donut-layout">
+                <div class="dashboard-donut-wrap">
+                    <svg class="dashboard-donut" viewBox="0 0 240 240" role="img" aria-label="@Title">
+                        <circle cx="120" cy="120" r="@Radius" class="dashboard-donut-track" />
+                        @foreach (var slice in Slices)
+                        {
+                            <circle cx="120" cy="120"
+                                    r="@Radius"
+                                    class="dashboard-donut-slice"
+                                    stroke="@slice.Color"
+                                    stroke-dasharray="@slice.DashArray"
+                                    stroke-dashoffset="@slice.DashOffset"
+                                    transform="rotate(-90 120 120)" />
+                        }
+                    </svg>
+                    <div class="dashboard-donut-center">
+                        <div class="dashboard-donut-total">@FormatPound(Total)</div>
+                        <div class="dashboard-donut-caption">@CenterCaption</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-legend">
+                    @foreach (var item in Items ?? Array.Empty<DashboardDistributionItemDto>())
+                    {
+                        <div class="dashboard-legend-item">
+                            <span class="dashboard-legend-swatch" style="background:@item.Color"></span>
+                            <span class="dashboard-legend-label">@item.Label</span>
+                            <span class="dashboard-legend-value">@FormatPound(item.Value)</span>
+                            <span class="dashboard-legend-percent">@item.Percentage.ToString("0.##")%</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="dashboard-empty-state">
+                <div class="dashboard-empty-icon"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i></div>
+                <div class="dashboard-empty-title">No data for this breakdown.</div>
+                <div class="dashboard-empty-subtitle">Nothing matched the selected filters yet.</div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private const double Radius = 76d;
+    private const double Circumference = 2d * Math.PI * Radius;
+
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string CenterCaption { get; set; } = "Total";
+    [Parameter] public IReadOnlyList<DashboardDistributionItemDto>? Items { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+
+    private decimal Total => Items?.Sum(x => x.Value) ?? 0m;
+    private bool HasData => Total > 0m && Items != null && Items.Any(x => x.Value > 0m);
+
+    private IReadOnlyList<SliceInfo> Slices => BuildSlices();
+
+    private IReadOnlyList<SliceInfo> BuildSlices()
+    {
+        if (Items == null || Items.Count == 0 || Total <= 0m)
+            return Array.Empty<SliceInfo>();
+
+        var result = new List<SliceInfo>();
+        var offset = 0d;
+
+        foreach (var item in Items.Where(x => x.Value > 0m))
+        {
+            var length = (double)(item.Value / Total) * Circumference;
+            result.Add(new SliceInfo
+            {
+                Color = item.Color,
+                DashArray = $"{length:0.##} {Circumference:0.##}",
+                DashOffset = -offset
+            });
+            offset += length;
+        }
+
+        return result;
+    }
+
+    private static string FormatPound(decimal value)
+        => $"£{value:N2}";
+
+    private sealed class SliceInfo
+    {
+        public string Color { get; set; } = "";
+        public string DashArray { get; set; } = "";
+        public double DashOffset { get; set; }
+    }
+}

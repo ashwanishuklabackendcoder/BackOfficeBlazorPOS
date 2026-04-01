@@ -1,0 +1,172 @@
+@if (IsLoading)
+{
+    <div class="dashboard-chart-card dashboard-skeleton">
+        <div class="dashboard-skeleton-line w-40"></div>
+        <div class="dashboard-skeleton-line w-25 mt-2"></div>
+        <div class="dashboard-skeleton-chart mt-4"></div>
+    </div>
+}
+else
+{
+    <div class="dashboard-chart-card">
+        <div class="dashboard-chart-head">
+            <div>
+                <div class="dashboard-chart-title">@Title</div>
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <div class="dashboard-chart-subtitle">@Subtitle</div>
+                }
+            </div>
+        </div>
+
+        @if (HasData)
+        {
+            <div class="dashboard-chart-scroll">
+                <svg class="dashboard-line-chart" viewBox="0 0 1000 320" role="img" aria-label="@Title">
+                    <defs>
+                        <linearGradient id="@GradientId" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="@LineColor" stop-opacity="0.3" />
+                            <stop offset="100%" stop-color="@LineColor" stop-opacity="0.02" />
+                        </linearGradient>
+                    </defs>
+
+                    @for (var i = 0; i < GridLines; i++)
+                    {
+                        var y = 30 + (i * 52);
+                        <line x1="20" y1="@y" x2="980" y2="@y" class="dashboard-chart-grid" />
+                    }
+
+                    <path d="@AreaPath" fill="@($"url(#{GradientId})")" />
+                    <path d="@LinePath" class="dashboard-line-chart-path" stroke="@LineColor" />
+
+                    @foreach (var point in ChartPoints)
+                    {
+                        <circle cx="@point.X" cy="@point.Y" r="4.5" fill="@LineColor" class="dashboard-line-point" />
+                    }
+                </svg>
+            </div>
+
+            <div class="dashboard-x-axis">
+                @foreach (var point in Points!)
+                {
+                    <span class="dashboard-x-axis-label">@point.Label</span>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="dashboard-empty-state">
+                <div class="dashboard-empty-icon"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></div>
+                <div class="dashboard-empty-title">No trend data for the selected filters.</div>
+                <div class="dashboard-empty-subtitle">Try widening the date range or selecting another location.</div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private const int ChartWidth = 1000;
+    private const int ChartHeight = 320;
+    private const int PaddingX = 40;
+    private const int PaddingTop = 30;
+    private const int PaddingBottom = 52;
+    private const int GridLines = 5;
+    private readonly string GradientId = $"line-gradient-{Guid.NewGuid():N}";
+
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public IReadOnlyList<DashboardTrendPointDto>? Points { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string LineColor { get; set; } = "#2563eb";
+
+    private bool HasData => Points != null && Points.Count > 0 && Points.Any(x => x.Value > 0m);
+
+    private IReadOnlyList<(double X, double Y)> ChartPoints
+        => BuildChartPoints();
+
+    private string LinePath => BuildLinePath();
+    private string AreaPath => BuildAreaPath();
+
+    private IReadOnlyList<(double X, double Y)> BuildChartPoints()
+    {
+        if (Points == null || Points.Count == 0)
+            return Array.Empty<(double X, double Y)>();
+
+        var values = Points.Select(x => (double)x.Value).ToArray();
+        var max = Math.Max(1d, values.Max());
+        var width = ChartWidth - (PaddingX * 2);
+        var height = ChartHeight - PaddingTop - PaddingBottom;
+
+        return values
+            .Select((value, index) =>
+            {
+                var x = Points.Count <= 1
+                    ? PaddingX + width / 2d
+                    : PaddingX + (width * index / (Points.Count - 1d));
+
+                var y = PaddingTop + (height - ((value / max) * height));
+                return (X: x, Y: y);
+            })
+            .ToArray();
+    }
+
+    private string BuildLinePath()
+    {
+        var points = ChartPoints;
+        if (points.Count == 0)
+            return string.Empty;
+
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < points.Count; i++)
+        {
+            var point = points[i];
+            builder.Append(i == 0 ? "M" : "L");
+            builder.Append(point.X.ToString("0.##"));
+            builder.Append(' ');
+            builder.Append(point.Y.ToString("0.##"));
+            builder.Append(' ');
+        }
+
+        return builder.ToString();
+    }
+
+    private string BuildAreaPath()
+    {
+        var points = ChartPoints;
+        if (points.Count == 0)
+            return string.Empty;
+
+        var first = points[0];
+        var last = points[^1];
+        var builder = new System.Text.StringBuilder();
+        builder.Append("M ");
+        builder.Append(first.X.ToString("0.##"));
+        builder.Append(' ');
+        builder.Append(ChartHeight - PaddingBottom);
+
+        builder.Append(' ');
+        builder.Append("L ");
+        builder.Append(first.X.ToString("0.##"));
+        builder.Append(' ');
+        builder.Append(first.Y.ToString("0.##"));
+        builder.Append(' ');
+
+        for (var i = 1; i < points.Count; i++)
+        {
+            var point = points[i];
+            builder.Append("L ");
+            builder.Append(point.X.ToString("0.##"));
+            builder.Append(' ');
+            builder.Append(point.Y.ToString("0.##"));
+            builder.Append(' ');
+        }
+
+        builder.Append("L ");
+        builder.Append(last.X.ToString("0.##"));
+        builder.Append(' ');
+        builder.Append(ChartHeight - PaddingBottom);
+        builder.Append(" Z");
+
+        return builder.ToString();
+    }
+}

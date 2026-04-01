@@ -1,0 +1,295 @@
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using System.Globalization
+
+@inject ICustomerService CustomerService
+@inject AppSnackbarService AppSnackbar
+
+<div class="modal fade show d-block customer-search-modal-backdrop" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable customer-search-modal-dialog">
+            <div class="modal-content customer-search-modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0">Search Customer</h5>
+                    <div class="small text-muted">Press Enter to search. Pick a row to fill the customer account.</div>
+                </div>
+                <button type="button" class="btn-close" @onclick="CancelAsync" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label-custom">Surname</label>
+                        <input class="form-control" @bind="Surname" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label-custom">Name</label>
+                        <input class="form-control" @bind="Name" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">Title</label>
+                        <input class="form-control" @bind="Title" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">Initials</label>
+                        <input class="form-control" @bind="Initials" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">Acc No</label>
+                        <input class="form-control" @bind="AccNo" @bind:event="oninput" />
+                    </div>
+                </div>
+
+                <div class="row g-2 mt-2">
+                    <div class="col-md-4">
+                        <label class="form-label-custom">Address</label>
+                        <input class="form-control" @bind="Address" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">PostCode</label>
+                        <input class="form-control" @bind="PostCode" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">Loyalty No</label>
+                        <input class="form-control" @bind="LoyaltyNo" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">Mobile</label>
+                        <input class="form-control" @bind="Mobile" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-custom">Telephone</label>
+                        <input class="form-control" @bind="Telephone" @bind:event="oninput" />
+                    </div>
+                </div>
+
+                <div class="row g-2 mt-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label-custom">Email</label>
+                        <input class="form-control" @bind="Email" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label-custom">Match Type</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="@GetMatchButtonClass(IsContainsMatch)" @onclick="SetMatchTypeContainsAsync">Contains</button>
+                            <button type="button" class="@GetMatchButtonClass(IsEqualMatch)" @onclick="SetMatchTypeEqualAsync">Equal</button>
+                            <button type="button" class="@GetMatchButtonClass(IsStartsWithMatch)" @onclick="SetMatchTypeStartsWithAsync">Start With</button>
+                            <button type="button" class="@GetMatchButtonClass(IsEndsWithMatch)" @onclick="SetMatchTypeEndsWithAsync">Ends With</button>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="currentOnlyToggle" checked="@CurrentOnly" @onchange="OnCurrentOnlyChanged" />
+                            <label class="form-check-label" for="currentOnlyToggle">Current only</label>
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2 justify-content-md-end">
+                        <button type="button" class="btn btn-outline-secondary" disabled="@IsLoading" @onclick="ClearAsync">Clear</button>
+                        <button type="button" class="btn btn-primary" disabled="@IsLoading" @onclick="SearchAsync">Search</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive customer-search-result-wrap mt-3">
+                    <table class="table table-sm table-bordered table-hover align-middle mb-0 customer-search-result-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Acc No</th>
+                                <th>Name</th>
+                                <th>Address</th>
+                                <th>PostCode</th>
+                                <th>Mobile</th>
+                                <th>Telephone</th>
+                                <th>Email</th>
+                                <th>Current</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (IsLoading)
+                            {
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-4">Searching customers...</td>
+                                </tr>
+                            }
+                            else if (Results.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-4">No customers found</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                    @foreach (var customer in Results)
+                                    {
+                                        <tr role="button" @onclick="() => SelectAsync(customer)">
+                                        <td>@customer.AccNo</td>
+                                        <td>@GetDisplayName(customer)</td>
+                                        <td>@GetAddress(customer)</td>
+                                        <td>@customer.Postcode</td>
+                                        <td>@customer.Mobile</td>
+                                        <td>@customer.Telephone</td>
+                                        <td>@customer.Email</td>
+                                        <td>@(customer.Stop ? "No" : "Yes")</td>
+                                        <td class="text-end">
+                                            <button type="button"
+                                                    class="btn btn-success btn-sm"
+                                                    @onclick:stopPropagation="true"
+                                                    @onclick="() => SelectAsync(customer)">
+                                                Select
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<CustomerDto> OnSelected { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<CustomerDto> Results { get; set; } = new();
+    private bool IsLoading { get; set; }
+
+    private string? Surname { get; set; }
+    private string? Name { get; set; }
+    private string? Title { get; set; }
+    private string? Initials { get; set; }
+    private string? Address { get; set; }
+    private string? AccNo { get; set; }
+    private string? PostCode { get; set; }
+    private string? LoyaltyNo { get; set; }
+    private bool CurrentOnly { get; set; }
+    private string? Mobile { get; set; }
+    private string? Telephone { get; set; }
+    private string? Email { get; set; }
+    private string MatchType { get; set; } = "Contains";
+
+    private bool IsContainsMatch => string.Equals(MatchType, "Contains", StringComparison.OrdinalIgnoreCase);
+    private bool IsEqualMatch => string.Equals(MatchType, "Equal", StringComparison.OrdinalIgnoreCase);
+    private bool IsStartsWithMatch => string.Equals(MatchType, "Start With", StringComparison.OrdinalIgnoreCase);
+    private bool IsEndsWithMatch => string.Equals(MatchType, "Ends With", StringComparison.OrdinalIgnoreCase);
+
+    private async Task SearchAsync()
+    {
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var request = new CustomerSearchRequestDto
+            {
+                Surname = TrimOrNull(Surname),
+                Name = TrimOrNull(Name),
+                Title = TrimOrNull(Title),
+                Initials = TrimOrNull(Initials),
+                Address = TrimOrNull(Address),
+                AccNo = TrimOrNull(AccNo),
+                PostCode = TrimOrNull(PostCode),
+                LoyaltyNo = TrimOrNull(LoyaltyNo),
+                CurrentOnly = CurrentOnly,
+                Mobile = TrimOrNull(Mobile),
+                Telephone = TrimOrNull(Telephone),
+                Email = TrimOrNull(Email),
+                MatchType = MatchType
+            };
+
+            var response = await CustomerService.SearchAsync(request);
+            Results = response.Success && response.Data != null
+                ? response.Data.OrderBy(x => x.Surname).ThenBy(x => x.Firstname).ThenBy(x => x.AccNo).ToList()
+                : new();
+
+            if (!response.Success && !string.Equals(response.Message, "Customer Not Found", StringComparison.OrdinalIgnoreCase))
+            {
+                await AppSnackbar.Show(response.Message ?? "Unable to search customers.", SnackbarType.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            await AppSnackbar.Show(ex.Message, SnackbarType.Error);
+            Results = new();
+        }
+        finally
+        {
+            IsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SelectAsync(CustomerDto customer)
+    {
+        if (OnSelected.HasDelegate)
+            await OnSelected.InvokeAsync(customer);
+    }
+
+    private async Task CancelAsync()
+    {
+        if (OnClose.HasDelegate)
+            await OnClose.InvokeAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        Surname = Name = Title = Initials = Address = AccNo = PostCode = LoyaltyNo = Mobile = Telephone = Email = null;
+        CurrentOnly = false;
+        MatchType = "Contains";
+        Results = new();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SetMatchTypeAsync(string value)
+    {
+        MatchType = value;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Task SetMatchTypeContainsAsync() => SetMatchTypeAsync("Contains");
+    private Task SetMatchTypeEqualAsync() => SetMatchTypeAsync("Equal");
+    private Task SetMatchTypeStartsWithAsync() => SetMatchTypeAsync("Start With");
+    private Task SetMatchTypeEndsWithAsync() => SetMatchTypeAsync("Ends With");
+
+    private async Task OnCurrentOnlyChanged(ChangeEventArgs e)
+    {
+        CurrentOnly = e.Value is bool b && b;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string TrimOrNull(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string GetDisplayName(CustomerDto customer)
+    {
+        var parts = new[]
+        {
+            customer.Title,
+            customer.Initials,
+            customer.Firstname,
+            customer.Surname
+        }.Where(x => !string.IsNullOrWhiteSpace(x));
+
+        var display = string.Join(" ", parts);
+        return string.IsNullOrWhiteSpace(display) ? customer.AccNo ?? string.Empty : display;
+    }
+
+    private static string GetAddress(CustomerDto customer)
+    {
+        var parts = new[]
+        {
+            customer.HouseName,
+            customer.Address1,
+            customer.Address2,
+            customer.Address3,
+            customer.Address4
+        }.Where(x => !string.IsNullOrWhiteSpace(x));
+
+        return string.Join(", ", parts);
+    }
+
+    private static string GetMatchButtonClass(bool active)
+        => active ? "btn btn-sm btn-primary" : "btn btn-sm btn-outline-secondary";
+}

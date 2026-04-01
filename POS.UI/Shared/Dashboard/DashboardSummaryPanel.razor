@@ -1,0 +1,42 @@
+@if (IsLoading)
+{
+    <div class="dashboard-summary-card dashboard-skeleton">
+        <div class="dashboard-skeleton-line w-35"></div>
+        <div class="dashboard-skeleton-grid mt-3"></div>
+    </div>
+}
+else
+{
+    <div class="dashboard-summary-card">
+        <div class="dashboard-chart-head">
+            <div>
+                <div class="dashboard-chart-title">@Title</div>
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <div class="dashboard-chart-subtitle">@Subtitle</div>
+                }
+            </div>
+        </div>
+
+        <div class="dashboard-summary-grid">
+            @foreach (var item in Items ?? Array.Empty<DashboardSummaryItemDto>())
+            {
+                <div class="dashboard-summary-item">
+                    <div class="dashboard-summary-label">@item.Label</div>
+                    <div class="dashboard-summary-value">@item.Value</div>
+                    @if (!string.IsNullOrWhiteSpace(item.Subtext))
+                    {
+                        <div class="dashboard-summary-subtext">@item.Subtext</div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public IReadOnlyList<DashboardSummaryItemDto>? Items { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+}

@@ -1,0 +1,78 @@
+@typeparam TItem
+
+<div class="selector-dropdown-panel">
+    <div class="selector-dropdown-search">
+        <input class="form-control selector-dropdown-search-input"
+               @ref="_searchInput"
+               value="@search"
+               placeholder="@SearchPlaceholder"
+               @oninput="OnSearchInput" />
+    </div>
+
+    <div class="selector-dropdown-list">
+        @if (Items is not null && Items.Any())
+        {
+            @foreach (var item in Items)
+            {
+                <button type="button"
+                        class="selector-dropdown-item @(IsSelected?.Invoke(item) == true ? "is-active" : "")"
+                        @onclick="() => SelectAsync(item)">
+                    @ItemText(item)
+                </button>
+            }
+        }
+        else
+        {
+            <div class="selector-dropdown-empty">No results found.</div>
+        }
+    </div>
+
+    <div class="selector-dropdown-footer">
+        <button type="button"
+                class="selector-dropdown-manage"
+                @onclick="OnManage"
+                @onclick:stopPropagation="true">
+            @ManageLabel
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IEnumerable<TItem> Items { get; set; } = Array.Empty<TItem>();
+    [Parameter, EditorRequired] public Func<TItem, string> ItemText { get; set; } = default!;
+    [Parameter] public Func<TItem, bool>? IsSelected { get; set; }
+    [Parameter, EditorRequired] public EventCallback<TItem> ItemSelected { get; set; }
+    [Parameter] public EventCallback<string> SearchChanged { get; set; }
+    [Parameter] public EventCallback OnManage { get; set; }
+    [Parameter] public string SearchPlaceholder { get; set; } = "Search...";
+    [Parameter] public string ManageLabel { get; set; } = "Manage";
+    [Parameter] public string? InitialSearch { get; set; }
+
+    private string search = string.Empty;
+    private bool searchSeeded;
+    private ElementReference _searchInput;
+
+    protected override void OnParametersSet()
+    {
+        if (!searchSeeded)
+        {
+            search = InitialSearch ?? string.Empty;
+            searchSeeded = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await _searchInput.FocusAsync();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        search = e.Value?.ToString() ?? string.Empty;
+        await SearchChanged.InvokeAsync(search);
+    }
+
+    private Task SelectAsync(TItem item)
+        => ItemSelected.InvokeAsync(item);
+}

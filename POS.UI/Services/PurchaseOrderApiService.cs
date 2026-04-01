@@ -37,6 +37,13 @@ namespace POS.UI.Services
             return await ApiResponseReader.ReadAsync<List<PurchaseOrderSummaryDto>>(response, "Order search failed");
         }
 
+        public async Task<ApiResponse<List<PurchaseOrderSupplierOptionDto>>> GetSupplierOptionsAsync(int? status)
+        {
+            var url = $"api/purchase-orders/suppliers?status={status?.ToString() ?? string.Empty}";
+            var response = await _http.GetAsync(url);
+            return await ApiResponseReader.ReadAsync<List<PurchaseOrderSupplierOptionDto>>(response, "Supplier search failed");
+        }
+
         public async Task<ApiResponse<PurchaseOrderWorkspaceDto>> RaiseAsync(PurchaseOrderUpsertRequestDto request)
         {
             var response = await _http.PostAsJsonAsync("api/purchase-orders/raise", request);
@@ -45,7 +52,7 @@ namespace POS.UI.Services
 
         public async Task<ApiResponse<PurchaseOrderWorkspaceDto>> RaiseDirectAsync(PurchaseOrderDirectRaiseRequestDto request)
         {
-            var response = await _http.PostAsJsonAsync("api/purchase-orders/direct-raise", request);
+             var response = await _http.PostAsJsonAsync("api/purchase-orders/direct-raise", request);
             return await ApiResponseReader.ReadAsync<PurchaseOrderWorkspaceDto>(response, "Direct raise failed");
         }
 
@@ -53,6 +60,12 @@ namespace POS.UI.Services
         {
             var response = await _http.PostAsJsonAsync("api/purchase-orders/receive", request);
             return await ApiResponseReader.ReadAsync<PurchaseOrderWorkspaceDto>(response, "Receive order failed");
+        }
+
+        public async Task<ApiResponse<PurchaseOrderWorkspaceDto>> AmendAsync(PurchaseOrderAmendRequestDto request)
+        {
+            var response = await _http.PostAsJsonAsync("api/purchase-orders/amend", request);
+            return await ApiResponseReader.ReadAsync<PurchaseOrderWorkspaceDto>(response, "Amend order failed");
         }
 
         public async Task<ApiResponse<bool>> CancelAsync(string orderNumber, string cancelledByCode)

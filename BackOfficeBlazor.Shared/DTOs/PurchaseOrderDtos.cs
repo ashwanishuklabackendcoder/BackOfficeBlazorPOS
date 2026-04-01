@@ -79,6 +79,12 @@ namespace BackOfficeBlazor.Shared.DTOs
         public decimal TotalCost { get; set; }
     }
 
+    public class PurchaseOrderSupplierOptionDto
+    {
+        public string SupplierCode { get; set; } = string.Empty;
+        public string SupplierName { get; set; } = string.Empty;
+    }
+
     public class PurchaseOrderWorkspaceDto
     {
         public int DraftRef { get; set; }
@@ -122,6 +128,22 @@ namespace BackOfficeBlazor.Shared.DTOs
         public decimal? ReceivedUnitCost { get; set; }
         public string? StockLocationCode { get; set; }
         public string? DeliveryLocationCode { get; set; }
+    }
+
+    public class PurchaseOrderAmendRequestDto
+    {
+        public string OrderNumber { get; set; } = string.Empty;
+        public string AmendedByCode { get; set; } = string.Empty;
+        public List<PurchaseOrderAmendLineDto> Lines { get; set; } = new();
+    }
+
+    public class PurchaseOrderAmendLineDto
+    {
+        public int ItemId { get; set; }
+        public string PartNumber { get; set; } = string.Empty;
+        public int SequenceId { get; set; }
+        public int QtyRequired { get; set; }
+        public decimal CostPrice { get; set; }
     }
 
     public enum PurchaseOrderItemScope

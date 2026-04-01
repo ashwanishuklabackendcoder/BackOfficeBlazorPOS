@@ -18,6 +18,7 @@ namespace POSAPI.Controllers
         private readonly IPrintJobService _printJobs;
         private readonly IPrintJobDispatcher _dispatcher;
         private readonly IEscPosBuilder _escPos;
+        private readonly ISysOptionService _sysOptions;
         private readonly ApiAccessService _access;
         private readonly ILogger<SalesController> _logger;
 
@@ -27,6 +28,7 @@ namespace POSAPI.Controllers
             IPrintJobService printJobs,
             IPrintJobDispatcher dispatcher,
             IEscPosBuilder escPos,
+            ISysOptionService sysOptions,
             ApiAccessService access,
             ILogger<SalesController> logger)
         {
@@ -35,6 +37,7 @@ namespace POSAPI.Controllers
             _printJobs = printJobs;
             _dispatcher = dispatcher;
             _escPos = escPos;
+            _sysOptions = sysOptions;
             _access = access;
             _logger = logger;
         }
@@ -61,7 +64,7 @@ namespace POSAPI.Controllers
             try
             {
                 var invoiceNo = await _service.ProcessSaleAsync(dto);
-                var printResult = await TryQueueReceiptPrintAsync(dto, invoiceNo);
+                var printResult = await TryQueueInvoicePrintAsync(dto, invoiceNo);
 
                 return Ok(ApiResponse<SaleProcessResultDto>.Ok(
                     new SaleProcessResultDto
@@ -80,7 +83,7 @@ namespace POSAPI.Controllers
             }
         }
 
-        private async Task<(bool Queued, string Message)> TryQueueReceiptPrintAsync(PosSaleRequestDto sale, string invoiceNo)
+        private async Task<(bool Queued, string Message)> TryQueueInvoicePrintAsync(PosSaleRequestDto sale, string invoiceNo)
         {
             try
             {
@@ -89,15 +92,16 @@ namespace POSAPI.Controllers
                     return (false, "Terminal code missing");
 
                 var assignment = await _terminalOptions.GetByTerminalCodeAsync(terminalCode);
-                if (assignment == null || assignment.ReceiptPrinterId <= 0)
-                    return (false, $"Receipt printer not assigned for terminal {terminalCode}");
+                if (assignment == null || !assignment.A4PrinterId.HasValue || assignment.A4PrinterId.Value <= 0)
+                    return (false, $"A4 printer not assigned for terminal {terminalCode}");
 
-                var payload = _escPos.BuildSaleReceipt(invoiceNo, sale);
+                var sysOptions = await _sysOptions.GetAsync();
+                var payload = _escPos.BuildSaleInvoiceHtml(invoiceNo, sale, sysOptions.Success ? sysOptions.Data : null);
                 var enqueue = await _printJobs.EnqueueAsync(new PrintJobRequestDto
                 {
                     TerminalCode = terminalCode,
-                    PrinterConfigId = assignment.ReceiptPrinterId,
-                    JobType = "Receipt",
+                    PrinterConfigId = assignment.A4PrinterId.Value,
+                    JobType = "A4Invoice",
                     Payload = payload
                 });
 
@@ -105,12 +109,12 @@ namespace POSAPI.Controllers
                     return (false, enqueue.Message);
 
                 await _dispatcher.DispatchAsync(enqueue.Data);
-                return (true, "Receipt queued");
+                return (true, "Invoice queued");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Receipt queue failed for invoice {InvoiceNo}", invoiceNo);
-                return (false, "Sale was saved, but receipt queueing failed.");
+                _logger.LogWarning(ex, "Invoice queue failed for invoice {InvoiceNo}", invoiceNo);
+                return (false, "Sale was saved, but invoice queueing failed.");
             }
         }
     }

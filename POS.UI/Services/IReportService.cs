@@ -8,5 +8,17 @@ namespace POS.UI.Services
     {
         Task<ApiResponse<List<CustomerSalesReturnLineDto>>> GetCustomerSalesReturnsAsync(
             CustomerSalesReturnReportRequestDto request);
+
+        Task<ApiResponse<List<StockPositionLineDto>>> GetStockPositionAsync(
+            StockPositionReportRequestDto request);
+
+        Task<ApiResponse<List<MajorItemSalesReportLineDto>>> GetMajorItemSalesAsync(
+            MajorItemSalesReportRequestDto request);
+
+        Task<ApiResponse<List<StockTransferReportLineDto>>> GetStockTransferReportAsync(
+            StockTransferReportRequestDto request);
+
+        Task<ApiResponse<List<LayawayReportLineDto>>> GetLayawayReportAsync(
+            LayawayReportRequestDto request);
     }
 }

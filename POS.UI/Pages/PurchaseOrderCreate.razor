@@ -9,26 +9,25 @@
 @inject IProductEnquiryService ProductEnquiryService
 @inject AppSnackbarService AppSnackbar
 @inject IAuthService AuthService
-@inject IStaffUserService StaffUserApi
 @inject ISupplierService SupplierService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>Purchase Order Create</PageTitle>
 
-<div class="card shadow-sm border-0 product-list-card" id="po-create-form">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+<div class="card shadow-sm border-0 form-shell-card product-list-card" id="po-create-form">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
         <div>
-            <h5 class="fw-bold mb-0">Purchase Order Creation</h5>
-            <div class="small text-muted">Create a draft purchase order from one form</div>
+            <h5 class="form-shell-title">Create Purchase Order</h5>
+            <div class="form-shell-subtitle">Create a draft purchase order from one form</div>
         </div>
-        <div class="small text-muted text-end">
+        <div class="form-shell-meta text-end">
             <div>Draft Ref: <strong>@DraftRefDisplay</strong></div>
             <div>Order No: <strong>@(string.IsNullOrWhiteSpace(OrderNumber) ? "-" : OrderNumber)</strong></div>
         </div>
     </div>
 
-    <div class="card-body p-4">
+    <div class="card-body form-shell-body p-4">
         <div class="row g-4">
             <div class="col-lg-7">
                 <div class="row g-3 align-items-center">
@@ -104,8 +103,7 @@
 
                     <div class="col-md-4 fw-semibold text-uppercase">Sales Code</div>
                     <div class="col-md-8">
-                        <input class="form-control w-25" @bind="SalesCode" @bind:event="oninput" />
-                        <div class="small text-primary fw-semibold mt-1">@SalesStaffNameOrFallback</div>
+                        <StaffCodeLookup @bind-Value="SalesCode" InputClass="form-control w-25" />
                     </div>
 
                     <div class="col-md-4 fw-semibold text-uppercase">Notes</div>
@@ -141,7 +139,7 @@
                     </div>
 
                     <div class="border rounded p-3 bg-white text-center">
-                        <div class="small text-muted">Order Total</div>
+                        <div class="form-shell-subtitle">Order Total</div>
                         <div class="display-6 fw-bold text-primary">@OrderTotal.ToString("£0.00")</div>
                     </div>
                 </div>
@@ -249,8 +247,6 @@
 
     List<PurchaseOrderLineDto> Lines = new();
     ProductDto? CurrentProduct;
-    List<StaffUserDto> StaffUsers = new();
-    string SalesStaffName = string.Empty;
 
     string DraftRefDisplay => DraftRef?.ToString() ?? "-";
     string CurrentProductDisplay => string.IsNullOrWhiteSpace(Description) ? "-" : Description;
@@ -259,13 +255,8 @@
     string SalesCode
     {
         get => _salesCode;
-        set
-        {
-            _salesCode = value?.Trim() ?? string.Empty;
-            UpdateSalesStaffName();
-        }
+        set => _salesCode = value?.Trim() ?? string.Empty;
     }
-    string SalesStaffNameOrFallback => string.IsNullOrWhiteSpace(SalesStaffName) ? "-" : SalesStaffName;
     string MarginText
     {
         get
@@ -281,12 +272,6 @@
         ? (int)(Math.Ceiling(Math.Max(QtyRequired, 1) / (decimal)BoxQty) * BoxQty)
         : Math.Max(QtyRequired, 1);
     decimal OrderTotal => Lines.Sum(x => x.LineTotal);
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadStaffUsersAsync();
-        UpdateSalesStaffName();
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -590,7 +575,6 @@
         SalesCode = string.Empty;
         StockLocationCode = "01";
         ProductSearchTerm = null;
-        SalesStaffName = string.Empty;
 
         SupplierCode = keepSupplier ? supplier : string.Empty;
         SupplierName = keepSupplier ? SupplierName : string.Empty;
@@ -613,14 +597,6 @@
         return MfrPartNumber?.Trim() ?? string.Empty;
     }
 
-    async Task LoadStaffUsersAsync()
-    {
-        var response = await StaffUserApi.GetAllAsync();
-        StaffUsers = response.Success && response.Data != null
-            ? response.Data
-            : new List<StaffUserDto>();
-    }
-
     async Task LoadSupplierNameAsync(string? supplierCode)
     {
         var code = supplierCode?.Trim() ?? string.Empty;
@@ -633,21 +609,6 @@
         SupplierName = supplier.Success && supplier.Data != null
             ? supplier.Data.Name ?? string.Empty
             : string.Empty;
-    }
-
-    void UpdateSalesStaffName()
-    {
-        var code = SalesCode?.Trim();
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            SalesStaffName = string.Empty;
-            return;
-        }
-
-        var match = StaffUsers.FirstOrDefault(x =>
-            string.Equals(x.StaffCode?.Trim(), code, StringComparison.OrdinalIgnoreCase));
-
-        SalesStaffName = match?.FullName ?? match?.Username ?? string.Empty;
     }
 
     void Exit()

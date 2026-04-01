@@ -45,5 +45,101 @@ namespace POSAPI.Controllers
             var rows = await _service.GetCustomerSalesReturnsAsync(request);
             return Ok(ApiResponse<List<CustomerSalesReturnLineDto>>.Ok(rows, "Report loaded."));
         }
+
+        [HttpPost("stock-position")]
+        public async Task<IActionResult> GetStockPosition([FromBody] StockPositionReportRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.StockInput, PermissionKeys.CustomerSalesReturn))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<StockPositionLineDto>>.Fail("You do not have permission to view stock position reports."));
+            }
+
+            if (request == null)
+            {
+                return BadRequest(ApiResponse<List<StockPositionLineDto>>.Fail(
+                    "Report criteria are required."));
+            }
+
+            var rows = await _service.GetStockPositionAsync(request);
+            return Ok(ApiResponse<List<StockPositionLineDto>>.Ok(rows, "Report loaded."));
+        }
+
+        [HttpPost("major-item-sales")]
+        public async Task<IActionResult> GetMajorItemSales([FromBody] MajorItemSalesReportRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.StockInput, PermissionKeys.CustomerSalesReturn))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<MajorItemSalesReportLineDto>>.Fail("You do not have permission to view major item sales reports."));
+            }
+
+            if (request == null)
+            {
+                return BadRequest(ApiResponse<List<MajorItemSalesReportLineDto>>.Fail(
+                    "Report criteria are required."));
+            }
+
+            var rows = await _service.GetMajorItemSalesAsync(request);
+            return Ok(ApiResponse<List<MajorItemSalesReportLineDto>>.Ok(rows, "Report loaded."));
+        }
+
+        [HttpPost("stock-transfer")]
+        public async Task<IActionResult> GetStockTransferReport([FromBody] StockTransferReportRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.StockInput, PermissionKeys.CustomerSalesReturn))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<StockTransferReportLineDto>>.Fail("You do not have permission to view stock transfer reports."));
+            }
+
+            if (request == null)
+            {
+                return BadRequest(ApiResponse<List<StockTransferReportLineDto>>.Fail(
+                    "Report criteria are required."));
+            }
+
+            if (request.DateMode?.Trim().Equals("DateRange", StringComparison.OrdinalIgnoreCase) == true
+                && request.FromDate.HasValue
+                && request.ToDate.HasValue
+                && request.FromDate > request.ToDate)
+            {
+                return BadRequest(ApiResponse<List<StockTransferReportLineDto>>.Fail(
+                    "Invalid date range."));
+            }
+
+            var rows = await _service.GetStockTransferReportAsync(request);
+            return Ok(ApiResponse<List<StockTransferReportLineDto>>.Ok(rows, "Report loaded."));
+        }
+
+        [HttpPost("layaway-report")]
+        public async Task<IActionResult> GetLayawayReport([FromBody] LayawayReportRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.Layaway))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<LayawayReportLineDto>>.Fail("You do not have permission to view layaway reports."));
+            }
+
+            if (request == null)
+            {
+                return BadRequest(ApiResponse<List<LayawayReportLineDto>>.Fail(
+                    "Report criteria are required."));
+            }
+
+            if (request.CustomerMode?.Trim().Equals("One", StringComparison.OrdinalIgnoreCase) == true &&
+                string.IsNullOrWhiteSpace(request.CustomerAccNo))
+            {
+                return BadRequest(ApiResponse<List<LayawayReportLineDto>>.Fail(
+                    "Customer account number is required."));
+            }
+
+            var rows = await _service.GetLayawayReportAsync(request);
+            return Ok(ApiResponse<List<LayawayReportLineDto>>.Ok(rows, "Report loaded."));
+        }
     }
 }

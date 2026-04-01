@@ -213,7 +213,6 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                     supplierCode = supplierCode.Trim();
                     q = q.Where(x => x.SupplierCode == supplierCode);
                 }
-                status = 1;
                 if (status.HasValue)
                     q = q.Where(x => x.Status == status.Value);
 
@@ -251,6 +250,120 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             catch (Exception ex)
             {
                 return ApiResponse<List<PurchaseOrderSummaryDto>>.Fail($"Search failed: {ex.Message}");
+            }
+        }
+
+        public async Task<ApiResponse<List<PurchaseOrderSupplierOptionDto>>> GetSupplierOptionsAsync(int? status)
+        {
+            try
+            {
+                var q = _context._PurchaseOrderHeaders.AsNoTracking().AsQueryable();
+
+                if (status.HasValue)
+                    q = q.Where(x => x.Status == status.Value);
+
+                var headers = await q
+                    .Select(x => x.SupplierCode)
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToListAsync();
+
+                if (!headers.Any())
+                    return ApiResponse<List<PurchaseOrderSupplierOptionDto>>.Ok(new List<PurchaseOrderSupplierOptionDto>());
+
+                var result = new List<PurchaseOrderSupplierOptionDto>();
+                foreach (var supplierCode in headers)
+                {
+                    var supplier = await _supplierRepository.GetByAccountNoAsync(supplierCode);
+                    result.Add(new PurchaseOrderSupplierOptionDto
+                    {
+                        SupplierCode = supplierCode,
+                        SupplierName = supplier?.Name ?? string.Empty
+                    });
+                }
+
+                return ApiResponse<List<PurchaseOrderSupplierOptionDto>>.Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<List<PurchaseOrderSupplierOptionDto>>.Fail($"Supplier search failed: {ex.Message}");
+            }
+        }
+
+        public async Task<ApiResponse<PurchaseOrderWorkspaceDto>> AmendAsync(PurchaseOrderAmendRequestDto request)
+        {
+            try
+            {
+                var orderNumber = NormalizeOrderNumber(request.OrderNumber);
+                var header = await _context._PurchaseOrderHeaders
+                    .FirstOrDefaultAsync(x => x.OrderNumber == orderNumber);
+
+                if (header == null)
+                    return ApiResponse<PurchaseOrderWorkspaceDto>.Fail("Purchase order not found");
+
+                if (header.Status != (int)PurchaseOrderStatus.Raised)
+                    return ApiResponse<PurchaseOrderWorkspaceDto>.Fail("Only raised purchase orders can be amended");
+
+                var items = await _context._PurchaseOrderItems
+                    .Where(x => x.OrderNumber == orderNumber)
+                    .OrderBy(x => x.SequenceId)
+                    .ToListAsync();
+
+                if (!items.Any())
+                    return ApiResponse<PurchaseOrderWorkspaceDto>.Fail("Purchase order items not found");
+
+                if (request.Lines.Count == 0)
+                    return ApiResponse<PurchaseOrderWorkspaceDto>.Fail("At least one purchase order line is required");
+
+                using var tx = await _context.Database.BeginTransactionAsync();
+
+                var amendedByCode = Truncate(request.AmendedByCode?.Trim().ToUpperInvariant(), 2);
+                var now = DateTime.UtcNow;
+
+                foreach (var item in items)
+                {
+                    var amendLine = request.Lines.FirstOrDefault(x =>
+                        x.ItemId == item.Id ||
+                        (x.SequenceId > 0 && x.SequenceId == item.SequenceId) ||
+                        (!string.IsNullOrWhiteSpace(x.PartNumber) &&
+                         string.Equals(x.PartNumber.Trim(), item.PartNumber, StringComparison.OrdinalIgnoreCase)));
+
+                    if (amendLine == null)
+                        continue;
+
+                    if (amendLine.QtyRequired <= 0)
+                        return ApiResponse<PurchaseOrderWorkspaceDto>.Fail("Qty Required must be greater than zero");
+
+                    item.QtyRequired = amendLine.QtyRequired;
+                    item.CostPrice = amendLine.CostPrice;
+                    item.DateUpdated = now;
+                }
+
+                header.AmendedLastByCode = amendedByCode;
+                header.AmendedLastOnDate = now;
+                header.DateUpdated = now;
+                header.JsonReport = BuildJsonReport(
+                    header,
+                    items,
+                    await _supplierRepository.GetByAccountNoAsync(header.SupplierCode),
+                    items.FirstOrDefault()?.StockLocationCode,
+                    string.Empty);
+
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                var supplier = await _supplierRepository.GetByAccountNoAsync(header.SupplierCode);
+                return ApiResponse<PurchaseOrderWorkspaceDto>.Ok(
+                    BuildWorkspace(header, items, null, supplier),
+                    "Purchase order amended");
+            }
+            catch (DbUpdateException ex)
+            {
+                return ApiResponse<PurchaseOrderWorkspaceDto>.Fail($"Failed to amend order: {ex.GetBaseException().Message}");
+            }
+            catch (Exception ex)
+            {
+                return ApiResponse<PurchaseOrderWorkspaceDto>.Fail($"Failed to amend order: {ex.Message}");
             }
         }
 

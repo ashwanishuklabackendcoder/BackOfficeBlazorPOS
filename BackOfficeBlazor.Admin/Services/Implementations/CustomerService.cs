@@ -37,6 +37,16 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             return ApiResponse<List<CustomerDto>>.Ok(
                 entities.Select(ToDto).ToList());
         }
+
+        public async Task<ApiResponse<List<CustomerDto>>> SearchAsync(CustomerSearchRequestDto request)
+        {
+            var entities = await _repo.SearchAsync(request);
+            if (entities == null || entities.Count == 0)
+                return ApiResponse<List<CustomerDto>>.Fail("Customer Not Found");
+
+            return ApiResponse<List<CustomerDto>>.Ok(
+                entities.Select(ToDto).ToList());
+        }
         public async Task<ApiResponse<CustomerDto>> SaveAsync(CustomerDto dto)
         {
             try

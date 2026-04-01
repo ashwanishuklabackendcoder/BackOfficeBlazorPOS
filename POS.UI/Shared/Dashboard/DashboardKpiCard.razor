@@ -1,0 +1,81 @@
+@if (IsLoading)
+{
+    <div class="dashboard-kpi-card dashboard-skeleton">
+        <div class="dashboard-skeleton-line w-40"></div>
+        <div class="dashboard-skeleton-line w-60 mt-3"></div>
+        <div class="dashboard-skeleton-line w-80 mt-4"></div>
+        <div class="dashboard-skeleton-line w-50 mt-3"></div>
+    </div>
+}
+else if (Item != null)
+{
+    <div class="dashboard-kpi-card">
+        <div class="dashboard-kpi-head">
+            <div>
+                <div class="dashboard-kpi-title">@Item.Title</div>
+                <div class="dashboard-kpi-subtitle">@Item.Subtitle</div>
+            </div>
+            <div class="dashboard-kpi-chip @TrendClass">
+                <i class="@TrendIcon me-1" aria-hidden="true"></i>
+                @TrendLabel
+            </div>
+        </div>
+
+        <div class="dashboard-kpi-value">@FormatValue(Item.Value, Item.Kind)</div>
+
+        <div class="dashboard-kpi-foot">
+            <span class="dashboard-kpi-comparison">@Item.ComparisonLabel</span>
+            <span class="dashboard-kpi-delta">@FormatDelta(Item.Delta, Item.DeltaPercent, Item.Kind)</span>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public DashboardKpiDto? Item { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+
+    private string TrendClass => Item?.TrendDirection switch
+    {
+        DashboardTrendDirection.Up => "trend-up",
+        DashboardTrendDirection.Down => "trend-down",
+        _ => "trend-flat"
+    };
+
+    private string TrendIcon => Item?.TrendDirection switch
+    {
+        DashboardTrendDirection.Up => "fa-solid fa-arrow-trend-up",
+        DashboardTrendDirection.Down => "fa-solid fa-arrow-trend-down",
+        _ => "fa-solid fa-minus"
+    };
+
+    private string TrendLabel => Item?.TrendDirection switch
+    {
+        DashboardTrendDirection.Up => "Up",
+        DashboardTrendDirection.Down => "Down",
+        _ => "Flat"
+    };
+
+    private static string FormatValue(decimal value, DashboardValueKind kind)
+    {
+        return kind switch
+        {
+            DashboardValueKind.Count => value.ToString("N0"),
+            DashboardValueKind.Percent => value.ToString("0.##") + "%",
+            DashboardValueKind.Text => value.ToString("0.##"),
+            _ => $"£{value:N2}"
+        };
+    }
+
+    private static string FormatDelta(decimal delta, decimal deltaPercent, DashboardValueKind kind)
+    {
+        var sign = delta > 0m ? "+" : delta < 0m ? "-" : string.Empty;
+        var absoluteDelta = Math.Abs(delta);
+
+        return kind switch
+        {
+            DashboardValueKind.Count => $"{sign}{delta:N0} ({sign}{deltaPercent:0.##}%)",
+            DashboardValueKind.Percent => $"{sign}{delta:0.##}% ({sign}{deltaPercent:0.##}%)",
+            _ => $"{sign}£{absoluteDelta:N2} ({sign}{deltaPercent:0.##}%)"
+        };
+    }
+}

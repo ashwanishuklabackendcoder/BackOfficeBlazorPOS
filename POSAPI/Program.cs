@@ -113,6 +113,7 @@ builder.Services.AddScoped<IPrintJobDispatcher, SignalRPrintJobDispatcher>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IQuickShortcutService, QuickShortcutService>();
 builder.Services.AddScoped<IProductEnquiryService, ProductEnquiryService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ApiAccessService>();
 
 
@@ -183,6 +184,7 @@ using (var scope = app.Services.CreateScope())
     await EnsureQuickShortcutSchemaAsync(db);
     await EnsureComboSchemaAsync(db);
     await EnsureReturnsTrackingSchemaAsync(db);
+    await EnsureStockTransferAuditSchemaAsync(db);
     var bootstrapUsername = builder.Configuration["AuthBootstrap:Username"] ?? "admin";
     var bootstrapPassword = builder.Configuration["AuthBootstrap:Password"] ?? "Admin@123";
     var bootstrapName = builder.Configuration["AuthBootstrap:FullName"] ?? "System Administrator";
@@ -370,6 +372,51 @@ static async Task EnsurePrinterSchemaAsync(BackOfficeAdminContext db)
         """);
 }
 
+static async Task EnsureStockTransferAuditSchemaAsync(BackOfficeAdminContext db)
+{
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF OBJECT_ID(N'dbo.ProductStockMovement', N'U') IS NULL
+        BEGIN
+            CREATE TABLE [dbo].[ProductStockMovement](
+                [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                [DateAndTime] DATETIME2 NOT NULL,
+                [PartNo] NVARCHAR(10) NOT NULL CONSTRAINT [DF_ProductStockMovement_PartNo] DEFAULT(''),
+                [StockQty] INT NOT NULL CONSTRAINT [DF_ProductStockMovement_StockQty] DEFAULT(0),
+                [Cost] DECIMAL(18,2) NULL,
+                [StockNumber] NVARCHAR(20) NULL,
+                [SerialNumber] NVARCHAR(20) NULL,
+                [Notes] NVARCHAR(300) NOT NULL CONSTRAINT [DF_ProductStockMovement_Notes] DEFAULT(''),
+                [SalesCode] NVARCHAR(5) NOT NULL CONSTRAINT [DF_ProductStockMovement_SalesCode] DEFAULT(''),
+                [FromLocation] NVARCHAR(2) NOT NULL CONSTRAINT [DF_ProductStockMovement_FromLocation] DEFAULT(''),
+                [ToLocation] NVARCHAR(2) NOT NULL CONSTRAINT [DF_ProductStockMovement_ToLocation] DEFAULT(''),
+                [TotalCurrentStock] INT NOT NULL CONSTRAINT [DF_ProductStockMovement_TotalCurrentStock] DEFAULT(0)
+            );
+        END
+
+        IF OBJECT_ID(N'dbo.ProductStockMovement', N'U') IS NOT NULL
+           AND COL_LENGTH('dbo.ProductStockMovement', 'Cost') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[ProductStockMovement]
+                ADD [Cost] DECIMAL(18,2) NULL;
+        END
+
+        IF OBJECT_ID(N'dbo.ProductStockMovement', N'U') IS NOT NULL
+           AND COL_LENGTH('dbo.ProductStockMovement', 'StockNumber') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[ProductStockMovement]
+                ADD [StockNumber] NVARCHAR(20) NULL;
+        END
+
+        IF OBJECT_ID(N'dbo.ProductStockMovement', N'U') IS NOT NULL
+           AND COL_LENGTH('dbo.ProductStockMovement', 'SerialNumber') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[ProductStockMovement]
+                ADD [SerialNumber] NVARCHAR(20) NULL;
+        END
+        """);
+}
+
 static async Task EnsureQuickShortcutSchemaAsync(BackOfficeAdminContext db)
 {
     await db.Database.ExecuteSqlRawAsync(
@@ -521,6 +568,14 @@ static async Task EnsureComboSchemaAsync(BackOfficeAdminContext db)
         IF COL_LENGTH('dbo.SysOptions', 'DiscountPartNumber') IS NULL
         BEGIN
             ALTER TABLE [dbo].[SysOptions] ADD [DiscountPartNumber] VARCHAR(10) NULL;
+        END
+        """);
+
+    await db.Database.ExecuteSqlRawAsync(
+        """
+        IF COL_LENGTH('dbo.SysOptions', 'CompanyLogoUrl') IS NULL
+        BEGIN
+            ALTER TABLE [dbo].[SysOptions] ADD [CompanyLogoUrl] NVARCHAR(500) NULL;
         END
         """);
 }

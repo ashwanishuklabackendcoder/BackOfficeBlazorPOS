@@ -13,12 +13,15 @@
 
 <PageTitle>Stock Transfer</PageTitle>
 
-<div class="card shadow-sm border-0 product-list-card">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-        <h5 class="fw-bold mb-0">Stock Transfer</h5>
+<div class="card shadow-sm border-0 form-shell-card product-list-card">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+        <div>
+            <h5 class="form-shell-title">Stock Transfer</h5>
+            <div class="form-shell-subtitle">Move stock between locations without changing the workflow</div>
+        </div>
     </div>
 
-    <div class="card-body p-4">
+    <div class="card-body form-shell-body p-4">
         <div class="glass-panel border rounded-3 px-3 py-3">
 
         <!-- PART -->
@@ -46,11 +49,11 @@
 
         <!-- PRODUCT INFO -->
         <div class="row mb-3">
+                <div class="col-sm-3">
+                    <input class="form-control readonly-box" value="@Product?.Make" readonly />
+                </div>
             <div class="col-sm-3">
-                <div class="form-control readonly">@Product?.Make</div>
-            </div>
-            <div class="col-sm-3">
-                <div class="form-control readonly">@Product?.Details</div>
+                <input class="form-control readonly-box" value="@Product?.Details" readonly />
             </div>
         </div>
 
@@ -85,9 +88,38 @@
                 <div class="row mb-2">
                     <label class="col-sm-4 form-label-custom">Sales Code</label>
                     <div class="col-sm-4">
+                        <StaffCodeLookup @bind-Value="SalesCode"
+                                         MaxLength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.SalesCode)))" />
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <label class="col-sm-4 form-label-custom">Cost</label>
+                    <div class="col-sm-4">
+                        <input type="number"
+                               step="0.01"
+                               min="0"
+                               class="form-control"
+                               @bind-value="Cost"
+                               @bind-value:event="oninput" />
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <label class="col-sm-4 form-label-custom">Stock No</label>
+                    <div class="col-sm-4">
                         <input class="form-control"
-                               @bind="SalesCode"
-                               maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.SalesCode)))" />
+                               @bind="StockNumber"
+                               maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.StockNumber)))" />
+                    </div>
+                </div>
+
+                <div class="row mb-2">
+                    <label class="col-sm-4 form-label-custom">Serial No</label>
+                    <div class="col-sm-4">
+                        <input class="form-control"
+                               @bind="SerialNumber"
+                               maxlength="@(MaxLengthHelper.For<StockTransferInputDto>(nameof(StockTransferInputDto.SerialNumber)))" />
                     </div>
                 </div>
 
@@ -111,7 +143,7 @@
             <div class="col-md-6">
 
                 <div class="info-header">
-                    <h6 class="fw-bold mb-0">Transfers This Session</h6>
+                    <h6 class="form-section-title mb-0">Transfers This Session</h6>
                 </div>
 
                 <div style="max-height:220px; overflow-y:auto;">
@@ -122,6 +154,9 @@
                                 <th>From</th>
                                 <th>To</th>
                                 <th>Qty</th>
+                                <th>Cost</th>
+                                <th>Stock No</th>
+                                <th>Serial No</th>
                                 <th>Sales</th>
                             </tr>
                         </thead>
@@ -133,13 +168,16 @@
                                     <td>@t.FromLocation</td>
                                     <td>@t.ToLocation</td>
                                     <td>@t.Quantity</td>
+                                    <td>@t.Cost.ToString("0.00")</td>
+                                    <td>@t.StockNumber</td>
+                                    <td>@t.SerialNumber</td>
                                     <td>@t.SalesCode</td>
                                 </tr>
                             }
                             @if (!SessionTransfers.Any())
                             {
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted">
+                                    <td colspan="8" class="text-center text-muted">
                                         No transfers yet
                                     </td>
                                 </tr>
@@ -166,6 +204,9 @@
     int Quantity = 1;
     int AvailableFromStock;
     string? SalesCode;
+    decimal Cost = 0m;
+    string? StockNumber;
+    string? SerialNumber;
     string? Notes;
 
     List<StockTransferInputDto> SessionTransfers = new();
@@ -229,6 +270,7 @@
         }
 
         Product = res.Data;
+        Cost = Product?.CostPrice ?? 0m;
         await RefreshAvailableFromStockAsync();
         await AppSnackbar.Show("Product loaded", SnackbarType.Success);
     }
@@ -289,6 +331,9 @@
             ToLocation = ToLocation,
             Quantity = Quantity,
             SalesCode = SalesCode ?? "",
+            Cost = Cost,
+            StockNumber = StockNumber,
+            SerialNumber = SerialNumber,
             Notes = Notes ?? ""
         };
 
@@ -303,6 +348,9 @@
         await AppSnackbar.Show(result.Message ?? "Stock transferred successfully", SnackbarType.Success);
         await RefreshAvailableFromStockAsync();
         Quantity = 1;
+        Cost = 0m;
+        StockNumber = null;
+        SerialNumber = null;
         Notes = null;
     }
 

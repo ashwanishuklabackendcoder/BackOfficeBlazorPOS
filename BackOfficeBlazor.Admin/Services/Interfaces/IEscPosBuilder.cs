@@ -6,5 +6,6 @@ namespace BackOfficeBlazor.Admin.Services.Interfaces
     {
         string BuildTestReceipt();
         string BuildSaleReceipt(string invoiceNo, PosSaleRequestDto sale);
+        string BuildSaleInvoiceHtml(string invoiceNo, PosSaleRequestDto sale, SysOptionsDto? sysOptions);
     }
 }

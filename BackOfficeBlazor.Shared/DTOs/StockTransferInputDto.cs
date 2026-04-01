@@ -22,6 +22,14 @@ namespace BackOfficeBlazor.Shared.DTOs
         [StringLength(5)]
         public string SalesCode { get; set; } = "";
 
+        [StringLength(20)]
+        public string? StockNumber { get; set; }
+
+        [StringLength(20)]
+        public string? SerialNumber { get; set; }
+
+        public decimal Cost { get; set; }
+
         [StringLength(300)]
         public string Notes { get; set; } = "";
     }

@@ -1,7 +1,9 @@
-﻿@page "/"
+@page "/"
+@inject NavigationManager Nav
 
-<PageTitle>Home</PageTitle>
-
-<h1>POS V1</h1>
-
-
+@code {
+    protected override void OnInitialized()
+    {
+        Nav.NavigateTo("/dashboard", true);
+    }
+}

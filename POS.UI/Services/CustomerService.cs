@@ -37,6 +37,18 @@ namespace POS.UI.Services
                 : ApiResponse<List<CustomerDto>>.Fail(payload.Message);
         }
 
+        public async Task<ApiResponse<List<CustomerDto>>> SearchAsync(CustomerSearchRequestDto request)
+        {
+            var response = await _http.PostAsJsonAsync("api/customer/SearchCustomers", request);
+            var payload = await ApiResponseReader.ReadAsync<List<CustomerDto>>(
+                response,
+                "Unable to search customers.");
+
+            return response.IsSuccessStatusCode
+                ? payload
+                : ApiResponse<List<CustomerDto>>.Fail(payload.Message);
+        }
+
         public async Task<ApiResponse<CustomerDto>?> SaveAsync(CustomerDto dto)
         {
             var response = await _http.PostAsJsonAsync("api/customer/SaveCustomer", dto);

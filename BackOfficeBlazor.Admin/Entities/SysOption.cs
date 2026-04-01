@@ -111,6 +111,9 @@ namespace BackOfficeBlazor.Admin.Entities
         public string? CompanyName { get; set; }
 
         [StringLength(500)]
+        public string? CompanyLogoUrl { get; set; }
+
+        [StringLength(500)]
         public string? QuoteMessage { get; set; }
         public bool? AutoPrintServiceInv { get; set; }
         [StringLength(10)]

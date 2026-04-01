@@ -9,16 +9,16 @@
 
 @if (DirectRaiseMode)
 {
-    <div class="card shadow-sm border-0 product-list-card @WorkspaceClass po-raise-screen">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+    <div class="card shadow-sm border-0 form-shell-card product-list-card @WorkspaceClass po-raise-screen">
+        <div class="card-header d-flex justify-content-between align-items-center py-3">
             <div>
-                <h5 class="fw-bold mb-0">@Title</h5>
+                <h5 class="form-shell-title">@Title</h5>
                 @if (!string.IsNullOrWhiteSpace(Subtitle))
                 {
-                    <div class="small text-muted">@Subtitle</div>
+                    <div class="form-shell-subtitle">@Subtitle</div>
                 }
             </div>
-            <div class="small text-muted">
+            <div class="form-shell-meta">
                 @if (Header != null)
                 {
                     <span>Status: <strong>@CurrentStatusText</strong></span>
@@ -62,7 +62,7 @@
 
                         <div class="col-md-4 fw-semibold text-uppercase">Sales Code</div>
                         <div class="col-md-8">
-                            <input class="form-control w-25" @bind="DirectSalesCode" />
+                            <StaffCodeLookup @bind-Value="DirectSalesCode" InputClass="form-control w-25" />
                         </div>
 
                         <div class="col-md-4 fw-semibold text-uppercase">Footer Message</div>
@@ -135,16 +135,16 @@
 }
 else
 {
-<div class="card shadow-sm border-0 product-list-card @WorkspaceClass">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+    <div class="card shadow-sm border-0 form-shell-card product-list-card @WorkspaceClass">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
         <div>
-            <h5 class="fw-bold mb-0">@Title</h5>
+            <h5 class="form-shell-title">@Title</h5>
             @if (!string.IsNullOrWhiteSpace(Subtitle))
             {
-                <div class="small text-muted">@Subtitle</div>
+                <div class="form-shell-subtitle">@Subtitle</div>
             }
         </div>
-        <div class="small text-muted">
+        <div class="form-shell-meta">
             @if (Header != null)
             {
                 <span>Status: <strong>@CurrentStatusText</strong></span>
@@ -159,7 +159,7 @@ else
         <div class="card-body p-4">
         @if (ShowOrderControls)
         {
-            @if (IsReceiveLookupMode)
+            @if (IsReceiveLookupMode || IsAmendMode)
             {
                 <div class="row g-3 align-items-end mb-3 po-top-controls">
                     <div class="col-lg-5 col-xl-4">
@@ -225,7 +225,7 @@ else
             }
         }
 
-        @if (!IsReceiveLookupMode)
+        @if (!IsReceiveLookupMode && !IsAmendMode)
         {
             <div class="row g-3 align-items-end mb-3 po-summary-strip">
                 <div class="col-md-2">
@@ -298,6 +298,20 @@ else
                             <th>Notes</th>
                         </tr>
                     }
+                    else if (IsAmendMode)
+                    {
+                        <tr>
+                            <th>#</th>
+                            <th>Part No</th>
+                            <th>MFR Part</th>
+                            <th>Description</th>
+                            <th>Box Qty</th>
+                            <th>Qty Required</th>
+                            <th>Cost</th>
+                            <th>Notes</th>
+                            <th>Line Total</th>
+                        </tr>
+                    }
                     else
                     {
                         <tr>
@@ -320,7 +334,7 @@ else
                     @if (!Lines.Any())
                     {
                         <tr>
-                            <td colspan="@(IsReceiveLookupMode ? 10 : 12)" class="text-center text-muted">No purchase order lines</td>
+                            <td colspan="@(IsReceiveLookupMode ? 10 : IsAmendMode ? 9 : 12)" class="text-center text-muted">No purchase order lines</td>
                         </tr>
                     }
                     else
@@ -347,6 +361,26 @@ else
                                     <td class="fw-semibold text-primary">@OutstandingQty(line)</td>
                                     <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="line.CostPrice" /></td>
                                     <td><input class="form-control form-control-sm" value="@line.Notes" readonly /></td>
+                                </tr>
+                            }
+                            else if (IsAmendMode)
+                            {
+                                <tr>
+                                    <td>@line.SequenceId</td>
+                                    <td><input class="form-control form-control-sm" value="@line.PartNumber" readonly /></td>
+                                    <td><input class="form-control form-control-sm" value="@line.MfrPartNumber" readonly /></td>
+                                    <td><input class="form-control form-control-sm" value="@line.Description" readonly /></td>
+                                    <td><input type="number" class="form-control form-control-sm" value="@line.BoxQty" readonly /></td>
+                                    <td>
+                                        <input type="number"
+                                               class="form-control form-control-sm"
+                                               min="1"
+                                               @bind="line.QtyRequired"
+                                               @bind:after="() => NormalizeAmendQty(line)" />
+                                    </td>
+                                    <td><input type="number" step="0.01" class="form-control form-control-sm" @bind="line.CostPrice" /></td>
+                                    <td><input class="form-control form-control-sm" value="@line.Notes" readonly /></td>
+                                    <td class="fw-semibold text-primary">@line.LineTotal.ToString("0.00")</td>
                                 </tr>
                             }
                             else
@@ -385,6 +419,16 @@ else
                             <th></th>
                         </tr>
                     }
+                    else if (IsAmendMode)
+                    {
+                        <tr class="table-light">
+                            <th colspan="5" class="text-end">Totals</th>
+                            <th>@TotalQtyRequired</th>
+                            <th></th>
+                            <th></th>
+                            <th>@TotalCost.ToString("0.00")</th>
+                        </tr>
+                    }
                     else
                     {
                         <tr class="table-light">
@@ -399,7 +443,46 @@ else
             </table>
         </div>
 
-        @if (AllowReceiveAllocation)
+        @if (AllowAmend)
+        {
+            <div class="row g-3 mt-2">
+                <div class="col-12">
+                    <div class="card border-0 bg-light po-results-card">
+                        <div class="card-header fw-semibold">Amendment Summary</div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Raised By</label>
+                                    <input class="form-control" @bind="RaisedByCode" readonly />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Supplier</label>
+                                    <input class="form-control" value="@SupplierNameOrFallback" readonly />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Status</label>
+                                    <input class="form-control" value="@CurrentStatusText" readonly />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Total Cost</label>
+                                    <input class="form-control" value="@TotalCost.ToString("0.00")" readonly />
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                <button class="btn btn-warning" @onclick="AmendOrder" disabled="@(!CanAmend)">Save Amendment</button>
+                                <button class="btn btn-outline-secondary" @onclick="ReloadCurrentOrder" disabled="@string.IsNullOrWhiteSpace(OrderNumber)">Reload</button>
+                                @if (AllowCancel)
+                                {
+                                    <button class="btn btn-outline-danger" @onclick="CancelOrder" disabled="@string.IsNullOrWhiteSpace(OrderNumber)">Cancel</button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (AllowReceiveAllocation)
         {
             <div class="row g-3 mt-2">
                 <div class="col-md-6">
@@ -563,15 +646,34 @@ else
                 <div class="modal-header">
                     <div>
                         <h5 class="modal-title mb-0">Search Purchase Orders</h5>
-                        <div class="small text-muted">Select a supplier, search, then pick an order to load into receive.</div>
+                        <div class="small text-muted">
+                            @(IsReceiveLookupMode || IsAmendMode
+                                ? "Select from suppliers with raised orders only, then search and pick an order."
+                                : "Select a supplier, search, then pick an order.")
+                        </div>
                     </div>
                     <button type="button" class="btn-close" @onclick="CloseSupplierSearchModal"></button>
                 </div>
                 <div class="modal-body" style="overflow-y:auto;">
                     <div class="row g-3 align-items-end">
                         <div class="col-lg-5">
-                            <label class="form-label">Supplier</label>
-                            <SupplierSelector Value="@SupplierCode" ValueChanged="OnSupplierChanged" />
+                            <label class="form-label">@(IsReceiveLookupMode || IsAmendMode ? "Supplier (raised orders only)" : "Supplier")</label>
+                            @if (IsReceiveLookupMode || IsAmendMode)
+                            {
+                                <select class="form-select" @bind="SearchSupplierCode" @bind:after="SearchOrders">
+                                    <option value="">All suppliers with raised orders</option>
+                                    @foreach (var supplier in AmendmentSupplierOptions)
+                                    {
+                                        <option value="@supplier.SupplierCode">
+                                            @(string.IsNullOrWhiteSpace(supplier.SupplierName) ? supplier.SupplierCode : supplier.SupplierName) (@supplier.SupplierCode)
+                                        </option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <SupplierSelector Value="@SearchSupplierCode" ValueChanged="OnSearchSupplierChanged" />
+                            }
                         </div>
                         <div class="col-lg-5">
                             <label class="form-label">Search Orders</label>
@@ -655,6 +757,7 @@ else
     [Parameter] public bool AllowSaveDraft { get; set; } = true;
     [Parameter] public bool AllowRaise { get; set; } = true;
     [Parameter] public bool AllowReceive { get; set; }
+    [Parameter] public bool AllowAmend { get; set; }
     [Parameter] public bool AllowCancel { get; set; }
     [Parameter] public bool AllowAddProduct { get; set; } = true;
     [Parameter] public bool AllowReceiveAllocation { get; set; }
@@ -668,6 +771,7 @@ else
     string OrderNumber = string.Empty;
     string SearchQuery = string.Empty;
     string SupplierCode = string.Empty;
+    string SearchSupplierCode = string.Empty;
     string SupplierName = string.Empty;
     string RaisedByCode = string.Empty;
     string LocationCode = string.Empty;
@@ -691,6 +795,7 @@ else
     PurchaseOrderHeaderDto? Header;
     List<PurchaseOrderLineDto> Lines = new();
     List<PurchaseOrderSummaryDto> SearchResults = new();
+    List<PurchaseOrderSupplierOptionDto> AmendmentSupplierOptions = new();
     readonly Dictionary<int, decimal> OriginalLineCosts = new();
 
     bool CanReceive =>
@@ -698,6 +803,10 @@ else
         Header != null &&
         Header.Status != (int)PurchaseOrderStatus.Cancelled &&
         Header.Status != (int)PurchaseOrderStatus.Received;
+    bool CanAmend =>
+        !string.IsNullOrWhiteSpace(OrderNumber) &&
+        Header != null &&
+        Header.Status == (int)PurchaseOrderStatus.Raised;
 
     string DraftRefDisplay => DraftRef?.ToString() ?? "-";
     string CurrentStatusText =>
@@ -713,10 +822,13 @@ else
     int TotalQtyRequired => Lines.Sum(x => x.QtyRequired);
     int TotalQtyReceived => Lines.Sum(x => x.QtyRecieved);
     int TotalQtyOutstanding => Lines.Sum(x => Math.Max(x.QtyRequired - x.QtyRecieved, 0));
-    decimal TotalCost => Lines.Sum(x => x.QtyRequired * x.CostPrice);
-    int ReceiveGridColumnCount => IsReceiveLookupMode ? 10 : 12;
+    decimal TotalCost =>
+        IsAmendMode
+            ? Lines.Sum(x => x.QtyRequired * x.CostPrice)
+            : Lines.Sum(x => x.QtyRecieved * x.CostPrice);
     bool ShowOrderControls => ShowDraftLoader || ShowOrderNumberLookup || ShowOrderSearchResults;
     bool IsReceiveLookupMode => AllowReceive && ShowOrderNumberLookup && !DirectRaiseMode;
+    bool IsAmendMode => AllowAmend && ShowOrderNumberLookup && !DirectRaiseMode;
     bool CanPreviewCurrentReport => !string.IsNullOrWhiteSpace(JsonReport) || !string.IsNullOrWhiteSpace(Header?.JsonReport);
     string? JsonReport;
 
@@ -727,7 +839,8 @@ else
 
     async Task SearchOrders()
     {
-        var result = await PurchaseOrderApi.SearchAsync(SearchQuery, SupplierCode, null);
+        var searchStatus = (AllowReceive || AllowAmend) ? (int)PurchaseOrderStatus.Raised : (int?)null;
+        var result = await PurchaseOrderApi.SearchAsync(SearchQuery, SearchSupplierCode, searchStatus);
         if (!result.Success)
         {
             await AppSnackbar.Show(result.Message, SnackbarType.Error);
@@ -745,7 +858,11 @@ else
             LastDirectActionMessage = string.Empty;
             return;
         }
+    }
 
+    async Task OnSearchSupplierChanged(string? value)
+    {
+        SearchSupplierCode = value ?? string.Empty;
         if (SupplierSearchModalOpen)
             await SearchOrders();
     }
@@ -753,7 +870,11 @@ else
     async Task OpenSupplierSearchModal()
     {
         SupplierSearchModalOpen = true;
-        if (string.IsNullOrWhiteSpace(SearchQuery) && string.IsNullOrWhiteSpace(SupplierCode))
+        SearchSupplierCode = SupplierCode;
+        if (IsReceiveLookupMode || IsAmendMode)
+            await LoadRaisedSupplierOptions();
+
+        if (string.IsNullOrWhiteSpace(SearchQuery) && string.IsNullOrWhiteSpace(SearchSupplierCode))
         {
             SearchResults = new();
             return;
@@ -815,6 +936,12 @@ else
             return;
         }
 
+        if (AllowAmend && result.Data.Header?.Status != (int)PurchaseOrderStatus.Raised)
+        {
+            await AppSnackbar.Show("Only raised purchase orders can be amended", SnackbarType.Warning);
+            return;
+        }
+
         ApplyWorkspace(result.Data);
         if (IsReceiveLookupMode)
             InitializeReceiveQuantities();
@@ -824,6 +951,14 @@ else
     async Task LoadOrder(string orderNo)
     {
         OrderNumber = orderNo;
+        await LoadOrder();
+    }
+
+    async Task ReloadCurrentOrder()
+    {
+        if (string.IsNullOrWhiteSpace(OrderNumber))
+            return;
+
         await LoadOrder();
     }
 
@@ -917,6 +1052,27 @@ else
         await AppSnackbar.Show("Purchase order received", SnackbarType.Success);
     }
 
+    async Task AmendOrder()
+    {
+        if (!CanAmend)
+        {
+            await AppSnackbar.Show("Load a raised order first", SnackbarType.Warning);
+            return;
+        }
+
+        NormalizeAmendQuantities();
+
+        var result = await PurchaseOrderApi.AmendAsync(BuildAmendRequest());
+        if (!result.Success || result.Data == null)
+        {
+            await AppSnackbar.Show(result.Message, SnackbarType.Error);
+            return;
+        }
+
+        ApplyWorkspace(result.Data);
+        await AppSnackbar.Show("Purchase order amended", SnackbarType.Success);
+    }
+
     async Task CancelOrder()
     {
         if (string.IsNullOrWhiteSpace(OrderNumber))
@@ -934,16 +1090,29 @@ else
         await AppSnackbar.Show("Purchase order cancelled", SnackbarType.Success);
     }
 
+    async Task LoadRaisedSupplierOptions()
+    {
+        if (AmendmentSupplierOptions.Any())
+            return;
+
+        var result = await PurchaseOrderApi.GetSupplierOptionsAsync((int)PurchaseOrderStatus.Raised);
+        AmendmentSupplierOptions = result.Success && result.Data != null
+            ? result.Data
+            : new List<PurchaseOrderSupplierOptionDto>();
+    }
+
     void NewDraft()
     {
         DraftRef = null;
         DraftRefText = string.Empty;
         OrderNumber = string.Empty;
         SupplierCode = string.Empty;
+        SearchSupplierCode = string.Empty;
         SupplierName = string.Empty;
         Header = null;
         Lines = new();
         SearchResults = new();
+        AmendmentSupplierOptions = new();
         CarriageCost = 0;
         ShippingCost = 0;
         SettlementDiscount = 0;
@@ -1061,6 +1230,21 @@ else
             }).ToList()
         };
 
+    PurchaseOrderAmendRequestDto BuildAmendRequest() =>
+        new()
+        {
+            OrderNumber = OrderNumber,
+            AmendedByCode = RaisedByCode,
+            Lines = Lines.Select(x => new PurchaseOrderAmendLineDto
+            {
+                ItemId = x.Id,
+                PartNumber = x.PartNumber,
+                SequenceId = x.SequenceId,
+                QtyRequired = x.QtyRequired,
+                CostPrice = x.CostPrice
+            }).ToList()
+        };
+
     void ApplyWorkspace(PurchaseOrderWorkspaceDto workspace)
     {
         DraftRef = workspace.DraftRef == 0 ? null : workspace.DraftRef;
@@ -1097,6 +1281,17 @@ else
     void NormalizeReceivedQty(PurchaseOrderLineDto line)
     {
         line.QtyRecieved = Math.Clamp(line.QtyRecieved, 0, line.QtyRequired);
+    }
+
+    void NormalizeAmendQuantities()
+    {
+        foreach (var line in Lines)
+            line.QtyRequired = Math.Max(line.QtyRequired, 1);
+    }
+
+    void NormalizeAmendQty(PurchaseOrderLineDto line)
+    {
+        line.QtyRequired = Math.Max(line.QtyRequired, 1);
     }
 
     int OutstandingQty(PurchaseOrderLineDto line) =>
@@ -1169,38 +1364,164 @@ else
     {
         ShowDirectPreview = false;
     }
-
     static string BuildPreviewHtml(PurchaseOrderReportEnvelopeDto envelope)
     {
         var header = envelope.Result.ReportHeader;
         var rows = envelope.Result.Rows ?? new List<PurchaseOrderReportRowDto>();
-        var totalQty = rows.Sum(x => x.QuantityOrdered);
-        var totalCost = rows.Sum(x => x.TotalCost);
 
         static string E(string? value) => System.Net.WebUtility.HtmlEncode(value ?? string.Empty);
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("<!doctype html><html><head><meta charset=\"utf-8\">");
-        sb.AppendLine("<title>Purchase Order Preview</title>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body{font-family:Arial,sans-serif;margin:24px;color:#222} h1{margin:0 0 8px} .meta{margin:4px 0 16px} table{width:100%;border-collapse:collapse;margin-top:16px} th,td{border:1px solid #cfcfcf;padding:8px;font-size:13px;text-align:left} th{background:#f3f3f3} .right{text-align:right} .footer{margin-top:20px;white-space:pre-wrap}");
-        sb.AppendLine("</style></head><body>");
-        sb.AppendLine($"<h1>Purchase Order {E(header.OrderNumber)}</h1>");
-        sb.AppendLine($"<div class=\"meta\"><strong>Supplier:</strong> {E(header.SupplierName)}<br><strong>Account:</strong> {E(header.SupplierAccNo)}<br><strong>Location:</strong> {E(header.LocationNo)}<br><strong>Date:</strong> {E(header.OrderDate)}</div>");
-        sb.AppendLine("<table><thead><tr><th>Our Part</th><th>Your Part</th><th>Description</th><th class=\"right\">Qty</th><th class=\"right\">Unit Cost</th><th class=\"right\">Total</th></tr></thead><tbody>");
 
-        foreach (var row in rows)
+        sb.AppendLine("<!doctype html><html><head><meta charset='utf-8'>");
+        sb.AppendLine("<title>Purchase Order</title>");
+
+        sb.AppendLine("<style>");
+        sb.AppendLine(@"
+        body{font-family:Arial;margin:0;background:#f5f5f5}
+        .page{width:900px;margin:20px auto;background:white;border:1px solid #ccc;padding:20px}
+        .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #333;padding-bottom:10px}
+        .logo{width:120px}
+        .title{text-align:center;flex-grow:1}
+        .title h2{margin:0}
+        .company{text-align:right;font-size:13px}
+        .section{border:1px solid #aaa;margin-top:15px}
+        .section-title{background:#eee;padding:6px;font-weight:bold;border-bottom:1px solid #aaa}
+        .grid{display:flex}
+        .cell{flex:1;padding:10px;border-right:1px solid #aaa}
+        .cell:last-child{border-right:none}
+        .info{padding:10px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #aaa;padding:6px;font-size:13px}
+        th{background:#eee}
+        .right{text-align:right}
+        .notes{height:80px}
+        .footer{margin-top:20px;font-size:12px;color:#666}
+    ");
+        sb.AppendLine("</style></head><body>");
+
+        sb.AppendLine("<div class='page'>");
+
+        // HEADER
+        sb.AppendLine("<div class='header'>");
+        // sb.AppendLine($"<img class='logo' src='{E(header.LogoUrl)}' />");
+        sb.AppendLine($"<img class='logo' src='#' />");
+        sb.AppendLine($"<div class='title'><h2>Purchase Order</h2><div>Order #: {E(header.OrderNumber)}</div></div>");
+        // sb.AppendLine($"<div class='company'><strong>{E(header.CompanyName)}</strong><br>Tel: {E(header.CompanyPhone)}<br>Email: {E(header.CompanyEmail)}<br>{E(header.CompanyWebsite)}</div>");
+        sb.AppendLine($"<div class='company'><strong>Bicycle Chain Pvt. Ltd.</strong><br>Tel: 000000000<br>Email: info@bicyclechain.com<br>bicyclechain.com</div>");
+        sb.AppendLine("</div>");
+
+        // ORDER INFO
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("<div class='section-title'>Order Information</div>");
+        sb.AppendLine("<div class='grid'>");
+
+        sb.AppendLine($"<div class='cell'><strong>SUPPLIER ADDRESS</strong><br>{E(header.SupplierName)}</div>");
+
+        // sb.AppendLine($@"
+        // <div class='cell'>
+        // <strong>DELIVERY ADDRESS</strong><br>
+        // {E(header.CompanyName)}<br>
+        // {E(header.DeliveryAddress1)}<br>
+        // {E(header.DeliveryAddress2)}<br>
+        // {E(header.PostCode)}<br>
+        // Tel: {E(header.CompanyPhone)}
+        // </div>");
+        sb.AppendLine($@"
+        <div class='cell'>
+        <strong>DELIVERY ADDRESS</strong><br>
+        Bicycle Chain Pvt. Ltd.<br>
+        Dorset<br>        
+        SP08<br>
+        Tel: 000000000
+        </div>");
+
+        sb.AppendLine("</div></div>");
+
+        // DATE BLOCK
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine($"<div class='info'><strong>Date:</strong> {E(header.OrderDate)}<br>");
+        sb.AppendLine($"<strong>Account:</strong> {E(header.SupplierAccNo)}<br>");
+        // sb.AppendLine($"<strong>VAT No:</strong> {E(header.VatNo)}</div>");
+        sb.AppendLine($"<strong>VAT No:</strong> 00</div>");
+        sb.AppendLine("</div>");
+
+        // ITEMS
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("<div class='section-title'>Items</div>");
+        sb.AppendLine("<table>");
+        sb.AppendLine("<thead><tr>");
+        sb.AppendLine("<th>Type</th><th>Your Ref</th><th>Our Ref</th><th>Description</th><th>Quantity</th><th>Unit Price</th><th>Total</th>");
+        sb.AppendLine("</tr></thead><tbody>");
+
+        decimal grandTotal = 0;
+
+        foreach (var r in rows)
         {
-            sb.AppendLine($"<tr><td>{E(row.OurPartNumber)}</td><td>{E(row.YourPartNumber)}</td><td>{E(row.Description)}</td><td class=\"right\">{row.QuantityOrdered}</td><td class=\"right\">{row.UnitCost:0.00}</td><td class=\"right\">{row.TotalCost:0.00}</td></tr>");
+            grandTotal += r.TotalCost;
+
+            sb.AppendLine($@"
+            <tr>
+                <td>PO</td>
+                <td>{E(r.YourPartNumber)}</td>
+                <td>{E(r.OurPartNumber)}</td>
+                <td>{E(r.Description)}</td>
+                <td>{r.QuantityOrdered}</td>
+                <td class='right'>{r.UnitCost:0.00}</td>
+                <td class='right'>{r.TotalCost:0.00}</td>
+            </tr>");
         }
 
-        sb.AppendLine("</tbody></table>");
-        sb.AppendLine($"<div class=\"meta\"><strong>Total Qty:</strong> {totalQty}<br><strong>Total Cost:</strong> {totalCost:0.00}</div>");
-        if (!string.IsNullOrWhiteSpace(header.FooterMessage))
-            sb.AppendLine($"<div class=\"footer\">{E(header.FooterMessage)}</div>");
-        sb.AppendLine("</body></html>");
+        sb.AppendLine($@"
+        <tr>
+            <td colspan='6' class='right'><strong>Total</strong></td>
+            <td class='right'><strong>{grandTotal:0.00}</strong></td>
+        </tr>");
+
+        sb.AppendLine("</tbody></table></div>");
+
+        // NOTES
+        sb.AppendLine("<div class='section'>");
+        sb.AppendLine("<div class='section-title'>Notes</div>");
+        sb.AppendLine($"<div class='info notes'>{E(header.FooterMessage)}</div>");
+        sb.AppendLine("</div>");
+
+        sb.AppendLine("<div class='footer'>Generated by POS System</div>");
+        sb.AppendLine("</div></body></html>");
+
         return sb.ToString();
     }
+    // static string BuildPreviewHtml(PurchaseOrderReportEnvelopeDto envelope)
+    // {
+    //     var header = envelope.Result.ReportHeader;
+    //     var rows = envelope.Result.Rows ?? new List<PurchaseOrderReportRowDto>();
+    //     var totalQty = rows.Sum(x => x.QuantityOrdered);
+    //     var totalCost = rows.Sum(x => x.TotalCost);
+
+    //     static string E(string? value) => System.Net.WebUtility.HtmlEncode(value ?? string.Empty);
+
+    //     var sb = new System.Text.StringBuilder();
+    //     sb.AppendLine("<!doctype html><html><head><meta charset=\"utf-8\">");
+    //     sb.AppendLine("<title>Purchase Order Preview</title>");
+    //     sb.AppendLine("<style>");
+    //     sb.AppendLine("body{font-family:Arial,sans-serif;margin:24px;color:#222} h1{margin:0 0 8px} .meta{margin:4px 0 16px} table{width:100%;border-collapse:collapse;margin-top:16px} th,td{border:1px solid #cfcfcf;padding:8px;font-size:13px;text-align:left} th{background:#f3f3f3} .right{text-align:right} .footer{margin-top:20px;white-space:pre-wrap}");
+    //     sb.AppendLine("</style></head><body>");
+    //     sb.AppendLine($"<h1>Purchase Order {E(header.OrderNumber)}</h1>");
+    //     sb.AppendLine($"<div class=\"meta\"><strong>Supplier:</strong> {E(header.SupplierName)}<br><strong>Account:</strong> {E(header.SupplierAccNo)}<br><strong>Location:</strong> {E(header.LocationNo)}<br><strong>Date:</strong> {E(header.OrderDate)}</div>");
+    //     sb.AppendLine("<table><thead><tr><th>Our Part</th><th>Your Part</th><th>Description</th><th class=\"right\">Qty</th><th class=\"right\">Unit Cost</th><th class=\"right\">Total</th></tr></thead><tbody>");
+
+    //     foreach (var row in rows)
+    //     {
+    //         sb.AppendLine($"<tr><td>{E(row.OurPartNumber)}</td><td>{E(row.YourPartNumber)}</td><td>{E(row.Description)}</td><td class=\"right\">{row.QuantityOrdered}</td><td class=\"right\">{row.UnitCost:0.00}</td><td class=\"right\">{row.TotalCost:0.00}</td></tr>");
+    //     }
+
+    //     sb.AppendLine("</tbody></table>");
+    //     sb.AppendLine($"<div class=\"meta\"><strong>Total Qty:</strong> {totalQty}<br><strong>Total Cost:</strong> {totalCost:0.00}</div>");
+    //     if (!string.IsNullOrWhiteSpace(header.FooterMessage))
+    //         sb.AppendLine($"<div class=\"footer\">{E(header.FooterMessage)}</div>");
+    //     sb.AppendLine("</body></html>");
+    //     return sb.ToString();
+    // }
 
     void ReSequence()
     {

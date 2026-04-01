@@ -1,0 +1,421 @@
+@page "/dashboard"
+@implements IAsyncDisposable
+@inject IAuthService AuthService
+@inject IDashboardService DashboardService
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="dashboard-page">
+    <div class="dashboard-hero">
+        <div>
+            <div class="dashboard-eyebrow">Admin Dashboard</div>
+            <h1 class="dashboard-title">Live POS Analytics</h1>
+            <p class="dashboard-subtitle">
+                Financially accurate, real-time transaction insights from the same database the POS uses.
+            </p>
+        </div>
+
+        <div class="dashboard-hero-meta">
+            <div class="dashboard-refresh-pill">
+                <i class="fa-regular fa-clock me-2" aria-hidden="true"></i>
+                Auto refresh every 60 seconds
+            </div>
+            <div class="dashboard-refresh-text">
+                Last refreshed: @LastLoadedText
+            </div>
+        </div>
+    </div>
+
+    @if (AuthService.CurrentUser?.IsAdmin != true)
+    {
+        <div class="alert alert-warning dashboard-access-alert">
+            Admin access is required to view this dashboard.
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <div class="alert alert-danger dashboard-access-alert" role="alert">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <span>@ErrorMessage</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="LoadAsync">
+                        Retry
+                    </button>
+                </div>
+            </div>
+        }
+
+        <div class="dashboard-filter-card">
+            <div class="dashboard-filter-group">
+                <div class="dashboard-filter-label">Date Range</div>
+                <div class="dashboard-range-buttons">
+                    @foreach (var preset in Presets)
+                    {
+                        <button class="dashboard-range-button @(Request.Preset == preset ? "active" : string.Empty)"
+                                @onclick="() => ApplyPresetAsync(preset)">
+                            @GetPresetLabel(preset)
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (Request.Preset == DashboardDatePreset.Custom)
+            {
+                <div class="dashboard-custom-range">
+                    <div>
+                        <label class="dashboard-filter-label" for="dashboard-from">From</label>
+                        <input id="dashboard-from"
+                               type="date"
+                               class="form-control"
+                               value="@CustomFromText"
+                               @onchange="OnCustomFromChanged" />
+                    </div>
+                    <div>
+                        <label class="dashboard-filter-label" for="dashboard-to">To</label>
+                        <input id="dashboard-to"
+                               type="date"
+                               class="form-control"
+                               value="@CustomToText"
+                               @onchange="OnCustomToChanged" />
+                    </div>
+                </div>
+            }
+
+            <div class="dashboard-filter-grid">
+                <div class="dashboard-filter-panel">
+                    <div class="dashboard-filter-label">Locations</div>
+                    <div class="dashboard-location-list">
+                        @if (Model?.Locations?.Count > 0)
+                        {
+                            @foreach (var location in Model.Locations)
+                            {
+                                <label class="dashboard-location-item">
+                                    <input type="checkbox"
+                                           class="form-check-input"
+                                           checked="@location.Selected"
+                                           @onchange="e => ToggleLocation(location.Code, e)" />
+                                    <span>
+                                        <span class="dashboard-location-code">@location.Code</span>
+                                        <span class="dashboard-location-name">@location.Name</span>
+                                    </span>
+                                </label>
+                            }
+                        }
+                        else
+                        {
+                            <div class="dashboard-filter-empty">Loading locations...</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="dashboard-filter-panel">
+                    <div class="dashboard-filter-label">Terminal</div>
+                    <select class="form-select" value="@Request.TerminalCode" @onchange="OnTerminalChanged">
+                        <option value="">All terminals</option>
+                        @if (Model?.Terminals != null)
+                        {
+                            @foreach (var terminal in Model.Terminals)
+                            {
+                                <option value="@terminal.Code">
+                                    @terminal.Code
+                                    @if (!string.IsNullOrWhiteSpace(terminal.DefaultBranch))
+                                    {
+                                        <text> (@terminal.DefaultBranch)</text>
+                                    }
+                                </option>
+                            }
+                        }
+                    </select>
+                    <div class="dashboard-filter-help">
+                        Optional terminal-scoped view for branch level analysis.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-kpi-grid">
+            <DashboardKpiCard Item="@SalesCurrent" IsLoading="@IsLoading" />
+            <DashboardKpiCard Item="@SalesToday" IsLoading="@IsLoading" />
+            <DashboardKpiCard Item="@ReturnsCurrent" IsLoading="@IsLoading" />
+            <DashboardKpiCard Item="@ReturnsToday" IsLoading="@IsLoading" />
+        </div>
+
+        <div class="dashboard-analytics-grid">
+            <div class="dashboard-chart-span-8">
+                <DashboardLineChart Title="Monthly Sales Trend"
+                                    Subtitle="@TrendSubtitle"
+                                    Points="@Model?.SalesTrend"
+                                    IsLoading="@IsLoading"
+                                    LineColor="#2563eb" />
+            </div>
+
+            <div class="dashboard-chart-span-4">
+                <DashboardDonutChart Title="Sales vs Returns Ratio"
+                                     Subtitle="@TrendSubtitle"
+                                     CenterCaption="Current period"
+                                     Items="@Model?.SalesVsReturns"
+                                     IsLoading="@IsLoading" />
+            </div>
+
+            <div class="dashboard-chart-span-4">
+                <DashboardDonutChart Title="Payment Method Distribution"
+                                     Subtitle="@TrendSubtitle"
+                                     CenterCaption="Tender mix"
+                                     Items="@Model?.PaymentMethods"
+                                     IsLoading="@IsLoading" />
+            </div>
+
+            <div class="dashboard-chart-span-8">
+                <DashboardBarChart Title="Top Selling Categories"
+                                   Subtitle="@TrendSubtitle"
+                                   Items="@Model?.TopCategories"
+                                   IsLoading="@IsLoading" />
+            </div>
+
+            <div class="dashboard-chart-span-12">
+                <DashboardSummaryPanel Title="Analytics Summary"
+                                       Subtitle="@TrendSubtitle"
+                                       Items="@Model?.Summary"
+                                       IsLoading="@IsLoading" />
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly DashboardDatePreset[] Presets =
+    {
+        DashboardDatePreset.Today,
+        DashboardDatePreset.ThisWeek,
+        DashboardDatePreset.ThisMonth,
+        DashboardDatePreset.Custom
+    };
+
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private CancellationTokenSource? _refreshCts;
+    private PeriodicTimer? _refreshTimer;
+
+    private DashboardResponseDto? Model;
+    private DashboardRequestDto Request { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+    private bool _reloadQueued;
+    private DateTime CustomFrom { get; set; } = DateTime.Today.AddDays(-6);
+    private DateTime CustomTo { get; set; } = DateTime.Today;
+    private string? ErrorMessage { get; set; }
+    private DateTime LastLoadedAt { get; set; }
+    private string CustomFromText => CustomFrom.ToString("yyyy-MM-dd");
+    private string CustomToText => CustomTo.ToString("yyyy-MM-dd");
+
+    private string LastLoadedText => LastLoadedAt == default
+        ? "Not loaded yet"
+        : LastLoadedAt.ToString("dd MMM yyyy HH:mm");
+
+    private string TrendSubtitle => Model?.CurrentRange.Label ?? GetPresetLabel(Request.Preset);
+    private DashboardKpiDto? SalesCurrent => GetKpi("sales-current");
+    private DashboardKpiDto? SalesToday => GetKpi("sales-today");
+    private DashboardKpiDto? ReturnsCurrent => GetKpi("returns-current");
+    private DashboardKpiDto? ReturnsToday => GetKpi("returns-today");
+
+    protected override async Task OnInitializedAsync()
+    {
+        Request = new DashboardRequestDto
+        {
+            Preset = DashboardDatePreset.ThisMonth
+        };
+
+        await LoadAsync();
+
+        _refreshCts = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        _ = RunRefreshLoopAsync(_refreshCts.Token);
+    }
+
+    private async Task RunRefreshLoopAsync(CancellationToken token)
+    {
+        if (_refreshTimer == null)
+            return;
+
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(token))
+            {
+                await LoadAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!await _loadGate.WaitAsync(0))
+        {
+            _reloadQueued = true;
+            return;
+        }
+
+        var reloadAgain = false;
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            await InvokeAsync(StateHasChanged);
+
+            var request = BuildRequest();
+            var result = await DashboardService.GetDashboardAsync(request);
+
+            if (!result.Success || result.Data == null)
+            {
+                ErrorMessage = result.Message;
+                Model = null;
+                return;
+            }
+
+            Model = result.Data;
+            LastLoadedAt = DateTime.Now;
+
+            SyncSelectionFromModel();
+        }
+        finally
+        {
+            IsLoading = false;
+            _loadGate.Release();
+            reloadAgain = _reloadQueued;
+            _reloadQueued = false;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        if (reloadAgain)
+            await LoadAsync();
+    }
+
+    private DashboardRequestDto BuildRequest()
+    {
+        var request = new DashboardRequestDto
+        {
+            Preset = Request.Preset,
+            TerminalCode = string.IsNullOrWhiteSpace(Request.TerminalCode) ? null : Request.TerminalCode.Trim(),
+            Locations = Request.Locations?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList() ?? new List<string>()
+        };
+
+        if (Request.Preset == DashboardDatePreset.Custom)
+        {
+            if (CustomTo < CustomFrom)
+                (CustomFrom, CustomTo) = (CustomTo, CustomFrom);
+
+            request.From = CustomFrom.Date;
+            request.To = CustomTo.Date;
+        }
+
+        return request;
+    }
+
+    private void SyncSelectionFromModel()
+    {
+        if (Model?.Locations != null)
+        {
+            var selectedLocations = Model.Locations
+                .Where(x => x.Selected)
+                .Select(x => x.Code)
+                .ToList();
+
+            if (selectedLocations.Count > 0)
+                Request.Locations = selectedLocations;
+        }
+
+        if (Model?.Terminals != null && !string.IsNullOrWhiteSpace(Request.TerminalCode))
+        {
+            Request.TerminalCode = Model.Terminals.Any(x => string.Equals(x.Code, Request.TerminalCode, StringComparison.OrdinalIgnoreCase))
+                ? Request.TerminalCode
+                : null;
+        }
+
+    }
+
+    private DashboardKpiDto? GetKpi(string key)
+        => Model?.Kpis.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
+
+    private static string GetPresetLabel(DashboardDatePreset preset)
+        => preset switch
+        {
+            DashboardDatePreset.Today => "Today",
+            DashboardDatePreset.ThisWeek => "This Week",
+            DashboardDatePreset.ThisMonth => "This Month",
+            DashboardDatePreset.Custom => "Custom Range",
+            _ => "Selected Period"
+        };
+
+    private async Task ApplyPresetAsync(DashboardDatePreset preset)
+    {
+        Request.Preset = preset;
+        if (preset == DashboardDatePreset.Custom)
+        {
+            if (CustomTo < CustomFrom)
+                (CustomFrom, CustomTo) = (CustomTo, CustomFrom);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task ToggleLocation(string code, ChangeEventArgs e)
+    {
+        var isChecked = e.Value switch
+        {
+            bool b => b,
+            string s when bool.TryParse(s, out var parsed) => parsed,
+            _ => false
+        };
+        var selected = Request.Locations ?? new List<string>();
+
+        if (isChecked)
+        {
+            if (!selected.Any(x => string.Equals(x, code, StringComparison.OrdinalIgnoreCase)))
+                selected.Add(code);
+        }
+        else
+        {
+            selected.RemoveAll(x => string.Equals(x, code, StringComparison.OrdinalIgnoreCase));
+        }
+
+        Request.Locations = selected;
+        await LoadAsync();
+    }
+
+    private async Task OnTerminalChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        Request.TerminalCode = string.IsNullOrWhiteSpace(value) ? null : value;
+        await LoadAsync();
+    }
+
+    private async Task OnCustomFromChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsed))
+        {
+            CustomFrom = parsed.Date;
+            if (Request.Preset == DashboardDatePreset.Custom)
+                await LoadAsync();
+        }
+    }
+
+    private async Task OnCustomToChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsed))
+        {
+            CustomTo = parsed.Date;
+            if (Request.Preset == DashboardDatePreset.Custom)
+                await LoadAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _refreshCts?.Cancel();
+        _refreshTimer?.Dispose();
+        _refreshCts?.Dispose();
+        _loadGate.Dispose();
+        await Task.CompletedTask;
+    }
+}

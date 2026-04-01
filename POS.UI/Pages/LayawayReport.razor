@@ -1,0 +1,158 @@
+@page "/layaway-report"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Shared
+@using POS.UI.State
+@using System.Globalization
+@using System.Net
+
+<PageTitle>Layaway Report</PageTitle>
+
+<FormGlassLayout Title="Layaway Report"
+                 Subtitle="Layaway activity by location, customer, category, and product type"
+                 Id="layaway-report-form"
+                 ScopeId="layaway-report-form"
+                 class="layaway-report-shell"
+                 BodyClass="card-body form-shell-body p-3 p-lg-4 layaway-report-body"
+                 HeaderActions="@HeaderActions">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3 mb-3 layaway-filter-panel">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">From Location</label>
+                    <LocationSelector Value="@FromLocation" ValueChanged="OnFromLocationChanged" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">CAT A</label>
+                    <CategorySelector Level="A" Code="@CategoryACode" CodeChanged="OnCategoryACodeChanged" Name="@CategoryAName" NameChanged="OnCategoryANameChanged" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">CAT B</label>
+                    <CategorySelector Level="B" Code="@CategoryBCode" CodeChanged="OnCategoryBCodeChanged" Name="@CategoryBName" NameChanged="OnCategoryBNameChanged" />
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">CAT C</label>
+                    <CategorySelector Level="C" Code="@CategoryCCode" CodeChanged="OnCategoryCCodeChanged" Name="@CategoryCName" NameChanged="OnCategoryCNameChanged" />
+                </div>
+                <div class="col-md-6 col-lg-2">
+                    <label class="form-label-custom">Customer</label>
+                    <div class="layaway-toggle-group">
+                        <button type="button" class="@GetToggleClass(IsCustomerAll)" @onclick="SetCustomerModeAllAsync">All</button>
+                        <button type="button" class="@GetToggleClass(IsCustomerOne)" @onclick="SetCustomerModeOneAsync">One</button>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-2">
+                    <label class="form-label-custom">Product Type</label>
+                    <div class="layaway-toggle-group">
+                        <button type="button" class="@GetToggleClass(IsTypeBoth)" @onclick="SetProductTypeBothAsync">Both</button>
+                        <button type="button" class="@GetToggleClass(IsTypeMajor)" @onclick="SetProductTypeMajorAsync">Major</button>
+                        <button type="button" class="@GetToggleClass(IsTypeMinor)" @onclick="SetProductTypeMinorAsync">Minor</button>
+                    </div>
+                </div>
+            </div>
+
+            @if (IsCustomerOne)
+            {
+                <div class="row g-3 mt-2 align-items-end">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label-custom">Customer Acc No</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-danger fw-bold small">F5</span>
+                            <input class="form-control" value="@CustomerAccNo" @onchange="OnCustomerAccChanged" maxlength="@(MaxLengthHelper.For<CustomerDto>(nameof(CustomerDto.AccNo)))" />
+                        </div>
+                        <div class="small @(string.Equals(CustomerStatus, CustomerNotFoundText, StringComparison.OrdinalIgnoreCase) ? "text-danger" : "text-primary") fw-semibold mt-1">@CustomerStatus</div>
+                    </div>
+                    <div class="col-md-5 col-lg-4">
+                        <label class="form-label-custom">Customer Name</label>
+                        <div class="form-control layaway-customer-name-field">@CustomerName</div>
+                    </div>
+                    <div class="col-md-3 col-lg-2">
+                        <label class="form-label-custom">&nbsp;</label>
+                        <button type="button" class="btn btn-outline-secondary w-100" disabled="@IsLoading" @onclick="OpenCustomerSearchAsync">Search (F5)</button>
+                    </div>
+                </div>
+            }
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-6 col-lg-3 d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@(!HasRows || IsLoading)" @onclick="ExportCsv">Export CSV</button>
+                    <button type="button" class="btn btn-outline-secondary" disabled="@(!HasRows || IsLoading)" @onclick="ExportPdf">Export PDF</button>
+                </div>
+                <div class="col-md-6 col-lg-9 d-flex justify-content-lg-end align-items-center">
+                    <span class="small text-muted">Press <b>F5</b> to search customer when customer mode is set to One.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel border rounded-3 overflow-hidden layaway-table-panel">
+            <div class="table-responsive layaway-table-wrap">
+                <table class="table table-sm table-bordered align-middle mb-0 layaway-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>CUSTOMER</th><th>DATE</th><th>LOC</th><th>SALES CODE</th><th>PART/STOCK NO</th><th>MFR</th><th>MAKE</th><th>SEARCH1</th><th>SEARCH2</th><th>CAT A</th><th>CAT B</th><th>CAT C</th><th>SUPPLIER</th><th class="text-end">QTY</th><th class="text-end">COST</th><th class="text-end">TOTAL COST</th><th class="text-end">PRICE</th><th class="text-end">TOTAL PRICE</th><th>RESERVED</th><th>TYPE</th><th>REF ID/JOB NO</th><th>DELIVERY TYPE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (IsLoading && Rows == null)
+                        {
+                            <tr><td colspan="22" class="text-muted py-4 text-center">Loading layaway report...</td></tr>
+                        }
+                        else if (Rows == null)
+                        {
+                            <tr><td colspan="22" class="text-muted py-4 text-center">Change a filter to load the report.</td></tr>
+                        }
+                        else if (Rows.Count == 0)
+                        {
+                            <tr><td colspan="22" class="text-muted py-4 text-center">No records match the selected filters.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in Rows)
+                            {
+                                <tr>
+                                    <td>@GetCustomerDisplay(row.CustomerAcc)</td>
+                                    <td>@row.DateAndTime.ToString("dd-MM-yyyy", CultureInfo.InvariantCulture)</td>
+                                    <td>@GetLocationDisplay(row.Location)</td>
+                                    <td>@row.SalesCode</td>
+                                    <td>@row.PartStockNo</td>
+                                    <td>@row.Mfr</td>
+                                    <td>@row.Make</td>
+                                    <td>@row.Search1</td>
+                                    <td>@row.Search2</td>
+                                    <td>@row.CatA</td>
+                                    <td>@row.CatB</td>
+                                    <td>@row.CatC</td>
+                                    <td>@row.Supplier</td>
+                                    <td class="text-end">@row.Qty</td>
+                                    <td class="text-end">@row.Cost.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.TotalCost.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.Price.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.TotalPrice.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td>@row.Reserved</td>
+                                    <td>@row.Type</td>
+                                    <td>@row.RefIdJobNo</td>
+                                    <td>@row.DeliveryType</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (HasRows)
+        {
+            <div class="layaway-summary-strip glass-panel border rounded-3 px-3 py-2 d-flex justify-content-end gap-4 flex-wrap">
+                <div><span class="text-muted">Lines:</span> <b>@Rows!.Count</b></div>
+                <div><span class="text-muted">Qty:</span> <b>@Rows.Sum(x => x.Qty)</b></div>
+                <div><span class="text-muted">Total Cost:</span> <b>@Rows.Sum(x => x.TotalCost).ToString("0.00", CultureInfo.InvariantCulture)</b></div>
+                <div><span class="text-muted">Total Price:</span> <b>@Rows.Sum(x => x.TotalPrice).ToString("0.00", CultureInfo.InvariantCulture)</b></div>
+            </div>
+        }
+    </ChildContent>
+</FormGlassLayout>
+
+@if (ShowCustomerSearch)
+{
+    <CustomerSearchModal OnSelected="OnCustomerSelectedAsync" OnClose="CloseCustomerSearchAsync" />
+}

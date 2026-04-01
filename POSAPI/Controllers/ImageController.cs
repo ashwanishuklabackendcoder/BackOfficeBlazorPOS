@@ -20,10 +20,14 @@ namespace POSAPI.Controllers
         }
 
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadImages(List<IFormFile> files)
+        public async Task<IActionResult> UploadImages([FromForm] List<IFormFile> files, [FromForm] string? folder = null)
         {
             if (files == null || files.Count == 0)
                 return BadRequest("No files uploaded.");
+
+            var uploadFolder = string.IsNullOrWhiteSpace(folder)
+                ? "products"
+                : folder.Trim();
 
             var cloudSettings = HttpContext.RequestServices
                 .GetRequiredService<IOptions<CloudinarySettings>>().Value;
@@ -48,7 +52,7 @@ namespace POSAPI.Controllers
                 var uploadParams = new ImageUploadParams
                 {
                     File = new FileDescription(file.FileName, stream),
-                    Folder = "products",   // Cloudinary folder
+                    Folder = uploadFolder,
                     UseFilename = true,
                     UniqueFilename = true,
                     Overwrite = false

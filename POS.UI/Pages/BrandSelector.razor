@@ -2,14 +2,14 @@
 @using POS.UI.Services
 @inject IManufacturerService BrandService
 @inject IJSRuntime JS
-@implements IAsyncDisposable
+@inject SelectorOverlayService OverlayService
 
 
 <div class="position-relative" @ref="root" tabindex="0">
     <!-- Selector -->
     <div class="form-control d-flex justify-content-between align-items-center"
          style="cursor:pointer; min-height: calc(1.5em + 0.75rem + 2px);"
-         @onclick="ToggleDropdown">
+         @onclick="ToggleDropdownAsync">
         <span class="text-truncate">@(string.IsNullOrWhiteSpace(Value) ? " " : Value)</span>
         <span class="d-inline-flex align-items-center gap-2 ms-2">
             @if (!string.IsNullOrWhiteSpace(Value))
@@ -20,63 +20,12 @@
                         style="width:18px; height:18px; border:none; border-radius:50%; background:gray; color:white; display:inline-flex; align-items:center; justify-content:center; font-size:0.85rem; line-height:1; padding:0;"
                         @onclick="ClearSelection"
                         @onclick:stopPropagation="true">
-                    ×
+                    &times;
                 </button>
             }
             <i class="bi bi-chevron-down"></i>
         </span>
     </div>
-
-    @if (isOpen)
-    {
-        <div class="border rounded shadow bg-white p-2"
-             style="position:absolute;
-                    top:100%;
-                    left:0;
-                    z-index:1055;
-                    width:clamp(300px, 150%, 560px);
-                    max-width:calc(100vw - 1rem);
-                    height:260px;
-                    min-height:230px;
-                    max-height:80vh;
-                    display:flex;
-                    flex-direction:column;
-                    resize:both;
-                    overflow:hidden;">
-
-            <!-- Search (fixed) -->
-            <div class="p-2 border-bottom">
-                <input class="form-control border"
-                       @ref="searchInput"
-                       @bind="search"
-                       @bind:event="oninput" />
-         
-            </div>
-         
-            <!-- Scrollable list -->
-            <div style="flex:1 1 auto; min-height:80px; overflow:auto">
-                @foreach (var b in FilteredBrands)
-                {
-                    <button type="button"
-                            class="list-group-item list-group-item-action @(Value == b.Name ? "active" : "")"
-                            @onclick="() => SelectBrand(b)">
-                        @b.Name
-                    </button>
-                }
-            </div>
-
-            <!-- Manage (fixed bottom) -->
-            <div class="border-top p-2 bg-light">
-                <button type="button"
-                        class="btn text-primary p-0"
-                        @onclick="OpenManageModal"
-                        @onclick:stopPropagation="true">
-                    <i class="bi bi-gear me-1"></i>Manage
-                </button>
-            </div>
-        </div>
-    }
-
 </div>
 
 @if (showManage)
@@ -164,67 +113,56 @@
     string search = "";
     string editId;
     string editBrandName = "";
+    SelectorOverlayPlacement? overlayPlacement;
+    const string OverlayKey = nameof(BrandSelector);
     ElementReference root;
-    ElementReference searchInput;
-    IJSObjectReference? module;
-    IJSObjectReference? outsideHandler;
-    DotNetObjectReference<BrandSelector>? dotNetRef;
+    IJSObjectReference? selectorModule;
+
     protected override void OnInitialized()
     {
         Value ??= "";
     }
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            dotNetRef = DotNetObjectReference.Create(this);
-            module = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./clickOutside.js");
 
-            outsideHandler = await JS.InvokeAsync<IJSObjectReference>(
-                "registerClickOutside", root, dotNetRef);
-
-        }
-    }
-
-    [JSInvokable]
-    public void OnClickOutside()
-    {
-        if (isOpen)
-        {
-            isOpen = false;
-            InvokeAsync(StateHasChanged);
-        }
-    }
     protected override async Task OnInitializedAsync()
     {
         brands = await BrandService.GetAllAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            selectorModule = await JS.InvokeAsync<IJSObjectReference>("import", "./selectorOverlay.js");
     }
 
     IEnumerable<ManufacturerDto> FilteredBrands =>
         string.IsNullOrWhiteSpace(search)
             ? brands
             : brands.Where(x =>
-                x.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+                (x.Name ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase));
 
-    void ToggleDropdown() => isOpen = !isOpen;
+    async Task ToggleDropdownAsync()
+    {
+        if (isOpen)
+        {
+            await CloseDropdownAsync();
+            return;
+        }
+
+        await OpenDropdownAsync();
+    }
 
     [JSInvokable]
     public async Task OnF5()
     {
-        isOpen = true;
-        await InvokeAsync(StateHasChanged);
-        await Task.Yield();
-        await searchInput.FocusAsync();
+        await OpenDropdownAsync();
     }
 
     async Task SelectBrand(ManufacturerDto b)
     {
         Value = b.Name;
         await ValueChanged.InvokeAsync(Value);
-        isOpen = false;
+        await CloseDropdownAsync();
         await InvokeAsync(StateHasChanged);
-        await Task.Yield();
         await root.FocusAsync();
     }
 
@@ -233,15 +171,14 @@
         Value = "";
         search = "";
         await ValueChanged.InvokeAsync(Value);
-        isOpen = false;
+        await CloseDropdownAsync();
         await InvokeAsync(StateHasChanged);
-        await Task.Yield();
         await root.FocusAsync();
     }
 
-    void OpenManageModal()
+    async Task OpenManageModal()
     {
-        isOpen = false;
+        await CloseDropdownAsync();
         showManage = true;
     }
 
@@ -293,12 +230,74 @@
 
         CloseManage();
     }
-    public async ValueTask DisposeAsync()
-    {
-        if (outsideHandler != null)
-            await outsideHandler.InvokeVoidAsync("dispose");
 
-        dotNetRef?.Dispose();
+    async Task OpenDropdownAsync()
+    {
+        isOpen = true;
+        overlayPlacement = selectorModule != null
+            ? await selectorModule.InvokeAsync<SelectorOverlayPlacement>("measureAnchor", root)
+            : null;
+        await OverlayService.ShowAsync(
+            OverlayKey,
+            typeof(SelectorDropdownPanel<ManufacturerDto>),
+            BuildOverlayParameters(),
+            overlayPlacement,
+            HandleOverlayDismissedAsync);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task CloseDropdownAsync()
+    {
+        if (!isOpen && OverlayService.Current is null)
+            return;
+
+        await OverlayService.RequestCloseAsync();
+        isOpen = false;
+        overlayPlacement = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task HandleOverlayDismissedAsync()
+    {
+        isOpen = false;
+        overlayPlacement = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    IDictionary<string, object> BuildOverlayParameters()
+    {
+        return new Dictionary<string, object>
+        {
+            ["Items"] = FilteredBrands.ToList(),
+            ["ItemText"] = (Func<ManufacturerDto, string>)(b => b.Name ?? string.Empty),
+            ["IsSelected"] = (Func<ManufacturerDto, bool>)(b => string.Equals(Value, b.Name, StringComparison.OrdinalIgnoreCase)),
+            ["ItemSelected"] = EventCallback.Factory.Create<ManufacturerDto>(this, SelectBrand),
+            ["SearchChanged"] = EventCallback.Factory.Create<string>(this, OnSearchChanged),
+            ["OnManage"] = EventCallback.Factory.Create(this, OpenManageModal),
+            ["InitialSearch"] = search,
+            ["SearchPlaceholder"] = "Search...",
+            ["ManageLabel"] = "Manage"
+        };
+    }
+
+    async Task OnSearchChanged(string value)
+    {
+        search = value;
+        if (isOpen)
+            await RefreshOverlayAsync();
+    }
+
+    async Task RefreshOverlayAsync()
+    {
+        if (!isOpen || overlayPlacement is null)
+            return;
+
+        await OverlayService.ShowAsync(
+            OverlayKey,
+            typeof(SelectorDropdownPanel<ManufacturerDto>),
+            BuildOverlayParameters(),
+            overlayPlacement,
+            HandleOverlayDismissedAsync);
     }
   
     void CancelEdit()

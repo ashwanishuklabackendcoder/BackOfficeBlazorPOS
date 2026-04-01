@@ -28,6 +28,10 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
             if (levels == null)
                 throw new Exception("Stock levels not found for part");
 
+            var product = await _db.ProductItems
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PartNumber == dto.PartNumber);
+
             var fromProp = typeof(StockLevels)
                 .GetProperty($"L{dto.FromLocation}");
 
@@ -58,12 +62,19 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 })
                 .Sum();
 
+            var movementCost = dto.Cost > 0m
+                ? dto.Cost
+                : product?.CostPrice;
+
             // INSERT INTO ProductStockMovement (AUDIT)
             _db.ProductStockMovement.Add(new ProductStockMovement
             {
                 DateAndTime = DateTime.UtcNow,
                 PartNo = dto.PartNumber,
                 StockQty = dto.Quantity,
+                Cost = movementCost,
+                StockNumber = string.IsNullOrWhiteSpace(dto.StockNumber) ? null : dto.StockNumber.Trim(),
+                SerialNumber = string.IsNullOrWhiteSpace(dto.SerialNumber) ? null : dto.SerialNumber.Trim(),
                 Notes = dto.Notes,
                 SalesCode = dto.SalesCode,
                 FromLocation = dto.FromLocation,

@@ -4,7 +4,7 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">POS.UI</a>
+        <a class="navbar-brand" href="dashboard">POS.UI</a>
         <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -24,8 +24,8 @@
         else
         {
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <NavLink class="nav-link" href="dashboard" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Dashboard
                 </NavLink>
             </div>
 
@@ -181,7 +181,7 @@
             {
                 <div class="nav-item px-3">
                     <button class="nav-link section-toggle" @onclick="TogglePurchaseOrderMenu" @onclick:stopPropagation="true">
-                        <span class="bi bi-bag-check-fill-nav-menu" aria-hidden="true"></span>
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
                         Purchase Orders
                         <span class="ms-auto bi @(purchaseOrderMenuExpanded ? "bi-chevron-up" : "bi-chevron-down")"></span>
                     </button>
@@ -286,9 +286,35 @@
                     {
                         <div class="nav-item px-4 submenu-item">
                             <NavLink class="nav-link" href="customer-sales-returns-report">
-                                <span class="bi bi-clipboard-data me-2" aria-hidden="true"></span> Sales/Returns Report
+                            <span class="bi bi-clipboard-data me-2" aria-hidden="true"></span> Sales/Returns Report
                             </NavLink>
                         </div>
+                    }
+                    @if (AuthService.HasAccess(PermissionKeys.StockInput) || AuthService.HasAccess(PermissionKeys.CustomerSalesReturn))
+                    {
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="overstock-report">
+                                <span class="bi bi-box-seam me-2" aria-hidden="true"></span> Overstock Report
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="major-item-sales-report">
+                                <span class="bi bi-graph-up me-2" aria-hidden="true"></span> Major Item Sales Report
+                            </NavLink>
+                        </div>
+                        <div class="nav-item px-4 submenu-item">
+                            <NavLink class="nav-link" href="stock-transfer-report">
+                                <span class="bi bi-arrow-left-right me-2" aria-hidden="true"></span> Stock Transfer Report
+                            </NavLink>
+                        </div>
+                        @if (AuthService.HasAccess(PermissionKeys.Layaway))
+                        {
+                            <div class="nav-item px-4 submenu-item">
+                                <NavLink class="nav-link" href="layaway-report">
+                                    <span class="bi bi-receipt me-2" aria-hidden="true"></span> Layaway Report
+                                </NavLink>
+                            </div>
+                        }
                     }
                 }
             }
@@ -384,6 +410,8 @@
         => AuthService.CurrentUser?.IsAdmin == true;
 
     private bool ShowReportsMenu()
-        => AuthService.HasAccess(PermissionKeys.CustomerSalesReturn);
+        => AuthService.HasAccess(PermissionKeys.CustomerSalesReturn)
+            || AuthService.HasAccess(PermissionKeys.StockInput)
+            || AuthService.HasAccess(PermissionKeys.Layaway);
 
 }

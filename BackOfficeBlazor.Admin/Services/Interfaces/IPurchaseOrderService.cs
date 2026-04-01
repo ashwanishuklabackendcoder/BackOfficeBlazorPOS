@@ -11,6 +11,8 @@ namespace BackOfficeBlazor.Admin.Services.Interfaces
         Task<ApiResponse<PurchaseOrderWorkspaceDto>> RaiseAsync(PurchaseOrderUpsertRequestDto request);
         Task<ApiResponse<PurchaseOrderWorkspaceDto>> RaiseDirectAsync(PurchaseOrderDirectRaiseRequestDto request);
         Task<ApiResponse<PurchaseOrderWorkspaceDto>> ReceiveAsync(PurchaseOrderReceiveRequestDto request);
+        Task<ApiResponse<PurchaseOrderWorkspaceDto>> AmendAsync(PurchaseOrderAmendRequestDto request);
+        Task<ApiResponse<List<PurchaseOrderSupplierOptionDto>>> GetSupplierOptionsAsync(int? status);
         Task<ApiResponse<bool>> CancelAsync(string orderNumber, string cancelledByCode);
     }
 }

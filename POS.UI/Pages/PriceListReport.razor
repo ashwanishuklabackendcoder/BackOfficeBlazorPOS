@@ -1,0 +1,679 @@
+@page "/price-list-report"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.Shared
+@using System.Globalization
+@using System.Net
+
+@inject IReportService ReportService
+@inject AppSnackbarService AppSnackbar
+@inject IJSRuntime JS
+@inject ILocationService LocationService
+@inject ISupplierService SupplierService
+@inject ICompanyBrandingService CompanyBrandingService
+
+@implements IAsyncDisposable
+
+<PageTitle>Price List Report</PageTitle>
+
+<style>
+    .price-list-report-shell .price-list-filter-panel {
+        background: linear-gradient(160deg, rgba(255,255,255,.92), rgba(244,248,252,.82));
+    }
+
+    .price-list-report-table {
+        table-layout: fixed;
+        font-size: .78rem;
+    }
+
+    .price-list-report-table th,
+    .price-list-report-table td {
+        padding: .28rem .35rem;
+        vertical-align: top;
+    }
+
+    .price-list-group-row td {
+        background: #e9f0f7;
+        font-weight: 700;
+    }
+
+    .price-list-subgroup-row td {
+        background: #f6f9fc;
+        font-weight: 600;
+        padding-left: .9rem;
+    }
+
+    .price-list-group-label {
+        letter-spacing: .02em;
+    }
+
+    .price-list-report-table .num {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .price-list-report-table .nowrap {
+        white-space: nowrap;
+    }
+</style>
+
+<FormGlassLayout Title="Price List Report"
+                 Subtitle="Grouped price list by make and model"
+                 Id="price-list-report-form"
+                 ScopeId="price-list-report-form"
+                 class="price-list-report-shell"
+                 BodyClass="card-body form-shell-body p-3 p-lg-4 price-list-report-body"
+                 HeaderActions="@HeaderActions">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3 mb-3 price-list-filter-panel">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Supplier No</label>
+                    <SupplierSelector Value="@SupplierNo" ValueChanged="OnSupplierChanged" />
+                </div>
+
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Major / Minor / Both</label>
+                    <div class="d-flex flex-wrap gap-2 toggle-button-group">
+                        <button type="button" class="@GetToggleClass(IsBoth)" @onclick="SetBoth">Both</button>
+                        <button type="button" class="@GetToggleClass(IsMajor)" @onclick="SetMajor">Major</button>
+                        <button type="button" class="@GetToggleClass(IsMinor)" @onclick="SetMinor">Minor</button>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Sort By</label>
+                    <select class="form-select" value="@SortBy" @onchange="OnSortByChanged">
+                        <option value="PartNumber">Part Number</option>
+                        <option value="Make">Make</option>
+                        <option value="Model">Model</option>
+                        <option value="MfrPartNumber">MFR Part Number</option>
+                        <option value="Detail">Detail</option>
+                        <option value="Category">Category</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2 align-items-end">
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">From Location</label>
+                    <LocationSelector Value="@FromLocation" ValueChanged="OnFromLocationChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">To Location</label>
+                    <LocationSelector Value="@ToLocation" ValueChanged="OnToLocationChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">Make</label>
+                    <BrandSelector Value="@Make" ValueChanged="OnMakeChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">Year</label>
+                    <input class="form-control" type="text" inputmode="numeric" value="@YearText" @onchange="OnYearChanged" />
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                    <label class="form-label-custom">Category A</label>
+                    <CategorySelector Level="A"
+                                      Code="@CategoryACode"
+                                      CodeChanged="OnCategoryACodeChanged"
+                                      Name="@CategoryAName"
+                                      NameChanged="OnCategoryANameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">Category B</label>
+                    <CategorySelector Level="B"
+                                      Code="@CategoryBCode"
+                                      CodeChanged="OnCategoryBCodeChanged"
+                                      Name="@CategoryBName"
+                                      NameChanged="OnCategoryBNameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">Category C</label>
+                    <CategorySelector Level="C"
+                                      Code="@CategoryCCode"
+                                      CodeChanged="OnCategoryCCodeChanged"
+                                      Name="@CategoryCName"
+                                      NameChanged="OnCategoryCNameChanged" />
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label-custom">Filters</label>
+                    <div class="d-flex flex-wrap gap-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="promoOnly" checked="@PromoPriceOnly" @onchange="OnPromoPriceOnlyChanged" />
+                            <label class="form-check-label" for="promoOnly">Promo Price</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="negativeOnly" checked="@NegativePriceOnly" @onchange="OnNegativePriceOnlyChanged" />
+                            <label class="form-check-label" for="negativeOnly">Negative Price</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-12 d-flex justify-content-end gap-2 flex-wrap">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@IsLoading" @onclick="RefreshNow">Refresh</button>
+                    <button type="button" class="btn btn-outline-secondary" disabled="@(!HasRows || IsLoading)" @onclick="ExportPdf">Export PDF</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel border rounded-3 overflow-hidden">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0 price-list-report-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Make</th>
+                            <th>Model</th>
+                            <th>CAT A</th>
+                            <th>CAT B</th>
+                            <th>CAT C</th>
+                            <th>Year</th>
+                            <th>PartNo</th>
+                            <th>Detail</th>
+                            <th>Size</th>
+                            <th>Color</th>
+                            <th>Barcode</th>
+                            <th>MFR PartNumber</th>
+                            <th class="text-end">Total Stock</th>
+                            <th class="text-end">Price</th>
+                            <th class="text-end">Promo Price</th>
+                            <th>Promo Start</th>
+                            <th>Promo End</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (IsLoading && Rows == null)
+                        {
+                            <tr><td colspan="17" class="text-muted py-4 text-center">Loading price list report...</td></tr>
+                        }
+                        else if (Rows == null)
+                        {
+                            <tr><td colspan="17" class="text-muted py-4 text-center">Adjust the filters to load the report.</td></tr>
+                        }
+                        else if (Rows.Count == 0)
+                        {
+                            <tr><td colspan="17" class="text-muted py-4 text-center">No records match the selected filters.</td></tr>
+                        }
+                        else
+                        {
+                            var currentMake = string.Empty;
+                            var currentModel = string.Empty;
+
+                            @foreach (var row in Rows)
+                            {
+                                if (!string.Equals(currentMake, row.Make, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    currentMake = row.Make;
+                                    currentModel = string.Empty;
+                                    <tr class="price-list-group-row">
+                                        <td colspan="17" class="price-list-group-label">Make: @row.Make</td>
+                                    </tr>
+                                }
+
+                                if (!string.Equals(currentModel, row.Model, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    currentModel = row.Model;
+                                    <tr class="price-list-subgroup-row">
+                                        <td colspan="17" class="price-list-group-label">&nbsp;&nbsp;Model: @row.Model</td>
+                                    </tr>
+                                }
+
+                                <tr>
+                                    <td>@row.Make</td>
+                                    <td>@row.Model</td>
+                                    <td>@row.CatA</td>
+                                    <td>@row.CatB</td>
+                                    <td>@row.CatC</td>
+                                    <td>@row.Year</td>
+                                    <td class="fw-semibold nowrap">@row.PartNo</td>
+                                    <td>@row.Detail</td>
+                                    <td>@row.Size</td>
+                                    <td>@row.Color</td>
+                                    <td>@row.Barcode</td>
+                                    <td>@row.MfrPartNumber</td>
+                                    <td class="text-end">@row.TotalStock</td>
+                                    <td class="text-end">@row.Price.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.PromoPrice.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="nowrap">@FormatDate(row.PromoStart)</td>
+                                    <td class="nowrap">@FormatDate(row.PromoEnd)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </ChildContent>
+</FormGlassLayout>
+
+@code {
+    private List<PriceListReportLineDto>? Rows;
+    private bool IsLoading;
+    private bool _disposed;
+    private int _requestVersion;
+    private CancellationTokenSource? _reloadCts;
+    private CompanyBrandingDto? _branding;
+    private IReadOnlyDictionary<string, LocationDto> _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyDictionary<string, SupplierDto> _supplierLookup = new Dictionary<string, SupplierDto>(StringComparer.OrdinalIgnoreCase);
+
+    private string? SupplierNo { get; set; }
+    private string ProductMode { get; set; } = "Both";
+    private bool PromoPriceOnly { get; set; }
+    private bool NegativePriceOnly { get; set; }
+    private string? FromLocation { get; set; } = "01";
+    private string? ToLocation { get; set; } = "30";
+    private string? Make { get; set; }
+    private string? CategoryACode { get; set; }
+    private string? CategoryAName { get; set; }
+    private string? CategoryBCode { get; set; }
+    private string? CategoryBName { get; set; }
+    private string? CategoryCCode { get; set; }
+    private string? CategoryCName { get; set; }
+    private string? YearText { get; set; }
+    private string SortBy { get; set; } = "PartNumber";
+
+    private bool HasRows => Rows is { Count: > 0 };
+    private bool IsBoth => string.Equals(ProductMode, "Both", StringComparison.OrdinalIgnoreCase);
+    private bool IsMajor => string.Equals(ProductMode, "Major", StringComparison.OrdinalIgnoreCase);
+    private bool IsMinor => string.Equals(ProductMode, "Minor", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookupsAsync();
+        _branding = await CompanyBrandingService.GetAsync();
+        await LoadReportAsync(showWarning: true);
+    }
+
+    private RenderFragment HeaderActions => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "d-flex align-items-center gap-2 flex-wrap justify-content-end");
+
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "form-shell-meta");
+        builder.AddContent(seq++, IsLoading ? "Refreshing..." : HasRows ? $"{Rows!.Count} rows" : "Ready");
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "button");
+        builder.AddAttribute(seq++, "type", "button");
+        builder.AddAttribute(seq++, "class", "btn btn-outline-secondary btn-sm");
+        builder.AddAttribute(seq++, "disabled", IsLoading);
+        builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, RefreshNow));
+        builder.AddContent(seq++, "Refresh");
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    private async Task RefreshNow()
+        => await LoadReportAsync(showWarning: true);
+
+    private async Task QueueReloadAsync()
+    {
+        if (_disposed)
+            return;
+
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+        _reloadCts = new CancellationTokenSource();
+
+        var token = _reloadCts.Token;
+
+        try
+        {
+            await Task.Delay(250, token);
+            await LoadReportAsync(showWarning: false);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadReportAsync(bool showWarning)
+    {
+        var requestVersion = Interlocked.Increment(ref _requestVersion);
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var request = new PriceListReportRequestDto
+            {
+                SupplierNo = string.IsNullOrWhiteSpace(SupplierNo) ? null : SupplierNo.Trim(),
+                ProductMode = ProductMode,
+                PromoPriceOnly = PromoPriceOnly,
+                NegativePriceOnly = NegativePriceOnly,
+                FromLocation = NormalizeLocation(FromLocation),
+                ToLocation = NormalizeLocation(ToLocation),
+                Make = string.IsNullOrWhiteSpace(Make) ? null : Make.Trim(),
+                CategoryA = string.IsNullOrWhiteSpace(CategoryACode) ? null : CategoryACode.Trim(),
+                CategoryB = string.IsNullOrWhiteSpace(CategoryBCode) ? null : CategoryBCode.Trim(),
+                CategoryC = string.IsNullOrWhiteSpace(CategoryCCode) ? null : CategoryCCode.Trim(),
+                Year = string.IsNullOrWhiteSpace(YearText) ? null : YearText.Trim(),
+                SortBy = SortBy
+            };
+
+            var res = await ReportService.GetPriceListReportAsync(request);
+
+            if (requestVersion != _requestVersion)
+                return;
+
+            if (!res.Success)
+            {
+                if (showWarning)
+                    await AppSnackbar.Show(res.Message ?? "Unable to load report.", SnackbarType.Error);
+
+                Rows = new();
+                return;
+            }
+
+            Rows = res.Data ?? new();
+        }
+        catch (Exception ex) when (!(_disposed || ex is TaskCanceledException))
+        {
+            if (requestVersion == _requestVersion && showWarning)
+                await AppSnackbar.Show("Unable to load report.", SnackbarType.Error);
+
+            if (requestVersion == _requestVersion)
+                Rows = new();
+        }
+        finally
+        {
+            if (requestVersion == _requestVersion)
+            {
+                IsLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private static string? NormalizeLocation(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        return int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var slot)
+            ? slot.ToString("D2", CultureInfo.InvariantCulture)
+            : trimmed.ToUpperInvariant();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        await LoadLocationLookupAsync();
+        await LoadSupplierLookupAsync();
+    }
+
+    private async Task LoadLocationLookupAsync()
+    {
+        try
+        {
+            var locations = await LocationService.GetAllAsync();
+            _locationLookup = locations
+                .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+                .GroupBy(x => DisplayLabelFormatter.NormalizeLocationCode(x.Code), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            _locationLookup = new Dictionary<string, LocationDto>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private async Task LoadSupplierLookupAsync()
+    {
+        try
+        {
+            var suppliers = await SupplierService.GetAllAsync();
+            _supplierLookup = suppliers
+                .Where(x => !string.IsNullOrWhiteSpace(x.AccountNo))
+                .GroupBy(x => x.AccountNo!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            _supplierLookup = new Dictionary<string, SupplierDto>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private string GetSupplierDisplay()
+    {
+        if (string.IsNullOrWhiteSpace(SupplierNo))
+            return "All";
+
+        var key = SupplierNo.Trim();
+        if (_supplierLookup.TryGetValue(key, out var supplier))
+            return string.IsNullOrWhiteSpace(supplier.Name) ? key : $"{supplier.AccountNo} - {supplier.Name}";
+
+        return key;
+    }
+
+    private string GetLocationDisplay(string? code)
+        => DisplayLabelFormatter.FormatLocation(code, _locationLookup);
+
+    private async Task OnSupplierChanged(string? value)
+    {
+        SupplierNo = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnMakeChanged(string? value)
+    {
+        Make = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryACodeChanged(string? value)
+    {
+        CategoryACode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryANameChanged(string? value)
+    {
+        CategoryAName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryBCodeChanged(string? value)
+    {
+        CategoryBCode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryBNameChanged(string? value)
+    {
+        CategoryBName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryCCodeChanged(string? value)
+    {
+        CategoryCCode = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnCategoryCNameChanged(string? value)
+    {
+        CategoryCName = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnFromLocationChanged(string? value)
+    {
+        FromLocation = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnToLocationChanged(string? value)
+    {
+        ToLocation = value;
+        await QueueReloadAsync();
+    }
+
+    private async Task OnYearChanged(ChangeEventArgs e)
+    {
+        YearText = e.Value?.ToString();
+        await QueueReloadAsync();
+    }
+
+    private async Task OnSortByChanged(ChangeEventArgs e)
+    {
+        SortBy = e.Value?.ToString() ?? "PartNumber";
+        await QueueReloadAsync();
+    }
+
+    private async Task OnPromoPriceOnlyChanged(ChangeEventArgs e)
+    {
+        PromoPriceOnly = ToBool(e.Value);
+        await QueueReloadAsync();
+    }
+
+    private async Task OnNegativePriceOnlyChanged(ChangeEventArgs e)
+    {
+        NegativePriceOnly = ToBool(e.Value);
+        await QueueReloadAsync();
+    }
+
+    private async Task SetBoth()
+    {
+        ProductMode = "Both";
+        await QueueReloadAsync();
+    }
+
+    private async Task SetMajor()
+    {
+        ProductMode = "Major";
+        await QueueReloadAsync();
+    }
+
+    private async Task SetMinor()
+    {
+        ProductMode = "Minor";
+        await QueueReloadAsync();
+    }
+
+    private async Task ExportPdf()
+    {
+        if (!HasRows)
+            return;
+
+        _branding = await CompanyBrandingService.GetAsync();
+        var title = "Price List Report";
+        var html = BuildPrintHtml(title, Rows ?? new());
+        await JS.InvokeVoidAsync("reportExport.printHtml", title, html);
+    }
+
+    private string BuildPrintHtml(string title, List<PriceListReportLineDto> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        var supplier = WebUtility.HtmlEncode(GetSupplierDisplay());
+        var mode = WebUtility.HtmlEncode(ProductMode);
+        var locations = WebUtility.HtmlEncode($"{GetLocationDisplay(FromLocation)} to {GetLocationDisplay(ToLocation)}");
+        var make = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(Make) ? "All" : Make);
+        var year = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(YearText) ? "All" : YearText);
+        var catA = WebUtility.HtmlEncode(CategoryAName ?? CategoryACode ?? "All");
+        var catB = WebUtility.HtmlEncode(CategoryBName ?? CategoryBCode ?? "All");
+        var catC = WebUtility.HtmlEncode(CategoryCName ?? CategoryCCode ?? "All");
+        var sortBy = WebUtility.HtmlEncode(SortBy);
+        var promo = PromoPriceOnly ? "Yes" : "No";
+        var negative = NegativePriceOnly ? "Yes" : "No";
+
+        sb.Append(PrintTheme.BuildDocumentStart(title, true, "table{width:100%;border-collapse:collapse;table-layout:fixed;}th,td{border:1px solid #cfcfcf;padding:2px 3px;vertical-align:top;font-size:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}th{background:#f4f6f8;font-weight:bold;}.num{text-align:right;}.group-row td{background:#e8eef6;font-weight:700;}.model-row td{background:#f5f8fc;font-weight:600;}.wrap{white-space:normal;}th:nth-child(1),td:nth-child(1){width:6%;}th:nth-child(2),td:nth-child(2){width:7%;}th:nth-child(3),td:nth-child(3){width:6%;}th:nth-child(4),td:nth-child(4){width:6%;}th:nth-child(5),td:nth-child(5){width:6%;}th:nth-child(6),td:nth-child(6){width:4%;}th:nth-child(7),td:nth-child(7){width:6%;}th:nth-child(8),td:nth-child(8){width:11%;white-space:normal;}th:nth-child(9),td:nth-child(9){width:5%;}th:nth-child(10),td:nth-child(10){width:5%;}th:nth-child(11),td:nth-child(11){width:7%;}th:nth-child(12),td:nth-child(12){width:8%;}th:nth-child(13),td:nth-child(13){width:5%;}th:nth-child(14),td:nth-child(14){width:5%;}th:nth-child(15),td:nth-child(15){width:6%;}th:nth-child(16),td:nth-child(16){width:6%;}th:nth-child(17),td:nth-child(17){width:6%;}"));
+        sb.Append("<div class=\"page\">");
+        sb.Append(PrintTheme.BuildHeader(title, _branding, "Grouped price list report"));
+        sb.Append("<div class=\"meta section\">");
+        sb.Append($"Supplier: {supplier}<br/>");
+        sb.Append($"Mode: {mode} | Promo Price: {(PromoPriceOnly ? "Yes" : "No")} | Negative Price: {negative}<br/>");
+        sb.Append($"Locations: {locations}<br/>");
+        sb.Append($"Make: {make} | Year: {year} | Categories: A={catA}, B={catB}, C={catC}<br/>");
+        sb.Append($"Sort By: {sortBy}");
+        sb.Append("</div>");
+        sb.Append("<table><thead><tr>");
+        sb.Append("<th>Make</th><th>Model</th><th>CAT A</th><th>CAT B</th><th>CAT C</th><th>Year</th><th>PartNo</th><th>Detail</th><th>Size</th><th>Color</th><th>Barcode</th><th>MFR PartNumber</th><th class=\"num\">Total Stock</th><th class=\"num\">Price</th><th class=\"num\">Promo Price</th><th>Promo Start</th><th>Promo End</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        var currentMake = string.Empty;
+        var currentModel = string.Empty;
+
+        foreach (var row in rows)
+        {
+            if (!string.Equals(currentMake, row.Make, StringComparison.OrdinalIgnoreCase))
+            {
+                currentMake = row.Make;
+                currentModel = string.Empty;
+                sb.Append("<tr class=\"group-row\"><td colspan=\"17\">");
+                sb.Append($"Make: {WebUtility.HtmlEncode(row.Make)}");
+                sb.Append("</td></tr>");
+            }
+
+            if (!string.Equals(currentModel, row.Model, StringComparison.OrdinalIgnoreCase))
+            {
+                currentModel = row.Model;
+                sb.Append("<tr class=\"model-row\"><td colspan=\"17\">");
+                sb.Append($"&nbsp;&nbsp;Model: {WebUtility.HtmlEncode(row.Model)}");
+                sb.Append("</td></tr>");
+            }
+
+            sb.Append("<tr>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Make)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Model)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.CatA)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.CatB)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.CatC)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Year)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.PartNo)}</td>");
+            sb.Append($"<td class=\"wrap\">{WebUtility.HtmlEncode(row.Detail)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Size)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Color)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.Barcode)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(row.MfrPartNumber)}</td>");
+            sb.Append($"<td class=\"num\">{row.TotalStock}</td>");
+            sb.Append($"<td class=\"num\">{row.Price.ToString("0.00", CultureInfo.InvariantCulture)}</td>");
+            sb.Append($"<td class=\"num\">{row.PromoPrice.ToString("0.00", CultureInfo.InvariantCulture)}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(FormatDate(row.PromoStart))}</td>");
+            sb.Append($"<td>{WebUtility.HtmlEncode(FormatDate(row.PromoEnd))}</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody></table></div>");
+        sb.Append(PrintTheme.BuildDocumentEnd());
+        return sb.ToString();
+    }
+
+    private static string FormatDate(DateTime? value)
+        => value.HasValue
+            ? value.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
+            : string.Empty;
+
+    private static bool ToBool(object? value)
+        => value switch
+        {
+            bool b => b,
+            string s when bool.TryParse(s, out var parsed) => parsed,
+            _ => false
+        };
+
+    private static string GetToggleClass(bool active)
+        => active ? "btn btn-sm btn-primary" : "btn btn-sm btn-outline-secondary";
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+        await Task.CompletedTask;
+    }
+}

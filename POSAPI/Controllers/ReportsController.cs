@@ -112,6 +112,26 @@ namespace POSAPI.Controllers
             return Ok(ApiResponse<List<MajorItemReportLineDto>>.Ok(rows, "Report loaded."));
         }
 
+        [HttpPost("price-list-report")]
+        public async Task<IActionResult> GetPriceListReport([FromBody] PriceListReportRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.StockInput, PermissionKeys.CustomerSalesReturn))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<PriceListReportLineDto>>.Fail("You do not have permission to view price list reports."));
+            }
+
+            if (request == null)
+            {
+                return BadRequest(ApiResponse<List<PriceListReportLineDto>>.Fail(
+                    "Report criteria are required."));
+            }
+
+            var rows = await _service.GetPriceListReportAsync(request);
+            return Ok(ApiResponse<List<PriceListReportLineDto>>.Ok(rows, "Report loaded."));
+        }
+
         [HttpPost("stock-transfer")]
         public async Task<IActionResult> GetStockTransferReport([FromBody] StockTransferReportRequestDto request)
         {

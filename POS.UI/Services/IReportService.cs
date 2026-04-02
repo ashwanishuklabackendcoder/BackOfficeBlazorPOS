@@ -18,6 +18,9 @@ namespace POS.UI.Services
         Task<ApiResponse<List<MajorItemReportLineDto>>> GetMajorItemReportAsync(
             MajorItemReportRequestDto request);
 
+        Task<ApiResponse<List<PriceListReportLineDto>>> GetPriceListReportAsync(
+            PriceListReportRequestDto request);
+
         Task<ApiResponse<List<StockTransferReportLineDto>>> GetStockTransferReportAsync(
             StockTransferReportRequestDto request);
 

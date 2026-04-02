@@ -643,6 +643,157 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 .ToList();
         }
 
+        public async Task<List<PriceListReportLineDto>> GetPriceListReportAsync(PriceListReportRequestDto request)
+        {
+            var rawLocations = await _context._Locations
+                .AsNoTracking()
+                .Where(x => x.IsActive && !x.IsDeleted)
+                .Select(x => new
+                {
+                    x.Code,
+                    x.Name
+                })
+                .ToListAsync();
+
+            var locations = rawLocations
+                .Select(x => new LocationSlot(NormalizeLocationCode(x.Code), x.Name))
+                .Where(x => !string.IsNullOrWhiteSpace(x.Code) && TryParseSlot(x.Code, out var slot) && slot >= 1 && slot <= 30)
+                .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (locations.Count == 0)
+                return new List<PriceListReportLineDto>();
+
+            var selectedSlots = ResolveLocationRange(locations, request.FromLocation, request.ToLocation);
+            if (selectedSlots.Count == 0)
+                return new List<PriceListReportLineDto>();
+
+            var selectedLocationCodes = selectedSlots.Select(x => x.Code).ToList();
+
+            IQueryable<ProductItem> productQuery = _context.ProductItems.AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(request.SupplierNo))
+            {
+                var supplierNo = request.SupplierNo.Trim();
+                productQuery = productQuery.Where(x =>
+                    x.Supplier1Code == supplierNo ||
+                    x.Supplier2Code == supplierNo);
+            }
+
+            var productMode = (request.ProductMode ?? string.Empty).Trim();
+            if (productMode.Equals("Major", StringComparison.OrdinalIgnoreCase))
+                productQuery = productQuery.Where(x => x.Major);
+            else if (productMode.Equals("Minor", StringComparison.OrdinalIgnoreCase))
+                productQuery = productQuery.Where(x => !x.Major);
+
+            if (!string.IsNullOrWhiteSpace(request.Make))
+            {
+                var make = request.Make.Trim();
+                productQuery = productQuery.Where(x => x.Make == make);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.CategoryA))
+            {
+                var category = request.CategoryA.Trim();
+                productQuery = productQuery.Where(x => x.CatACode == category || x.CatA == category);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.CategoryB))
+            {
+                var category = request.CategoryB.Trim();
+                productQuery = productQuery.Where(x => x.CatBCode == category || x.CatB == category);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.CategoryC))
+            {
+                var category = request.CategoryC.Trim();
+                productQuery = productQuery.Where(x => x.CatCCode == category || x.CatC == category);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Year))
+            {
+                var year = request.Year.Trim();
+                productQuery = productQuery.Where(x => x.Year == year);
+            }
+
+            if (request.PromoPriceOnly)
+            {
+                productQuery = productQuery.Where(x => (x.PromoPrice ?? 0m) > 0m);
+            }
+
+            var products = await productQuery
+                .OrderBy(x => x.Make)
+                .ThenBy(x => x.GroupName ?? x.ShortDescription ?? x.PartNumber)
+                .ThenBy(x => x.PartNumber)
+                .ToListAsync();
+
+            if (request.NegativePriceOnly)
+            {
+                products = products
+                    .Where(x => GetReportPrice(x) < 0m || (x.PromoPrice ?? 0m) < 0m)
+                    .ToList();
+            }
+
+            if (products.Count == 0)
+                return new List<PriceListReportLineDto>();
+
+            var partNumbers = products
+                .Select(x => x.PartNumber)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (partNumbers.Count == 0)
+                return new List<PriceListReportLineDto>();
+
+            var stockRows = await _context._ProductsStockLevels
+                .AsNoTracking()
+                .Where(x => partNumbers.Contains(x.PartNumber))
+                .ToListAsync();
+
+            var stockByPart = stockRows
+                .GroupBy(x => x.PartNumber, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.First(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            var sortBy = (request.SortBy ?? string.Empty).Trim();
+            var rows = products
+                .Select(product =>
+                {
+                    stockByPart.TryGetValue(product.PartNumber, out var stockRow);
+                    var totalStock = CalculateTotalStock(stockRow, selectedLocationCodes);
+                    return new PriceListReportLineDto
+                    {
+                        Make = product.Make ?? string.Empty,
+                        Model = product.GroupName ?? product.ShortDescription ?? product.PartNumber,
+                        CatA = product.CatA ?? product.CatACode ?? string.Empty,
+                        CatB = product.CatB ?? product.CatBCode ?? string.Empty,
+                        CatC = product.CatC ?? product.CatCCode ?? string.Empty,
+                        Year = product.Year ?? string.Empty,
+                        PartNo = product.PartNumber,
+                        Detail = product.Details ?? product.ShortDescription ?? string.Empty,
+                        Size = product.Size ?? string.Empty,
+                        Color = product.Color ?? string.Empty,
+                        Barcode = product.Barcode ?? string.Empty,
+                        MfrPartNumber = product.MfrPartNumber ?? product.MfrPartNumber2 ?? string.Empty,
+                        TotalStock = totalStock,
+                        Price = GetReportPrice(product),
+                        PromoPrice = product.PromoPrice ?? 0m,
+                        PromoStart = product.PromoStart,
+                        PromoEnd = product.PromoEnd
+                    };
+                })
+                .OrderBy(x => x.Make, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Model, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => GetSortValue(x, sortBy), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.PartNo, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return rows;
+        }
+
         public async Task<List<StockTransferReportLineDto>> GetStockTransferReportAsync(StockTransferReportRequestDto request)
         {
             var rawLocations = await _context._Locations
@@ -1023,6 +1174,52 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
 
             return product?.CostPrice ?? 0m;
         }
+
+        private static decimal GetReportPrice(ProductItem product)
+        {
+            if (product.StorePrice.HasValue && product.StorePrice.Value != 0m)
+                return product.StorePrice.Value;
+
+            if (product.SuggestedRRP.HasValue && product.SuggestedRRP.Value != 0m)
+                return product.SuggestedRRP.Value;
+
+            if (product.TradePrice.HasValue && product.TradePrice.Value != 0m)
+                return product.TradePrice.Value;
+
+            if (product.WebPrice.HasValue && product.WebPrice.Value != 0m)
+                return product.WebPrice.Value;
+
+            return 0m;
+        }
+
+        private static int CalculateTotalStock(StockLevels? stockRow, List<string> selectedLocationCodes)
+        {
+            if (stockRow == null || selectedLocationCodes.Count == 0)
+                return 0;
+
+            var total = 0;
+
+            foreach (var locationCode in selectedLocationCodes)
+            {
+                if (!TryParseSlot(locationCode, out var slotIndex))
+                    continue;
+
+                total += GetStockQty(stockRow, slotIndex);
+            }
+
+            return total;
+        }
+
+        private static string GetSortValue(PriceListReportLineDto row, string sortBy)
+            => sortBy.ToUpperInvariant() switch
+            {
+                "MAKE" => row.Make,
+                "MODEL" => row.Model,
+                "MFR PART NUMBER" => row.MfrPartNumber,
+                "DETAIL" => row.Detail,
+                "CATEGORY" => $"{row.CatA}|{row.CatB}|{row.CatC}",
+                _ => row.PartNo
+            };
 
         private static string GetDeliveryTypeLabel(int? layawayType)
             => layawayType switch

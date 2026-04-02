@@ -64,6 +64,19 @@ namespace POS.UI.Services
                    ?? ApiResponse<List<MajorItemReportLineDto>>.Fail("Null response");
         }
 
+        public async Task<ApiResponse<List<PriceListReportLineDto>>> GetPriceListReportAsync(
+            PriceListReportRequestDto request)
+        {
+            var res = await _http.PostAsJsonAsync("api/reports/price-list-report", request);
+
+            if (!res.IsSuccessStatusCode)
+                return ApiResponse<List<PriceListReportLineDto>>.Fail(
+                    await res.Content.ReadAsStringAsync());
+
+            return await res.Content.ReadFromJsonAsync<ApiResponse<List<PriceListReportLineDto>>>()
+                   ?? ApiResponse<List<PriceListReportLineDto>>.Fail("Null response");
+        }
+
         public async Task<ApiResponse<List<StockTransferReportLineDto>>> GetStockTransferReportAsync(
             StockTransferReportRequestDto request)
         {

@@ -85,6 +85,11 @@
     margin-bottom: 1rem;
 }
 
+.dashboard-filter-top {
+    display: grid;
+    gap: 0.9rem;
+}
+
 .dashboard-filter-group,
 .dashboard-filter-panel {
     display: grid;
@@ -97,13 +102,6 @@
     color: #50647f;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-}
-
-.dashboard-filter-grid {
-    display: grid;
-    grid-template-columns: 1.5fr 1fr;
-    gap: 0.9rem;
-    margin-top: 0.9rem;
 }
 
 .dashboard-range-buttons {
@@ -141,10 +139,34 @@
     margin-top: 0.85rem;
 }
 
+.dashboard-location-panel {
+    padding-top: 0.3rem;
+    border-top: 1px solid rgba(127, 147, 172, 0.12);
+}
+
+.dashboard-location-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.dashboard-location-summary {
+    flex: 0 0 auto;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #294056;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.12);
+}
+
 .dashboard-location-list {
     display: grid;
-    gap: 0.55rem;
-    max-height: 240px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.6rem;
+    max-height: 260px;
     overflow: auto;
     padding-right: 0.25rem;
 }
@@ -157,6 +179,13 @@
     border-radius: 0.9rem;
     border: 1px solid rgba(127, 147, 172, 0.16);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(245, 248, 252, 0.9));
+    transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.dashboard-location-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 18px rgba(19, 39, 73, 0.07);
+    border-color: rgba(37, 99, 235, 0.22);
 }
 
 .dashboard-location-code {
@@ -295,10 +324,17 @@
         text-align: left;
     }
 
-    .dashboard-filter-grid,
     .dashboard-custom-range,
     .dashboard-kpi-grid,
     .dashboard-summary-grid {
         grid-template-columns: 1fr;
+    }
+
+    .dashboard-location-header {
+        flex-direction: column;
+    }
+
+    .dashboard-location-summary {
+        align-self: flex-start;
     }
 }

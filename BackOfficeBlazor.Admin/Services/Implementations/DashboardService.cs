@@ -1,3 +1,4 @@
+using System.Globalization;
 using BackOfficeBlazor.Admin.Context;
 using BackOfficeBlazor.Admin.Entities;
 using BackOfficeBlazor.Admin.Services.Interfaces;
@@ -118,8 +119,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 PaymentMethods = paymentMethods,
                 TopCategories = topCategories,
                 Summary = BuildSummaryItems(netSales, invoiceCount, averageTicket, returnRate, peakDay, topCategory, topPayment, currentRange.Label),
-                Locations = await BuildLocationOptionsAsync(selectedLocations),
-                Terminals = await BuildTerminalOptionsAsync(selectedLocations, selectedTerminal)
+                Locations = await BuildLocationOptionsAsync(selectedLocations)
             };
 
             return response;
@@ -325,8 +325,7 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
         {
             var allLocations = await _context._Locations
                 .AsNoTracking()
-                .Where(x => x.IsActive && !x.IsDeleted)
-                .OrderBy(x => x.Name)
+                .Where(x => x.IsActive && !x.IsDeleted && x.KeyLocation)
                 .Select(x => new DashboardLocationOptionDto
                 {
                     Code = x.Code,
@@ -335,31 +334,16 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
                 })
                 .ToListAsync();
 
-            return allLocations;
+            return allLocations
+                .OrderBy(x => GetLocationSortKey(x.Code))
+                .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
-        private async Task<List<DashboardTerminalOptionDto>> BuildTerminalOptionsAsync(
-            IReadOnlyCollection<string> selectedLocations,
-            string? selectedTerminal)
-        {
-            var terminals = _context.TerminalOptions.AsNoTracking();
-            if (selectedLocations.Count > 0)
-            {
-                var locationCodes = selectedLocations.ToArray();
-                terminals = terminals.Where(x => x.DefaultBranch == null || locationCodes.Contains(x.DefaultBranch));
-            }
-
-            return await terminals
-                .OrderBy(x => x.TerminalCode)
-                .Select(x => new DashboardTerminalOptionDto
-                {
-                    Code = x.TerminalCode,
-                    DefaultBranch = x.DefaultBranch,
-                    Selected = !string.IsNullOrWhiteSpace(selectedTerminal) &&
-                               x.TerminalCode == selectedTerminal
-                })
-                .ToListAsync();
-        }
+        private static int GetLocationSortKey(string? code)
+            => int.TryParse(code?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+                ? value
+                : int.MaxValue;
 
         private static DashboardKpiDto BuildKpi(
             string key,

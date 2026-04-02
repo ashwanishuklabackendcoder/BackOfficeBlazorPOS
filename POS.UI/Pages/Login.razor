@@ -5,49 +5,336 @@
 @inject IAuthService AuthService
 @inject NavigationManager Nav
 @inject AppSnackbarService AppSnackbar
+@inject ICompanyBrandingService CompanyBrandingService
 
 <PageTitle>Login</PageTitle>
 
-<div class="container mt-5" style="max-width:420px;">
-    <div class="card shadow-sm">
-        <div class="card-header fw-bold">Staff Login</div>
-        <div class="card-body">
-            <EditForm Model="this" OnValidSubmit="DoLogin">
-                <div class="mb-3">
-                    <label class="form-label">Username</label>
-                    <input class="form-control"
-                           @bind="Username"
-                           @bind:event="oninput"
-                           @onkeydown="HandleKeyDown" />
+<style>
+    .login-page {
+        min-height: 100vh;
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        background:
+            radial-gradient(circle at top left, rgba(25, 135, 84, 0.18), transparent 28%),
+            radial-gradient(circle at bottom right, rgba(13, 110, 253, 0.16), transparent 30%),
+            linear-gradient(160deg, #f7fafc 0%, #edf4fb 48%, #f9fbfd 100%);
+    }
+
+    .login-orb {
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(16px);
+        opacity: 0.75;
+        pointer-events: none;
+        animation: login-float 10s ease-in-out infinite;
+    }
+
+    .login-orb.orb-1 {
+        width: 13rem;
+        height: 13rem;
+        top: -3rem;
+        left: -2rem;
+        background: rgba(25, 135, 84, 0.18);
+    }
+
+    .login-orb.orb-2 {
+        width: 16rem;
+        height: 16rem;
+        right: -4rem;
+        bottom: -5rem;
+        background: rgba(13, 110, 253, 0.14);
+        animation-delay: -3s;
+    }
+
+    .login-shell {
+        width: min(92vw, 980px);
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        border-radius: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.16);
+        animation: login-enter 560ms cubic-bezier(.2,.85,.2,1) both;
+    }
+
+    .login-brand-panel {
+        padding: 2.5rem;
+        color: #fff;
+        background:
+            linear-gradient(160deg, rgba(12, 22, 39, 0.92), rgba(15, 118, 110, 0.86)),
+            linear-gradient(160deg, #0f172a 0%, #115e59 100%);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 34rem;
+    }
+
+    .login-brand-panel::after {
+        content: "";
+        position: absolute;
+        inset: auto -6rem -5rem auto;
+        width: 16rem;
+        height: 16rem;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,255,255,.16), rgba(255,255,255,0) 68%);
+        animation: login-pulse 5.5s ease-in-out infinite;
+    }
+
+    .login-brand-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.55rem 0.9rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(10px);
+        width: fit-content;
+    }
+
+    .login-brand-logo {
+        width: 3rem;
+        height: 3rem;
+        object-fit: contain;
+        border-radius: 0.65rem;
+        background: rgba(255,255,255,.12);
+        padding: 0.2rem;
+        animation: login-bob 4.5s ease-in-out infinite;
+    }
+
+    .login-brand-name {
+        font-weight: 800;
+        font-size: 1.35rem;
+        line-height: 1.15;
+    }
+
+    .login-brand-copy {
+        max-width: 26rem;
+        margin-top: 1.25rem;
+    }
+
+    .login-brand-copy h1 {
+        font-size: clamp(2rem, 4vw, 3rem);
+        line-height: 1.05;
+        margin: 0 0 0.75rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+    }
+
+    .login-brand-copy p {
+        margin: 0;
+        font-size: 0.98rem;
+        color: rgba(255,255,255,.82);
+        max-width: 24rem;
+    }
+
+    .login-brand-footer {
+        margin-top: 2rem;
+        display: grid;
+        gap: 0.4rem;
+        font-size: 0.92rem;
+        color: rgba(255,255,255,.82);
+    }
+
+    .login-form-panel {
+        padding: 2.5rem;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(18px);
+        display: flex;
+        align-items: center;
+    }
+
+    .login-form-card {
+        width: 100%;
+    }
+
+    .login-form-title {
+        font-size: 1.45rem;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+        color: #0f172a;
+    }
+
+    .login-form-subtitle {
+        color: #64748b;
+        margin-bottom: 1.4rem;
+    }
+
+    .login-field {
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .login-field:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .login-submit {
+        padding: 0.8rem 1rem;
+        border-radius: 0.85rem;
+        font-weight: 700;
+        transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+    }
+
+    .login-submit:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 26px rgba(13, 110, 253, 0.22);
+        filter: saturate(1.03);
+    }
+
+    .login-mini-note {
+        margin-top: 0.9rem;
+        color: #6b7280;
+        font-size: 0.86rem;
+        text-align: center;
+    }
+
+    @@keyframes login-enter {
+        from {
+            opacity: 0;
+            transform: translateY(16px) scale(0.985);
+            filter: blur(6px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+        }
+    }
+
+    @@keyframes login-bob {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+    }
+
+    @@keyframes login-pulse {
+        0%, 100% { transform: scale(0.96); opacity: 0.45; }
+        50% { transform: scale(1.04); opacity: 0.78; }
+    }
+
+    @@keyframes login-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-12px); }
+    }
+
+    @@media (max-width: 991.98px) {
+        .login-shell {
+            grid-template-columns: 1fr;
+        }
+
+        .login-brand-panel {
+            min-height: auto;
+        }
+    }
+
+    @@media (max-width: 575.98px) {
+        .login-brand-panel,
+        .login-form-panel {
+            padding: 1.4rem;
+        }
+
+        .login-brand-copy h1 {
+            font-size: 1.8rem;
+        }
+    }
+</style>
+
+<div class="login-page">
+    <div class="login-orb orb-1"></div>
+    <div class="login-orb orb-2"></div>
+
+    <div class="login-shell">
+        <section class="login-brand-panel">
+            <div>
+                <div class="login-brand-badge">
+                    @if (!string.IsNullOrWhiteSpace(CompanyLogoUrl))
+                    {
+                        <img src="@CompanyLogoUrl" alt="Company logo" class="login-brand-logo" />
+                    }
+                    else
+                    {
+                        <div class="login-brand-logo d-flex align-items-center justify-content-center fw-bold">P</div>
+                    }
+
+                    <div>
+                        <div class="small text-uppercase text-white-50">Welcome</div>
+                        <div class="login-brand-name">@CompanyNameOrDefault</div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <input class="form-control"
-                           type="password"
-                           @bind="Password"
-                           @bind:event="oninput"
-                           @onkeydown="HandleKeyDown" />
+
+                <div class="login-brand-copy">
+                    <h1>Sign in to continue</h1>
+                    <p>
+                        Access your back office, reports, stock tools, and admin features from one clean dashboard.
+                    </p>
                 </div>
-                <button class="btn btn-primary w-100" type="submit" disabled="@IsLoggingIn">
-                    @(IsLoggingIn ? "Logging in..." : "Login")
-                </button>
-            </EditForm>
-        </div>
+            </div>
+
+            <div class="login-brand-footer">
+                <div>Secure access for staff and administrators.</div>
+                <div>Use your username and password to continue.</div>
+            </div>
+        </section>
+
+        <section class="login-form-panel">
+            <div class="login-form-card">
+                <div class="login-form-title">Staff Login</div>
+                <div class="login-form-subtitle">Enter your credentials to open the system.</div>
+
+                <EditForm Model="this" OnValidSubmit="DoLogin">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Username</label>
+                        <input class="form-control login-field"
+                               @bind="Username"
+                               @bind:event="oninput"
+                               @onkeydown="HandleKeyDown" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Password</label>
+                        <input class="form-control login-field"
+                               type="password"
+                               @bind="Password"
+                               @bind:event="oninput"
+                               @onkeydown="HandleKeyDown" />
+                    </div>
+                    <button class="btn btn-primary w-100 login-submit" type="submit" disabled="@IsLoggingIn">
+                        @(IsLoggingIn ? "Logging in..." : "Login")
+                    </button>
+                </EditForm>
+
+                <div class="login-mini-note">
+                    If you do not have an account, contact your manager.
+                </div>
+            </div>
+        </section>
     </div>
 </div>
 
 @code {
+    private CompanyBrandingDto? _branding;
     string Username = "";
     string Password = "";
     bool IsLoggingIn;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         if (AuthService.IsAuthenticated)
         {
             Nav.NavigateTo("/dashboard", true);
+            return;
         }
+
+        _branding = await CompanyBrandingService.GetAsync();
     }
+
+    private string CompanyNameOrDefault
+        => string.IsNullOrWhiteSpace(_branding?.CompanyName) ? "POS.UI" : _branding!.CompanyName;
+
+    private string CompanyLogoUrl
+        => _branding?.CompanyLogoUrl ?? string.Empty;
 
     async Task HandleKeyDown(KeyboardEventArgs args)
     {

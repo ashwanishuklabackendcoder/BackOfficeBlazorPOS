@@ -47,89 +47,77 @@
         }
 
         <div class="dashboard-filter-card">
-            <div class="dashboard-filter-group">
-                <div class="dashboard-filter-label">Date Range</div>
-                <div class="dashboard-range-buttons">
-                    @foreach (var preset in Presets)
-                    {
-                        <button class="dashboard-range-button @(Request.Preset == preset ? "active" : string.Empty)"
-                                @onclick="() => ApplyPresetAsync(preset)">
-                            @GetPresetLabel(preset)
-                        </button>
-                    }
+            <div class="dashboard-filter-top">
+                <div class="dashboard-filter-group">
+                    <div class="dashboard-filter-label">Date Range</div>
+                    <div class="dashboard-range-buttons">
+                        @foreach (var preset in Presets)
+                        {
+                            <button class="dashboard-range-button @(Request.Preset == preset ? "active" : string.Empty)"
+                                    @onclick="() => ApplyPresetAsync(preset)">
+                                @GetPresetLabel(preset)
+                            </button>
+                        }
+                    </div>
                 </div>
+
+                @if (Request.Preset == DashboardDatePreset.Custom)
+                {
+                    <div class="dashboard-custom-range">
+                        <div>
+                            <label class="dashboard-filter-label" for="dashboard-from">From</label>
+                            <input id="dashboard-from"
+                                   type="date"
+                                   class="form-control"
+                                   value="@CustomFromText"
+                                   @onchange="OnCustomFromChanged" />
+                        </div>
+                        <div>
+                            <label class="dashboard-filter-label" for="dashboard-to">To</label>
+                            <input id="dashboard-to"
+                                   type="date"
+                                   class="form-control"
+                                   value="@CustomToText"
+                                   @onchange="OnCustomToChanged" />
+                        </div>
+                    </div>
+                }
             </div>
 
-            @if (Request.Preset == DashboardDatePreset.Custom)
-            {
-                <div class="dashboard-custom-range">
+            <div class="dashboard-filter-panel dashboard-location-panel">
+                <div class="dashboard-location-header">
                     <div>
-                        <label class="dashboard-filter-label" for="dashboard-from">From</label>
-                        <input id="dashboard-from"
-                               type="date"
-                               class="form-control"
-                               value="@CustomFromText"
-                               @onchange="OnCustomFromChanged" />
+                        <div class="dashboard-filter-label">Key Locations</div>
+                        <div class="dashboard-filter-help">
+                            Showing only priority branches in numerical order.
+                        </div>
                     </div>
-                    <div>
-                        <label class="dashboard-filter-label" for="dashboard-to">To</label>
-                        <input id="dashboard-to"
-                               type="date"
-                               class="form-control"
-                               value="@CustomToText"
-                               @onchange="OnCustomToChanged" />
-                    </div>
-                </div>
-            }
-
-            <div class="dashboard-filter-grid">
-                <div class="dashboard-filter-panel">
-                    <div class="dashboard-filter-label">Locations</div>
-                    <div class="dashboard-location-list">
-                        @if (Model?.Locations?.Count > 0)
-                        {
-                            @foreach (var location in Model.Locations)
-                            {
-                                <label class="dashboard-location-item">
-                                    <input type="checkbox"
-                                           class="form-check-input"
-                                           checked="@location.Selected"
-                                           @onchange="e => ToggleLocation(location.Code, e)" />
-                                    <span>
-                                        <span class="dashboard-location-code">@location.Code</span>
-                                        <span class="dashboard-location-name">@location.Name</span>
-                                    </span>
-                                </label>
-                            }
-                        }
-                        else
-                        {
-                            <div class="dashboard-filter-empty">Loading locations...</div>
-                        }
+                    <div class="dashboard-location-summary">
+                        @LocationSummary
                     </div>
                 </div>
 
-                <div class="dashboard-filter-panel">
-                    <div class="dashboard-filter-label">Terminal</div>
-                    <select class="form-select" value="@Request.TerminalCode" @onchange="OnTerminalChanged">
-                        <option value="">All terminals</option>
-                        @if (Model?.Terminals != null)
+                <div class="dashboard-location-list">
+                    @if (Model?.Locations?.Count > 0)
+                    {
+                        @foreach (var location in Model.Locations)
                         {
-                            @foreach (var terminal in Model.Terminals)
-                            {
-                                <option value="@terminal.Code">
-                                    @terminal.Code
-                                    @if (!string.IsNullOrWhiteSpace(terminal.DefaultBranch))
-                                    {
-                                        <text> (@terminal.DefaultBranch)</text>
-                                    }
-                                </option>
-                            }
+                            <label class="dashboard-location-item">
+                                <input type="checkbox"
+                                       class="form-check-input"
+                                       checked="@location.Selected"
+                                       @onchange="e => ToggleLocation(location.Code, e)" />
+                                <span>
+                                    <span class="dashboard-location-code">@FormatLocationCode(location.Code)</span>
+                                    <span class="dashboard-location-name">@location.Name</span>
+                                </span>
+                            </label>
                         }
-                    </select>
-                    <div class="dashboard-filter-help">
-                        Optional terminal-scoped view for branch level analysis.
-                    </div>
+                    }
+                    else
+                    {
+                        <div class="dashboard-filter-empty">Loading key locations...</div>
+                    }
                 </div>
             </div>
         </div>
@@ -212,6 +200,10 @@
         : LastLoadedAt.ToString("dd MMM yyyy HH:mm");
 
     private string TrendSubtitle => Model?.CurrentRange.Label ?? GetPresetLabel(Request.Preset);
+    private string LocationSummary
+        => Model?.Locations?.Count > 0
+            ? $"{Model.Locations.Count(x => x.Selected)}/{Model.Locations.Count} selected"
+            : "Loading";
     private DashboardKpiDto? SalesCurrent => GetKpi("sales-current");
     private DashboardKpiDto? SalesToday => GetKpi("sales-today");
     private DashboardKpiDto? ReturnsCurrent => GetKpi("returns-current");
@@ -296,7 +288,6 @@
         var request = new DashboardRequestDto
         {
             Preset = Request.Preset,
-            TerminalCode = string.IsNullOrWhiteSpace(Request.TerminalCode) ? null : Request.TerminalCode.Trim(),
             Locations = Request.Locations?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList() ?? new List<string>()
         };
 
@@ -323,13 +314,6 @@
 
             if (selectedLocations.Count > 0)
                 Request.Locations = selectedLocations;
-        }
-
-        if (Model?.Terminals != null && !string.IsNullOrWhiteSpace(Request.TerminalCode))
-        {
-            Request.TerminalCode = Model.Terminals.Any(x => string.Equals(x.Code, Request.TerminalCode, StringComparison.OrdinalIgnoreCase))
-                ? Request.TerminalCode
-                : null;
         }
 
     }
@@ -383,13 +367,6 @@
         await LoadAsync();
     }
 
-    private async Task OnTerminalChanged(ChangeEventArgs e)
-    {
-        var value = e.Value?.ToString();
-        Request.TerminalCode = string.IsNullOrWhiteSpace(value) ? null : value;
-        await LoadAsync();
-    }
-
     private async Task OnCustomFromChanged(ChangeEventArgs e)
     {
         if (DateTime.TryParse(e.Value?.ToString(), out var parsed))
@@ -418,4 +395,7 @@
         _loadGate.Dispose();
         await Task.CompletedTask;
     }
+
+    private static string FormatLocationCode(string? code)
+        => DisplayLabelFormatter.NormalizeLocationCode(code);
 }

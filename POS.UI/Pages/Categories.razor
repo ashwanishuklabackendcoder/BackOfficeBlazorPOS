@@ -3,6 +3,7 @@
 @using POS.UI.Services
 @using POS.UI.Shared
 @inject ICategoryService CategoryService
+@inject ICompanyBrandingService CompanyBrandingService
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
 
@@ -102,6 +103,9 @@
         <GenericGrid @ref="savedCategoriesGrid"
                      Title="Saved Categories"
                      GridKey="saved-categories"
+                     EnableExportButtons="true"
+                     ExportFileNamePrefix="categories"
+                     ExportBranding="_branding"
                      Columns="SavedCategoryColumns"
                      LoadData="LoadSavedCategoriesForGrid"
                      OnRowClick="@( (CategoryDto item) => FillFormFromRow(item) )"
@@ -114,6 +118,7 @@
     private static readonly string[] CategoryLevels = { "A", "B", "C" };
     private string? selectedCategoryCode;
     private bool isRowSelecting;
+    private CompanyBrandingDto? _branding;
     private GenericGrid<CategoryDto>? savedCategoriesGrid;
     private readonly List<GridColumn<CategoryDto>> SavedCategoryColumns = new()
     {
@@ -179,6 +184,11 @@
 
     ElementReference codeInput;
     ElementReference nameInput;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branding = await CompanyBrandingService.GetAsync();
+    }
 
     DotNetObjectReference<Categories>? dotNetRef;
     string? shortcutRegistrationId;

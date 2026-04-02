@@ -86,6 +86,32 @@ namespace POSAPI.Controllers
             return Ok(ApiResponse<List<MajorItemSalesReportLineDto>>.Ok(rows, "Report loaded."));
         }
 
+        [HttpPost("major-item-report")]
+        public async Task<IActionResult> GetMajorItemReport([FromBody] MajorItemReportRequestDto request)
+        {
+            if (!await _access.HasAnyPermissionAsync(User, PermissionKeys.StockInput, PermissionKeys.CustomerSalesReturn))
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    ApiResponse<List<MajorItemReportLineDto>>.Fail("You do not have permission to view major item reports."));
+            }
+
+            if (request == null)
+            {
+                return BadRequest(ApiResponse<List<MajorItemReportLineDto>>.Fail(
+                    "Report criteria are required."));
+            }
+
+            if (request.FromDate.HasValue && request.ToDate.HasValue && request.FromDate > request.ToDate)
+            {
+                return BadRequest(ApiResponse<List<MajorItemReportLineDto>>.Fail(
+                    "Invalid date range."));
+            }
+
+            var rows = await _service.GetMajorItemReportAsync(request);
+            return Ok(ApiResponse<List<MajorItemReportLineDto>>.Ok(rows, "Report loaded."));
+        }
+
         [HttpPost("stock-transfer")]
         public async Task<IActionResult> GetStockTransferReport([FromBody] StockTransferReportRequestDto request)
         {

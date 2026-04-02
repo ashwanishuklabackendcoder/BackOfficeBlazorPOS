@@ -31,6 +31,11 @@ namespace BackOfficeBlazor.Admin.Services.Implementations
             return _repo.GetMajorItemSalesAsync(request);
         }
 
+        public Task<List<MajorItemReportLineDto>> GetMajorItemReportAsync(MajorItemReportRequestDto request)
+        {
+            return _repo.GetMajorItemReportAsync(request);
+        }
+
         public Task<List<StockTransferReportLineDto>> GetStockTransferReportAsync(StockTransferReportRequestDto request)
         {
             return _repo.GetStockTransferReportAsync(request);

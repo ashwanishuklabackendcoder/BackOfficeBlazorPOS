@@ -6,6 +6,7 @@
 @using POS.UI.Shared
 
 @inject ICustomerService CustomerService
+@inject ICompanyBrandingService CompanyBrandingService
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
 @inject AppSnackbarService AppSnackbar
@@ -381,6 +382,9 @@
         <GenericGrid @ref="savedCustomersGrid"
                      Title="Saved Customers"
                      GridKey="saved-customers"
+                     EnableExportButtons="true"
+                     ExportFileNamePrefix="customers"
+                     ExportBranding="_branding"
                      Columns="SavedCustomerColumns"
                      LoadData="LoadSavedCustomersForGrid"
                      OnRowClick="@( (CustomerDto item) => FillFormFromRow(item) )"
@@ -394,6 +398,7 @@
     bool isAccLocked = false;
     private string? selectedCustomerAccNo;
     private bool isRowSelecting;
+    private CompanyBrandingDto? _branding;
     private GenericGrid<CustomerDto>? savedCustomersGrid;
     private readonly List<GridColumn<CustomerDto>> SavedCustomerColumns = new()
     {
@@ -434,6 +439,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _branding = await CompanyBrandingService.GetAsync();
         await base.OnInitializedAsync();
     }
 

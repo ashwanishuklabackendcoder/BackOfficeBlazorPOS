@@ -41,6 +41,22 @@
     <script src="clickOutside.js"></script>
     <script src="rte.js"></script>
     <script src="report-export.js"></script>
+    <script>
+        window.reportExport = window.reportExport || {};
+        window.reportExport.downloadFileFromStream = async function (filename, contentType, streamRef) {
+            const arrayBuffer = await streamRef.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: contentType || "application/octet-stream" });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = "hidden";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+    </script>
     <script src="payment-shortcuts.js"></script>
     <script src="https://js.stripe.com/v3/" defer></script>
     <script src="stripe-payments.js"></script>

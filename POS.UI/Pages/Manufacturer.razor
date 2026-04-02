@@ -4,6 +4,7 @@
 @using POS.UI.Services
 @using POS.UI.Shared
 @inject IManufacturerService ManufacturerService
+@inject ICompanyBrandingService CompanyBrandingService
 @inject AppSnackbarService AppSnackbar
 @inject IJSRuntime JS
 
@@ -84,6 +85,9 @@
         <GenericGrid @ref="savedManufacturersGrid"
                      Title="Saved Manufacturers"
                      GridKey="saved-manufacturers"
+                     EnableExportButtons="true"
+                     ExportFileNamePrefix="manufacturers"
+                     ExportBranding="_branding"
                      Columns="SavedManufacturerColumns"
                      LoadData="LoadSavedManufacturersForGrid"
                      OnRowClick="@( (ManufacturerDto item) => FillFormFromRow(item) )"
@@ -95,6 +99,7 @@
 
     private string? selectedManufacturerCode;
     private bool isRowSelecting;
+    private CompanyBrandingDto? _branding;
     private GenericGrid<ManufacturerDto>? savedManufacturersGrid;
     private readonly List<GridColumn<ManufacturerDto>> SavedManufacturerColumns = new()
     {
@@ -123,6 +128,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _branding = await CompanyBrandingService.GetAsync();
         await base.OnInitializedAsync();
     }
 

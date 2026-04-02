@@ -4,6 +4,7 @@
 @using POS.UI.Services
 @using POS.UI.Shared
 @using System.Threading
+@using Microsoft.JSInterop
 @typeparam TItem
 
 <style>
@@ -26,7 +27,7 @@
 <div class="card card-outline card-warning">
     <div class="card-header d-flex justify-content-between align-items-center">
         <strong>@Title</strong>
-        <div class="d-flex gap-2 align-items-center">
+        <div class="d-flex gap-2 align-items-center flex-wrap justify-content-end">
             <input class="form-control form-control-sm"
                    placeholder="Search..."
                    style="min-width:200px"
@@ -37,6 +38,22 @@
                            HiddenColumns="state.HiddenColumns"
                            OnToggleColumn="ToggleColumnVisibility"
                            OnRestoreDefaults="RestoreDefaultColumns" />
+
+            @if (EnableExportButtons)
+            {
+                <button type="button"
+                        class="btn btn-outline-success btn-sm"
+                        disabled="@(!CanExport)"
+                        @onclick="ExportToXlsxAsync">
+                    Export Excel
+                </button>
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm"
+                        disabled="@(!CanExport)"
+                        @onclick="ExportToPdfAsync">
+                    Export PDF
+                </button>
+            }
         </div>
     </div>
 
@@ -118,6 +135,7 @@
 </div>
 
 @code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
     [Inject] private GridStateStorageService GridStateStorage { get; set; } = default!;
 
     [Parameter] public string Title { get; set; } = "";
@@ -126,6 +144,10 @@
     [Parameter] public List<GridColumn<TItem>> Columns { get; set; } = new();
     [Parameter] public Func<TItem, string>? RowCssClass { get; set; }
     [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+    [Parameter] public bool EnableExportButtons { get; set; }
+    [Parameter] public string? ExportFileNamePrefix { get; set; }
+    [Parameter] public string? ExportTitle { get; set; }
+    [Parameter] public CompanyBrandingDto? ExportBranding { get; set; }
 
     private GridState state = new();
     private List<TItem>? rawItems;
@@ -147,6 +169,8 @@
 
     private IEnumerable<GridColumn<TItem>> VisibleColumns =>
         Columns.Where(c => !state.HiddenColumns.Contains(c.ColumnKey));
+
+    private bool CanExport => displayItems?.Any() == true && VisibleColumns.Any();
 
     private IReadOnlyList<ColumnChooserOption> ChooserOptions =>
         Columns.Select(c => new ColumnChooserOption
@@ -302,5 +326,76 @@
 
         await SaveStateAsync();
         RefreshView();
+    }
+
+    private async Task ExportToPdfAsync()
+    {
+        if (!CanExport)
+            return;
+
+        var exportColumns = VisibleColumns.ToList();
+        var exportRows = BuildExportRows(exportColumns);
+        var html = GridExportBuilder.BuildBrandedPrintHtml(
+            GetExportTitle(),
+            ExportBranding,
+            exportColumns.Select(c => c.Title).ToList(),
+            exportRows,
+            subtitle: "Current filtered grid view",
+            landscape: true);
+
+        await JS.InvokeVoidAsync("reportExport.printHtml", GetExportTitle(), html);
+    }
+
+    private async Task ExportToXlsxAsync()
+    {
+        if (!CanExport)
+            return;
+
+        var exportColumns = VisibleColumns.ToList();
+        var exportRows = BuildExportRows(exportColumns);
+        var bytes = GridExportBuilder.BuildWorkbookBytes(GetExportTitle(), exportColumns.Select(c => c.Title).ToList(), exportRows);
+        using var stream = new DotNetStreamReference(new MemoryStream(bytes));
+
+        var fileName = $"{GetExportFilePrefix()}-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+        await JS.InvokeVoidAsync(
+            "reportExport.downloadFileFromStream",
+            fileName,
+            GridExportBuilder.SpreadsheetMimeType,
+            stream);
+    }
+
+    private List<IReadOnlyList<string>> BuildExportRows(IReadOnlyList<GridColumn<TItem>> exportColumns)
+        => (displayItems ?? new List<TItem>())
+            .Select(item => (IReadOnlyList<string>)exportColumns
+                .Select(column => column.Value(item)?.ToString() ?? string.Empty)
+                .ToList())
+            .ToList();
+
+    private string GetExportTitle()
+        => string.IsNullOrWhiteSpace(ExportTitle) ? Title : ExportTitle!;
+
+    private string GetExportFilePrefix()
+    {
+        if (!string.IsNullOrWhiteSpace(ExportFileNamePrefix))
+            return SanitizeFileNamePart(ExportFileNamePrefix!);
+
+        if (!string.IsNullOrWhiteSpace(GridKey))
+            return SanitizeFileNamePart(GridKey);
+
+        return SanitizeFileNamePart(Title);
+    }
+
+    private static string SanitizeFileNamePart(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var result = new string(value
+            .Trim()
+            .Select(ch => invalid.Contains(ch) ? '-' : ch)
+            .ToArray());
+
+        while (result.Contains("--"))
+            result = result.Replace("--", "-");
+
+        return string.IsNullOrWhiteSpace(result) ? "export" : result.Trim('-').ToLowerInvariant();
     }
 }

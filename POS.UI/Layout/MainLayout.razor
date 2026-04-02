@@ -53,9 +53,8 @@
     protected override async Task OnInitializedAsync()
     {
         CompanyBrandingService.Changed += HandleBrandingChanged;
-
-        if (AuthService.IsAuthenticated)
-            await LoadBrandingAsync();
+        _branding = CompanyBrandingService.Current;
+        await LoadBrandingAsync();
     }
 
     private async Task LoadBrandingAsync()

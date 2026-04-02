@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace POSAPI.Controllers
 {
     [ApiController]
-    [Authorize]
     [Route("api/company-branding")]
     public class CompanyBrandingController : ControllerBase
     {
@@ -17,6 +16,7 @@ namespace POSAPI.Controllers
             _service = service;
         }
 
+        [AllowAnonymous]
         [HttpGet]
         public async Task<IActionResult> Get()
         {

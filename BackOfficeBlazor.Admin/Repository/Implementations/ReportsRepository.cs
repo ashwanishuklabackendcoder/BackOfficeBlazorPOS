@@ -465,6 +465,184 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 .ToList();
         }
 
+        public async Task<List<MajorItemReportLineDto>> GetMajorItemReportAsync(MajorItemReportRequestDto request)
+        {
+            var rawLocations = await _context._Locations
+                .AsNoTracking()
+                .Where(x => x.IsActive && !x.IsDeleted)
+                .Select(x => new
+                {
+                    x.Code,
+                    x.Name
+                })
+                .ToListAsync();
+
+            var locations = rawLocations
+                .Select(x => new LocationSlot(NormalizeLocationCode(x.Code), x.Name))
+                .Where(x => !string.IsNullOrWhiteSpace(x.Code) && TryParseSlot(x.Code, out var slot) && slot >= 1 && slot <= 30)
+                .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (locations.Count == 0)
+                return new List<MajorItemReportLineDto>();
+
+            var selectedSlots = ResolveLocationRange(locations, request.FromLocation, request.ToLocation);
+            if (selectedSlots.Count == 0)
+                return new List<MajorItemReportLineDto>();
+
+            var selectedLocationCodes = selectedSlots
+                .Select(x => x.Code)
+                .ToList();
+
+            var categoryLevel = (request.CategoryLevel ?? string.Empty).Trim();
+            var categoryCode = request.CategoryCode?.Trim();
+            var headingMode = (request.HeadingMode ?? string.Empty).Trim();
+            var headingValue = request.HeadingValue?.Trim();
+
+            IQueryable<ProductItem> productQuery = _context.ProductItems
+                .AsNoTracking()
+                .Where(x => x.Major);
+
+            if (!string.IsNullOrWhiteSpace(categoryCode))
+            {
+                switch (categoryLevel.ToUpperInvariant())
+                {
+                    case "A":
+                        productQuery = productQuery.Where(x => x.CatACode == categoryCode || x.CatA == categoryCode);
+                        break;
+                    case "B":
+                        productQuery = productQuery.Where(x => x.CatBCode == categoryCode || x.CatB == categoryCode);
+                        break;
+                    case "C":
+                        productQuery = productQuery.Where(x => x.CatCCode == categoryCode || x.CatC == categoryCode);
+                        break;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(headingValue))
+            {
+                switch (headingMode.ToUpperInvariant())
+                {
+                    case "MAKE":
+                        productQuery = productQuery.Where(x => x.Make == headingValue);
+                        break;
+                    case "SUPPLIER":
+                        productQuery = productQuery.Where(x => x.Supplier1Code == headingValue || x.Supplier2Code == headingValue);
+                        break;
+                    case "CATA":
+                        productQuery = productQuery.Where(x => x.CatACode == headingValue || x.CatA == headingValue);
+                        break;
+                    case "CATB":
+                        productQuery = productQuery.Where(x => x.CatBCode == headingValue || x.CatB == headingValue);
+                        break;
+                    case "CATC":
+                        productQuery = productQuery.Where(x => x.CatCCode == headingValue || x.CatC == headingValue);
+                        break;
+                }
+            }
+
+            var products = await productQuery
+                .OrderBy(x => x.PartNumber)
+                .ToListAsync();
+
+            if (products.Count == 0)
+                return new List<MajorItemReportLineDto>();
+
+            var partNumbers = products
+                .Select(x => x.PartNumber)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (partNumbers.Count == 0)
+                return new List<MajorItemReportLineDto>();
+
+            var productByPart = products
+                .GroupBy(x => x.PartNumber, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            var stockRows = await _context._ProductsStock
+                .AsNoTracking()
+                .Where(x => partNumbers.Contains(x.PartNumber))
+                .ToListAsync();
+
+            var stockByPartAndNo = stockRows
+                .Where(x => !string.IsNullOrWhiteSpace(x.StockNumber))
+                .GroupBy(x => $"{x.PartNumber.Trim()}|{x.StockNumber.Trim()}", StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.DateCreated).First(), StringComparer.OrdinalIgnoreCase);
+
+            var dateBounds = NormalizeDateBounds(request.FromDate, request.ToDate);
+            var printBy = (request.PrintBy ?? string.Empty).Trim();
+
+            if (printBy.Equals("Sold", StringComparison.OrdinalIgnoreCase))
+            {
+                var salesQuery = _context.FTT05
+                    .AsNoTracking()
+                    .Where(x =>
+                        x.DateAndTime != null &&
+                        x.DateAndTime >= dateBounds.From &&
+                        x.DateAndTime <= dateBounds.To &&
+                        selectedLocationCodes.Contains(x.Location) &&
+                        partNumbers.Contains(x.PartNumber) &&
+                        !string.IsNullOrWhiteSpace(x.InOut) &&
+                        x.InOut.ToUpper().StartsWith("S"));
+
+                var salesRows = await salesQuery
+                    .OrderByDescending(x => x.DateAndTime)
+                    .ThenBy(x => x.PartNumber)
+                    .ThenBy(x => x.StockNo)
+                    .ToListAsync();
+
+                return salesRows
+                    .Select(sale =>
+                    {
+                        productByPart.TryGetValue(sale.PartNumber.Trim(), out var product);
+                        stockByPartAndNo.TryGetValue($"{sale.PartNumber.Trim()}|{sale.StockNo.Trim()}", out var stockRow);
+
+                        return BuildMajorItemReportLine(
+                            product,
+                            stockRow,
+                            sale.PartNumber,
+                            sale.StockNo,
+                            sale.DateAndTime ?? DateTime.MinValue,
+                            sale.Cost,
+                            sale.StockNo,
+                            stockRow?.SerialNumber);
+                    })
+                    .ToList();
+            }
+
+            var stockQuery = _context._ProductsStock
+                .AsNoTracking()
+                .Where(x =>
+                    partNumbers.Contains(x.PartNumber) &&
+                    selectedLocationCodes.Contains(x.LocationCode) &&
+                    x.DateCreated >= dateBounds.From &&
+                    x.DateCreated <= dateBounds.To);
+
+            var rows = await stockQuery
+                .OrderByDescending(x => x.DateCreated)
+                .ThenBy(x => x.PartNumber)
+                .ThenBy(x => x.StockNumber)
+                .ToListAsync();
+
+            return rows
+                .Select(stock =>
+                {
+                    productByPart.TryGetValue(stock.PartNumber.Trim(), out var product);
+                    return BuildMajorItemReportLine(
+                        product,
+                        stock,
+                        stock.PartNumber,
+                        stock.StockNumber,
+                        stock.DateCreated,
+                        stock.Cost,
+                        stock.StockNumber,
+                        stock.SerialNumber);
+                })
+                .ToList();
+        }
+
         public async Task<List<StockTransferReportLineDto>> GetStockTransferReportAsync(StockTransferReportRequestDto request)
         {
             var rawLocations = await _context._Locations
@@ -894,6 +1072,65 @@ namespace BackOfficeBlazor.Admin.Repository.Implementations
                 (from, to) = (toDate.Value.Date, fromDate.Value.Date.AddDays(1).AddTicks(-1));
 
             return (from, to);
+        }
+
+        private static MajorItemReportLineDto BuildMajorItemReportLine(
+            ProductItem? product,
+            Stock? stock,
+            string partNumber,
+            string? stockNumber,
+            DateTime dateIn,
+            decimal cost,
+            string? fallbackStockNo,
+            string? fallbackFrameNumber)
+        {
+            var stockNo = !string.IsNullOrWhiteSpace(stockNumber)
+                ? stockNumber.Trim()
+                : !string.IsNullOrWhiteSpace(stock?.StockNumber)
+                    ? stock.StockNumber.Trim()
+                : !string.IsNullOrWhiteSpace(fallbackStockNo)
+                    ? fallbackStockNo.Trim()
+                    : string.Empty;
+
+            var frameNumber = !string.IsNullOrWhiteSpace(stock?.SerialNumber)
+                ? stock.SerialNumber.Trim()
+                : !string.IsNullOrWhiteSpace(stock?.StockNumber)
+                    ? stock.StockNumber.Trim()
+                : !string.IsNullOrWhiteSpace(fallbackFrameNumber)
+                    ? fallbackFrameNumber.Trim()
+                    : stockNo;
+
+            return new MajorItemReportLineDto
+            {
+                StockNo = stockNo,
+                PartNo = partNumber,
+                Make = product?.Make ?? string.Empty,
+                Model = product?.GroupName ?? product?.ShortDescription ?? partNumber,
+                Detail = product?.Details ?? product?.ShortDescription ?? string.Empty,
+                Cost = cost,
+                Rrp = product?.SuggestedRRP ?? product?.StorePrice ?? 0m,
+                Promo = product?.PromoPrice ?? 0m,
+                DateIn = dateIn,
+                Size = product?.Size ?? string.Empty,
+                Colour = product?.Color ?? string.Empty,
+                Bin = ResolveBinLocation(product),
+                FrameNumber = frameNumber,
+                MfrSku = product?.MfrPartNumber ?? product?.MfrPartNumber2 ?? string.Empty
+            };
+        }
+
+        private static string ResolveBinLocation(ProductItem? product)
+        {
+            if (product == null)
+                return string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(product.BinLocation1))
+                return product.BinLocation1.Trim();
+
+            if (!string.IsNullOrWhiteSpace(product.BinLocation2))
+                return product.BinLocation2.Trim();
+
+            return string.Empty;
         }
 
         private sealed record LocationSlot(string Code, string? Name);

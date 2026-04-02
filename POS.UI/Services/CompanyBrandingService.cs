@@ -22,14 +22,21 @@ namespace POS.UI.Services
             if (!forceRefresh && Current != null)
                 return Current;
 
-            var response = await _http.GetFromJsonAsync<ApiResponse<CompanyBrandingDto>>("api/company-branding")
-                ?? ApiResponse<CompanyBrandingDto>.Fail("Null response");
-
-            if (response.Success && response.Data != null)
+            try
             {
-                Current = response.Data;
-                Changed?.Invoke();
-                return Current;
+                var response = await _http.GetFromJsonAsync<ApiResponse<CompanyBrandingDto>>("api/company-branding")
+                    ?? ApiResponse<CompanyBrandingDto>.Fail("Null response");
+
+                if (response.Success && response.Data != null)
+                {
+                    Current = response.Data;
+                    Changed?.Invoke();
+                    return Current;
+                }
+            }
+            catch
+            {
+                // Branding is a best-effort UI concern. Fall back instead of breaking the layout.
             }
 
             Current = new CompanyBrandingDto();

@@ -1,0 +1,192 @@
+@page "/major-item-report"
+
+@using BackOfficeBlazor.Shared.DTOs
+@using POS.UI.Services
+@using POS.UI.Shared
+@using System.Globalization
+@using System.Net
+
+<PageTitle>Major Item Report</PageTitle>
+
+<FormGlassLayout Title="Major Item Report"
+                 Subtitle="Detailed major item stock and sales report"
+                 Id="major-item-report-form"
+                 ScopeId="major-item-report-form"
+                 class="major-item-report-shell"
+                 BodyClass="card-body form-shell-body p-3 p-lg-4 major-item-report-body"
+                 HeaderActions="@HeaderActions">
+    <ChildContent>
+        <div class="glass-panel border rounded-3 px-3 py-3 mb-3 major-item-report-filter-panel">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Print By</label>
+                    <div class="d-flex flex-wrap gap-2 toggle-button-group">
+                        <button type="button" class="@GetToggleClass(IsPrintByInStock)" @onclick="SetPrintByInStock">In Stock</button>
+                        <button type="button" class="@GetToggleClass(IsPrintBySold)" @onclick="SetPrintBySold">Sold</button>
+                    </div>
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">From Location</label>
+                    <LocationSelector Value="@FromLocation" ValueChanged="OnFromLocationChanged" />
+                </div>
+
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label-custom">To Location</label>
+                    <LocationSelector Value="@ToLocation" ValueChanged="OnToLocationChanged" />
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">From Date</label>
+                    <input class="form-control" type="date" value="@FromDateText" @onchange="OnFromDateChanged" />
+                </div>
+
+                <div class="col-md-2 col-lg-2">
+                    <label class="form-label-custom">To Date</label>
+                    <input class="form-control" type="date" value="@ToDateText" @onchange="OnToDateChanged" />
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Print by Category</label>
+                    <div class="d-flex flex-wrap gap-2 toggle-button-group">
+                        <button type="button" class="@GetToggleClass(IsCategoryLevelA)" @onclick="SetCategoryLevelA">A</button>
+                        <button type="button" class="@GetToggleClass(IsCategoryLevelB)" @onclick="SetCategoryLevelB">B</button>
+                        <button type="button" class="@GetToggleClass(IsCategoryLevelC)" @onclick="SetCategoryLevelC">C</button>
+                    </div>
+                </div>
+
+                <div class="col-md-8 col-lg-9">
+                    @if (IsCategoryLevelA)
+                    {
+                        <label class="form-label-custom">Category A</label>
+                        <CategorySelector Level="A" Code="@CategoryACode" CodeChanged="OnCategoryACodeChanged" Name="@CategoryAName" NameChanged="OnCategoryANameChanged" />
+                    }
+                    else if (IsCategoryLevelB)
+                    {
+                        <label class="form-label-custom">Category B</label>
+                        <CategorySelector Level="B" Code="@CategoryBCode" CodeChanged="OnCategoryBCodeChanged" Name="@CategoryBName" NameChanged="OnCategoryBNameChanged" />
+                    }
+                    else
+                    {
+                        <label class="form-label-custom">Category C</label>
+                        <CategorySelector Level="C" Code="@CategoryCCode" CodeChanged="OnCategoryCCodeChanged" Name="@CategoryCName" NameChanged="OnCategoryCNameChanged" />
+                    }
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2 align-items-end">
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label-custom">Print Heading</label>
+                    <div class="d-flex flex-wrap gap-2 toggle-button-group">
+                        <button type="button" class="@GetToggleClass(IsHeadingMake)" @onclick="SetHeadingMake">Make</button>
+                        <button type="button" class="@GetToggleClass(IsHeadingSupplier)" @onclick="SetHeadingSupplier">Supplier</button>
+                        <button type="button" class="@GetToggleClass(IsHeadingCategoryA)" @onclick="SetHeadingCategoryA">CAT A</button>
+                        <button type="button" class="@GetToggleClass(IsHeadingCategoryB)" @onclick="SetHeadingCategoryB">CAT B</button>
+                        <button type="button" class="@GetToggleClass(IsHeadingCategoryC)" @onclick="SetHeadingCategoryC">CAT C</button>
+                    </div>
+                </div>
+
+                <div class="col-md-8 col-lg-9">
+                    @if (IsHeadingMake)
+                    {
+                        <label class="form-label-custom">Make</label>
+                        <BrandSelector Value="@HeadingMake" ValueChanged="OnHeadingMakeChanged" />
+                    }
+                    else if (IsHeadingSupplier)
+                    {
+                        <label class="form-label-custom">Supplier</label>
+                        <SupplierSelector Value="@HeadingSupplier" ValueChanged="OnHeadingSupplierChanged" />
+                    }
+                    else if (IsHeadingCategoryA)
+                    {
+                        <label class="form-label-custom">CAT A</label>
+                        <CategorySelector Level="A" Code="@HeadingCategoryACode" CodeChanged="OnHeadingCategoryACodeChanged" Name="@HeadingCategoryAName" NameChanged="OnHeadingCategoryANameChanged" />
+                    }
+                    else if (IsHeadingCategoryB)
+                    {
+                        <label class="form-label-custom">CAT B</label>
+                        <CategorySelector Level="B" Code="@HeadingCategoryBCode" CodeChanged="OnHeadingCategoryBCodeChanged" Name="@HeadingCategoryBName" NameChanged="OnHeadingCategoryBNameChanged" />
+                    }
+                    else
+                    {
+                        <label class="form-label-custom">CAT C</label>
+                        <CategorySelector Level="C" Code="@HeadingCategoryCCode" CodeChanged="OnHeadingCategoryCCodeChanged" Name="@HeadingCategoryCName" NameChanged="OnHeadingCategoryCNameChanged" />
+                    }
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-6">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-primary" disabled="@IsLoading" @onclick="LoadReportAsync">Load Report</button>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@(!HasRows || IsLoading)" @onclick="ExportCsv">Export CSV</button>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@(!HasRows || IsLoading)" @onclick="ExportPdf">Export PDF</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel border rounded-3 overflow-hidden major-item-report-table-panel">
+            <div class="table-responsive major-item-report-table-wrap">
+                <table class="table table-sm table-bordered align-middle mb-0 major-item-report-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Stock No</th>
+                            <th>Part No</th>
+                            <th>Make</th>
+                            <th>Model</th>
+                            <th>Detail</th>
+                            <th class="text-end">Cost</th>
+                            <th class="text-end">RRP</th>
+                            <th class="text-end">Promo</th>
+                            <th>Date In</th>
+                            <th>Size</th>
+                            <th>Colour</th>
+                            <th>Bin</th>
+                            <th>Frame Number</th>
+                            <th>Mfr SKU</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (IsLoading && Rows == null)
+                        {
+                            <tr><td colspan="14" class="text-muted py-4 text-center">Loading major item report...</td></tr>
+                        }
+                        else if (Rows == null)
+                        {
+                            <tr><td colspan="14" class="text-muted py-4 text-center">Choose filters and load the report.</td></tr>
+                        }
+                        else if (Rows.Count == 0)
+                        {
+                            <tr><td colspan="14" class="text-muted py-4 text-center">No records match the selected filters.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in Rows)
+                            {
+                                <tr>
+                                    <td>@row.StockNo</td>
+                                    <td class="fw-semibold">@row.PartNo</td>
+                                    <td>@row.Make</td>
+                                    <td>@row.Model</td>
+                                    <td>@row.Detail</td>
+                                    <td class="text-end">@row.Cost.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.Rrp.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td class="text-end">@row.Promo.ToString("0.00", CultureInfo.InvariantCulture)</td>
+                                    <td>@row.DateIn.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)</td>
+                                    <td>@row.Size</td>
+                                    <td>@row.Colour</td>
+                                    <td>@row.Bin</td>
+                                    <td>@row.FrameNumber</td>
+                                    <td>@row.MfrSku</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </ChildContent>
+</FormGlassLayout>

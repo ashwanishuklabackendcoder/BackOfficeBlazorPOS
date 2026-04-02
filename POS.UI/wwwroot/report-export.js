@@ -1,4 +1,5 @@
-window.reportExport = {
+window.reportExport = window.reportExport || {};
+Object.assign(window.reportExport, {
     downloadCsv: function (filename, csvText) {
         var blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
         var link = document.createElement("a");
@@ -38,4 +39,4 @@ window.reportExport = {
         win.document.title = title || "Preview";
         win.focus();
     }
-};
+});

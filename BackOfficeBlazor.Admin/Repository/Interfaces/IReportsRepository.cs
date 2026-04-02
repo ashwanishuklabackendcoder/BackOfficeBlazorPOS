@@ -9,6 +9,7 @@ namespace BackOfficeBlazor.Admin.Repository.Interfaces
         Task<List<CustomerSalesReturnLineDto>> GetCustomerSalesReturnsAsync(CustomerSalesReturnReportRequestDto request);
         Task<List<StockPositionLineDto>> GetStockPositionAsync(StockPositionReportRequestDto request);
         Task<List<MajorItemSalesReportLineDto>> GetMajorItemSalesAsync(MajorItemSalesReportRequestDto request);
+        Task<List<MajorItemReportLineDto>> GetMajorItemReportAsync(MajorItemReportRequestDto request);
         Task<List<StockTransferReportLineDto>> GetStockTransferReportAsync(StockTransferReportRequestDto request);
         Task<List<LayawayReportLineDto>> GetLayawayReportAsync(LayawayReportRequestDto request);
     }
